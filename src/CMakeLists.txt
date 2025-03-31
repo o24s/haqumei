@@ -2,7 +2,7 @@
 # CMake configuration for open_jtalk
 #
 # adapted from https://gist.github.com/hkrn/889259/266e798f48a49d041d7f1e41a579d878134f1fca
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12...3.31)
 
 # set library version
 set(OPEN_JTALK_VERSION 1.11)
@@ -93,21 +93,6 @@ else()
   set(LIB_TYPE STATIC)
 endif()
 
-# find HTSEngine
-find_path(HTS_ENGINE_INCLUDE_DIR HTS_engine.h)
-find_library(HTS_ENGINE_LIB hts_engine_API)
-if(NOT HTS_ENGINE_LIB)
-  # fallback
-  find_library(HTS_ENGINE_LIB HTSEngine)
-endif()
-
-if(HTS_ENGINE_INCLUDE_DIR AND HTS_ENGINE_LIB)
-  target_link_libraries(openjtalk ${HTS_ENGINE_LIB})
-  include_directories(openjtalk ${HTS_ENGINE_INCLUDE_DIR})
-else()
-  message(FATAL_ERROR "Required HTSEngine not found")
-endif()
-
 # configuration for charset
 #option(CHARSET "Encoding set for mecab" "eucjp")
 set(CHARSET "utf8")
@@ -135,6 +120,11 @@ elseif(${CHARSET} STREQUAL "utf8")
   )
 else()
   message(FATAL_ERROR "Encoding ${CHARSET} not recognized. You can set sjis/eucjp/utf8")
+endif()
+
+option(BUILD_PROGRAMS "Build Programs" OFF)
+if(BUILD_PROGRAMS)
+  add_subdirectory(bin)
 endif()
 
 # installation
