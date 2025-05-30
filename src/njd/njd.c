@@ -273,6 +273,7 @@ int NJD_get_size(NJD * njd)
 }
 
 void NJD_push_node(NJD * njd, NJDNode * node)
+// NOTE: NJD に新たな NJDNode を追加する。
 {
    if (njd->head == NULL) {
       njd->head = node;
