@@ -131,6 +131,9 @@ void JPCommonLabel_fprint(JPCommonLabel * label, FILE * fp);
 void JPCommonLabel_clear(JPCommonLabel * label);
 
 /* JPCommonNode */
+// NOTE:
+// ワード（単語）に相当するノード。
+// NJDNode から生成されるが、かなりの情報を落としてある。
 
 typedef struct _JPCommonNode {
    char *pron;                  /* pronunciation */
@@ -161,7 +164,8 @@ void JPCommonNode_fprint(JPCommonNode * node, FILE * fp);
 void JPCommonNode_clear(JPCommonNode * node);
 
 /* JPCommon */
-
+// NOTE:
+// ワードをフラットに並べた JPCommonNode 系と、階層化した JPCommonLabel 系の両方を保持する
 typedef struct _JPCommon {
    JPCommonNode *head;
    JPCommonNode *tail;

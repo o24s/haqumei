@@ -135,14 +135,23 @@ static void convert_cform(char *buff, const char *cform)
 }
 
 void njd2jpcommon(JPCommon * jpcommon, NJD * njd)
+// NOTE:
+// NJD の各ノードを詰め替え、JPCommon へ収納する。品詞と活用は変換する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyOJT `OpenJTalk.run_frontend()` 内で
 {
    char buff[MAXBUFLEN];
    NJDNode *inode;
    JPCommonNode *jnode;
 
    for (inode = njd->head; inode != NULL; inode = inode->next) {
+      // NOTE: NJDNode に対応する新しい JPCommonNode を用意する
       jnode = (JPCommonNode *) calloc(1, sizeof(JPCommonNode));
       JPCommonNode_initialize(jnode);
+
+      // NOTE: 属性を必要に応じて変換し、詰め替える
       JPCommonNode_set_pron(jnode, NJDNode_get_pron(inode));
       convert_pos(buff, NJDNode_get_pos(inode), NJDNode_get_pos_group1(inode),
                   NJDNode_get_pos_group2(inode), NJDNode_get_pos_group3(inode));
@@ -153,6 +162,8 @@ void njd2jpcommon(JPCommon * jpcommon, NJD * njd)
       JPCommonNode_set_cform(jnode, buff);
       JPCommonNode_set_acc(jnode, NJDNode_get_acc(inode));
       JPCommonNode_set_chain_flag(jnode, NJDNode_get_chain_flag(inode));
+
+      // NOTE: 属性が揃った JPCommonNode を JPCommon へ組み込む
       JPCommon_push(jpcommon, jnode);
    }
 }

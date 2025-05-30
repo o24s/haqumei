@@ -65,6 +65,7 @@ void JPCommon_initialize(JPCommon * jpcommon)
 }
 
 void JPCommon_push(JPCommon * jpcommon, JPCommonNode * node)
+// NOTE: JPCommonNode を連結リストへ組み込んで JPCommon へ収納する。
 {
    if (jpcommon->head == NULL) {
       jpcommon->head = node;
