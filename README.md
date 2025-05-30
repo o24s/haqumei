@@ -2,7 +2,7 @@ NOTE:
 # Analysis Open JTalk
 This repository is a fork of '***fork of open_jtalk***' ([`r9y9/open_jtalk`](https://github.com/r9y9/open_jtalk)).  
 I added only NOTE comments for analysis/understanding of Open JTalk.  
-The comments start with `NOTE: ` notation.  
+The comments start with `NOTE:` notation.  
 
 NOTE: There are some differences between Open JTalk cvs and `r9y9/open_jtalk`.  
 Open JTalk cvs stop update at v1.10, but there is the Open JTalk v1.11 as archive file in official Open JTalk page.  
