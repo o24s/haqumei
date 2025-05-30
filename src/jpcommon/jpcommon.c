@@ -82,7 +82,7 @@ void JPCommon_make_label(JPCommon * jpcommon)
 // 利用は以下：
 //   - `Open_JTalk_synthesis()` 内で
 //   - パブリック関数として外部で
-//     - pyOJT `OpenJTalk.run_frontend()` 内で
+//     - pyOJT `OpenJTalk.make_label()` 内で
 {
    JPCommonNode *node = jpcommon->head;
 
