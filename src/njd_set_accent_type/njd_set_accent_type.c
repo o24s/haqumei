@@ -136,19 +136,28 @@ static void get_rule(const char *input_rule, const char *prev_pos, char *rule, i
 }
 
 void njd_set_accent_type(NJD * njd)
+// NOTE:
+// アクセント句境界と各ノードのアクセント連鎖タイプに基づき、`.acc` を非負の整数に設定する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyOJT `OpenJTalk.run_frontend()` 内で
 {
    NJDNode *node;
    NJDNode *top_node = NULL;
    char rule[MAXBUFLEN];
    int add_type = 0;
-   int mora_size = 0;
+   int mora_size = 0; // NOTE: アクセント句の先頭から現ノードまでの合計モーラ数。
 
    if (njd == NULL || njd->head == NULL)
       return;
 
+   // NOTE: アクセント句の末尾ノードになるまで先頭ノードの `.acc` を上書き
    for (node = njd->head; node != NULL; node = node->next) {
       if (NJDNode_get_string(node) == NULL)
          continue;
+
+      // NOTE: アクセント句の境界に到達したのでリセットする。
       if ((node == njd->head) || (NJDNode_get_chain_flag(node) != 1)) {
          /* store the top node */
          top_node = node;
@@ -158,6 +167,7 @@ void njd_set_accent_type(NJD * njd)
          get_rule(NJDNode_get_chain_rule(node), NJDNode_get_pos(node->prev), rule, &add_type);
 
          /* change accent type */
+         // NOTE: アクセント句の先頭ノードの `.acc` を更新する。
          if (strcmp(rule, "*") == 0) {  /* no chnage */
          } else if (strcmp(rule, "F1") == 0) {  /* for ancillary word */
          } else if (strcmp(rule, "F2") == 0) {
@@ -198,6 +208,7 @@ void njd_set_accent_type(NJD * njd)
       }
 
       /* change accent type for digit */
+      // NOTE: `node.prev.acc` を更新する。
       if (node->prev != NULL && NJDNode_get_chain_flag(node) == 1 &&
           strcmp(NJDNode_get_pos_group1(node->prev), NJD_SET_ACCENT_TYPE_KAZU) == 0 &&
           strcmp(NJDNode_get_pos_group1(node), NJD_SET_ACCENT_TYPE_KAZU) == 0) {
@@ -274,6 +285,7 @@ void njd_set_accent_type(NJD * njd)
          NJDNode_set_acc(node, 0);
       }
 
+      // NOTE: アクセント句の先頭からこのノードまでの合計モーラ数を更新する。
       mora_size += NJDNode_get_mora_size(node);
    }
 }
