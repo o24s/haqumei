@@ -105,8 +105,8 @@ typedef struct _JPCommonLabelBreathGroup {
 } JPCommonLabelBreathGroup;
 
 typedef struct _JPCommonLabel {
-   int size;
-   char **feature;
+   int size;       // NOTE: 音素の数
+   char **feature; // NOTE: フルコンテキストラベル文字列のリスト
    JPCommonLabelBreathGroup *breath_head;
    JPCommonLabelBreathGroup *breath_tail;
    JPCommonLabelAccentPhrase *accent_head;

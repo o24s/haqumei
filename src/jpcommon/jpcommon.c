@@ -76,6 +76,12 @@ void JPCommon_push(JPCommon * jpcommon, JPCommonNode * node)
 }
 
 void JPCommon_make_label(JPCommon * jpcommon)
+// NOTE:
+// JPCommon から JPCommonLabel を生成する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyOJT `OpenJTalk.run_frontend()` 内で
 {
    JPCommonNode *node = jpcommon->head;
 
@@ -93,6 +99,7 @@ void JPCommon_make_label(JPCommon * jpcommon)
                               JPCommonNode_get_cform(node),
                               JPCommonNode_get_acc(node), JPCommonNode_get_chain_flag(node));
    /* make label */
+   // NOTE: フルコンテキストラベルをダンプして JPCommon.label.feature へ収納する
    JPCommonLabel_make(jpcommon->label);
 }
 
@@ -105,6 +112,7 @@ int JPCommon_get_label_size(JPCommon * jpcommon)
 }
 
 char **JPCommon_get_label_feature(JPCommon * jpcommon)
+// NOTE: フルコンテキストラベル系列を取得する。
 {
    if (jpcommon->label != NULL)
       return JPCommonLabel_get_feature(jpcommon->label);

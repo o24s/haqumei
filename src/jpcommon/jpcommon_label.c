@@ -261,10 +261,12 @@ static void JPCommonLabelBreathGroup_clear(JPCommonLabelBreathGroup * b)
 }
 
 static int index_mora_in_accent_phrase(JPCommonLabelMora * m)
+// NOTE: アクセント句におけるモーラのインデックス（1始まり）を算出する。
 {
    int i;
    JPCommonLabelMora *index;
 
+   // NOTE: `index` の初期値は head mora (MR -> [up] -> WD -> [up] -> AP -> [head] -> WD -> [head] -> MR)
    for (i = 0, index = m->up->up->head->head; index != NULL; index = index->next) {
       i++;
       if (index == m)
@@ -274,10 +276,12 @@ static int index_mora_in_accent_phrase(JPCommonLabelMora * m)
 }
 
 static int count_mora_in_accent_phrase(JPCommonLabelMora * m)
+// NOTE: アクセント句に含まれるモーラの数を算出する。
 {
    int i;
    JPCommonLabelMora *index;
 
+   // NOTE: `index` の初期値は head mora (MR -> [up] -> WD -> [up] -> AP -> [head] -> WD -> [head] -> MR)
    for (i = 0, index = m->up->up->head->head; index != NULL; index = index->next) {
       i++;
       if (index == m->up->up->tail->tail)
@@ -287,10 +291,12 @@ static int count_mora_in_accent_phrase(JPCommonLabelMora * m)
 }
 
 static int index_accent_phrase_in_breath_group(JPCommonLabelAccentPhrase * a)
+// NOTE: GreathGroup におけるアクセント句のインデックス（1始まり）を算出する。
 {
    int i;
    JPCommonLabelAccentPhrase *index;
 
+   // NOTE: `index` の初期値は head accent phrase (AP -> [up] -> BG -> [head] -> AP)
    for (i = 0, index = a->up->head; index != NULL; index = index->next) {
       i++;
       if (index == a)
@@ -300,10 +306,12 @@ static int index_accent_phrase_in_breath_group(JPCommonLabelAccentPhrase * a)
 }
 
 static int count_accent_phrase_in_breath_group(JPCommonLabelAccentPhrase * a)
+// NOTE: BreathGroup に含まれるアクセント句の数を算出する。
 {
    int i;
    JPCommonLabelAccentPhrase *index;
 
+   // NOTE: `index` の初期値は head accent phrase (AP -> [up] -> BG -> [head] -> AP)
    for (i = 0, index = a->up->head; index != NULL; index = index->next) {
       i++;
       if (index == a->up->tail)
@@ -313,10 +321,12 @@ static int count_accent_phrase_in_breath_group(JPCommonLabelAccentPhrase * a)
 }
 
 static int index_mora_in_breath_group(JPCommonLabelMora * m)
+// NOTE: BreathGroup におけるモーラのインデックス（1始まり）を算出する。
 {
    int i;
    JPCommonLabelMora *index;
 
+   // NOTE: `index` の初期値は head mora (MR -> [up] -> WD -> [up] -> AP -> [up] -> BG -> [head] -> AP -> [head] -> WD -> [head] -> MR)
    for (i = 0, index = m->up->up->up->head->head->head; index != NULL; index = index->next) {
       i++;
       if (index == m)
@@ -645,6 +655,7 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
 }
 
 void JPCommonLabel_make(JPCommonLabel * label)
+// NOTE: フルコンテキストラベル文字列を生成し、label->feature へ収納する
 {
    int i, tmp1, tmp2, tmp3;
    char buff[MAXBUFLEN];
@@ -656,6 +667,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
    int short_pause_flag;
 
    /* initialize */
+   // NOTE: 音素数をカウントし必要なサイズを計算する
    for (p = label->phoneme_head, label->size = 0; p != NULL; p = p->next)
       label->size++;
    if (label->size < 1) {
@@ -663,12 +675,13 @@ void JPCommonLabel_make(JPCommonLabel * label)
       return;
    }
    label->size += 2;
-   label->feature = (char **) calloc(label->size, sizeof(char *));
+   label->feature = (char **) calloc(label->size, sizeof(char *)); // NOTE: フルコンテキストラベル系列の収納先
    for (i = 0; i < label->size; i++)
-      label->feature[i] = (char *) calloc(MAXBUFLEN, sizeof(char));
+      label->feature[i] = (char *) calloc(MAXBUFLEN, sizeof(char)); // NOTE: フルコンテキストラベルの収納先
 
    /* phoneme list */
-   phoneme_list = (char **) calloc(label->size + 4, sizeof(char *));
+   // NOTE: 前後に音素を足して ["xx", "xx", "sil", contents, "sil", "xx", "xx"] とする。
+   phoneme_list = (char **) calloc(label->size + 4, sizeof(char *)); // NOTE: 音素の一覧
    phoneme_list[0] = JPCOMMON_PHONEME_UNKNOWN;
    phoneme_list[1] = JPCOMMON_PHONEME_UNKNOWN;
    phoneme_list[2] = JPCOMMON_PHONEME_SILENT;
@@ -678,15 +691,19 @@ void JPCommonLabel_make(JPCommonLabel * label)
    for (i = 3, p = label->phoneme_head; p != NULL; p = p->next)
       phoneme_list[i++] = p->phoneme;
 
+   // NOTE: 音素ごとにフルコンテキストラベルを生成する
    for (i = 0, p = label->phoneme_head; i < label->size; i++) {
+      // NOTE: `pau` のフラグを立てる
       if (strcmp(p->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0)
          short_pause_flag = 1;
       else
          short_pause_flag = 0;
 
       /* for phoneme */
+      // NOTE: 音素を前後の音素ごとダンプする
       sprintf(label->feature[i], "%s^%s-%s+%s=%s", phoneme_list[i], phoneme_list[i + 1],
               phoneme_list[i + 2], phoneme_list[i + 3], phoneme_list[i + 4]);
+
       /* for A: */
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1)
          sprintf(buff, "/A:xx+xx+xx");
@@ -699,7 +716,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
                  limit(count_mora_in_accent_phrase(p->up) - tmp1 + 1, 1, MAX_M));
       }
       strcat(label->feature[i], buff);
+
       /* for B: */
+      // NOTE: 前の Word の品詞と活用をダンプする
       if (short_pause_flag == 1)
          w = p->prev->up->up;
       else if (p->up->up->prev == NULL)
@@ -713,13 +732,17 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          sprintf(buff, "/B:%s-%s_%s", w->pos, w->ctype, w->cform);
       strcat(label->feature[i], buff);
+
       /* for C: */
+      // NOTE: この Word の品詞と活用をダンプする
       if (i == 0 || i == label->size - 1 || short_pause_flag)
          sprintf(buff, "/C:xx_xx+xx");
       else
          sprintf(buff, "/C:%s_%s+%s", p->up->up->pos, p->up->up->ctype, p->up->up->cform);
       strcat(label->feature[i], buff);
+
       /* for D: */
+      // NOTE: 次の Word の品詞と活用をダンプする
       if (short_pause_flag == 1)
          w = p->next->up->up;
       else if (p->up->up->next == NULL)
@@ -733,7 +756,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          sprintf(buff, "/D:%s+%s_%s", w->pos, w->ctype, w->cform);
       strcat(label->feature[i], buff);
+
       /* for E: */
+      // NOTE: 前のアクセント句のモーラ数・アクセント・疑問形有無・ポーズ有無をダンプする
       if (short_pause_flag == 1)
          a = p->prev->up->up->up;
       else if (i == label->size - 1)
@@ -755,7 +780,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
                  strcmp(a->tail->tail->tail->next->phoneme,
                         JPCOMMON_PHONEME_SHORT_PAUSE) == 0 ? 0 : 1);
       strcat(label->feature[i], buff);
+
       /* for F: */
+      // NOTE: アクセント句のモーラ数・アクセントなどをダンプする
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1)
          a = NULL;
       else
@@ -774,6 +801,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
                  limit(count_mora_in_breath_group(a->head->head) - tmp2 + 1, 1, MAX_L));
       }
       strcat(label->feature[i], buff);
+
       /* for G: */
       if (short_pause_flag == 1)
          a = p->next->up->up->up;
@@ -796,7 +824,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
                  strcmp(a->head->head->head->prev->phoneme,
                         JPCOMMON_PHONEME_SHORT_PAUSE) == 0 ? 0 : 1);
       strcat(label->feature[i], buff);
+
       /* for H: */
+      // NOTE: 前の BreathGroup のアクセント句数とモーラ数をダンプする。
       if (short_pause_flag == 1)
          b = p->prev->up->up->up->up;
       else if (i == label->size - 1)
@@ -809,7 +839,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
          sprintf(buff, "/H:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
                  limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L));
       strcat(label->feature[i], buff);
+
       /* for I: */
+      // NOTE: BreathGroup のアクセント句数とモーラ数などをダンプする。
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1)
          b = NULL;
       else
@@ -832,6 +864,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
                  limit(count_mora_in_utterance(b->head->head->head) - tmp3 + 1, 1, MAX_LL));
       }
       strcat(label->feature[i], buff);
+
       /* for J: */
       if (short_pause_flag == 1)
          b = p->next->up->up->up->up;
@@ -845,6 +878,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
          sprintf(buff, "/J:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
                  limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L));
       strcat(label->feature[i], buff);
+
       /* for K: */
       sprintf(buff, "/K:%d+%d-%d",
               limit(count_breath_group_in_utterance(label->breath_head), 1, MAX_S),
@@ -852,6 +886,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
               limit(count_mora_in_utterance(label->mora_head), 1, MAX_LL));
       strcat(label->feature[i], buff);
 
+      // NOTE: 次の音素を設定する
       if (0 < i && i < label->size - 2)
          p = p->next;
    }
@@ -866,6 +901,7 @@ int JPCommonLabel_get_size(JPCommonLabel * label)
 }
 
 char **JPCommonLabel_get_feature(JPCommonLabel * label)
+// NOTE: フルコンテキストラベル系列を取得する。
 {
    return label->feature;
 }
