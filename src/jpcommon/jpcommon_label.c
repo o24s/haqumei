@@ -898,12 +898,12 @@ void JPCommonLabel_make(JPCommonLabel * label)
          tmp1 = index_accent_phrase_in_breath_group(a);
          tmp2 = index_mora_in_breath_group(a->head->head);
          sprintf(buff, "/F:%d_%d#%s_xx@%d_%d|%d_%d",
-                 limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M),
-                 limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1,
-                       MAX_M), a->emotion == NULL ? "0" : a->emotion, limit(tmp1, 1, MAX_M),
-                 limit(count_accent_phrase_in_breath_group(a) - tmp1 + 1, 1, MAX_M), limit(tmp2, 1,
+                 limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M), // NOTE: f1. アクセント句に含まれるモーラの数
+                 limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1, // NOTE: f2. 句アクセントの位置
+                       MAX_M), a->emotion == NULL ? "0" : a->emotion, limit(tmp1, 1, MAX_M), // NOTE: f3. 疑問形フラグ、(f4無し)、f5. BreathGroup 内のアクセント句のインデックス
+                 limit(count_accent_phrase_in_breath_group(a) - tmp1 + 1, 1, MAX_M), limit(tmp2, 1, // Note: f6.、f7.
                                                                                            MAX_L),
-                 limit(count_mora_in_breath_group(a->head->head) - tmp2 + 1, 1, MAX_L));
+                 limit(count_mora_in_breath_group(a->head->head) - tmp2 + 1, 1, MAX_L)); // NOTE: f8.
       }
       strcat(label->feature[i], buff);
 
@@ -960,7 +960,7 @@ void JPCommonLabel_make(JPCommonLabel * label)
          sprintf(buff, "/I:%d-%d@%d+%d&%d-%d|%d+%d",
                  limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
                  limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L), limit(tmp1, 1,
-                                                                                         MAX_S),
+                                                                                         MAX_S), // Note: i3. breathGroup のインデックス
                  limit(count_breath_group_in_utterance(b) - tmp1 + 1, 1, MAX_S), limit(tmp2, 1,
                                                                                        MAX_M),
                  limit(count_accent_phrase_in_utterance(b->head) - tmp2 + 1, 1, MAX_M), limit(tmp3,
