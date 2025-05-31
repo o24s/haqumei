@@ -51,7 +51,17 @@
 
 JPCOMMON_H_START;
 
-/* JPCommonLabel */
+/* JPCommonLabel
+NOTE:
+Utterance 全体のフルコンテキストラベル情報を保持するクラス。
+クラス群は以下の階層構造を持つ (BG -> AP -> WD -> MR -> PN)：
+  `_JPCommonLabelBreathGroup` -> `_JPCommonLabelAccentPhrase` > `_JPCommonLabelWord` > `_JPCommonLabelMora` > `_JPCommonLabelPhoneme`
+各クラスは以下の構造をもつ:
+  - head/tail: 下位クラスの先頭・末尾インスタンス
+  - prev/next: 同クラスの前後インスタンス
+  - up: 上位クラスのインスタンス
+  - 個別属性: `phoneme` や `mora` など
+*/
 
 struct _JPCommonLabelPhoneme;
 struct _JPCommonLabelMora;
@@ -87,9 +97,11 @@ typedef struct _JPCommonLabelWord {
    struct _JPCommonLabelAccentPhrase *up;
 } JPCommonLabelWord;
 
+// NOTE:
+// 生成は全て「メモリ確保 + JPCommonLabelAccentPhrase_initialize()」のセットでおこなわれている
 typedef struct _JPCommonLabelAccentPhrase {
    int accent;
-   char *emotion;
+   char *emotion; // NOTE: 末尾の疑問形フラグ。Null | "1"。
    struct _JPCommonLabelWord *head;
    struct _JPCommonLabelWord *tail;
    struct _JPCommonLabelAccentPhrase *prev;
@@ -169,7 +181,7 @@ void JPCommonNode_clear(JPCommonNode * node);
 typedef struct _JPCommon {
    JPCommonNode *head;
    JPCommonNode *tail;
-   JPCommonLabel *label;
+   JPCommonLabel *label; // NOTE: ラベルの階層連結リスト
 } JPCommon;
 
 void JPCommon_initialize(JPCommon * jpcommon);
