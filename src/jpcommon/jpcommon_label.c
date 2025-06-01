@@ -443,7 +443,10 @@ void JPCommonLabel_initialize(JPCommonLabel * label)
    label->feature = NULL;
 }
 
-// NOTE: Label に `short_pause_flag` フラグが経っていた場合、フラグを消費して末尾に pau 音素（.up 無し）を追加する
+// NOTE:
+// Label に `short_pause_flag` フラグが経っていた場合、フラグを消費して末尾に pau 音素（.up 無し）を追加する
+// "pau flag ON No.1" と "pau flag ON No.2" の2箇所でのみフラグが ON になる。
+
 static void JPCommonLabel_insert_pause(JPCommonLabel * label)
 {
    /* insert short pause */
@@ -486,6 +489,7 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
 
    // NOTE: `、` 単体の場合、Label に pau フラグを立てるのみで終了する
    if (strcmp(pron, JPCOMMON_MORA_SHORT_PAUSE) == 0) {
+      // NOTE: pau flag ON No.1
       label->short_pause_flag = 1;
       return;
    }
@@ -511,18 +515,13 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
       }
 
       // NOTE: Label に pau フラグを立てる
+      // NOTE: pau flag ON No.2
       label->short_pause_flag = 1;
 
       return;
    }
 
-   /* NOTE:
-      インスタンス生成は一定のパターンに従っている。
-      大枠としては「`calloc()` による収納先のメモリ確保 -> `*_initialize()` による初期化」になっている。
-      収納先は Label の状況によって異なり、先行要素が無ければ `label.*_tail`、あれば `label.*_tail.next` になる。
-      `*_initialize()` の引数も状況によって異なる。
-      先行要素が無ければ prev=NULL/next=NULL、あれば prev=tail/next=NULL になる。
-   */
+   // NOTE: pau flag ON (`label->short_pause_flag = 1`) はこれ以降おこなわれない
 
    /* analysis pron */
    // NOTE:
@@ -532,6 +531,12 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
    //   - route_B: 無声化「’」
    //   - route_C: 一般モーラ
    //   - route_D: リスト外の入力
+   /* NOTE:
+      インスタンス生成は一定のパターンに従っている。
+      大枠としては「`calloc()` による収納先のメモリ確保 -> `*_initialize()` による初期化」になっている。
+      収納先は Label の状況によって異なり、先行要素が無ければ `label.*_tail`、あれば `label.*_tail.next` になる。
+      `*_initialize()` の引数も状況によって異なり、先行要素が無ければ prev=NULL/next=NULL、あれば prev=tail/next=NULL になる。
+   */
    while (pron[0] != '\0') {
       find = strtopcmp(pron, JPCOMMON_MORA_LONG_VOWEL);
       if (find != -1) {
@@ -689,16 +694,17 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
    // NOTE: ワードの追加が無かった（例: 冒頭に不正な発音で打ち切り）
    if (is_first_word == 1)
       return;
-   // NOTE: 音素が存在しない（例: フラグを建てただけ）
+   // NOTE: 音素が存在しない（例: pron が空）
    if (label->phoneme_tail == NULL)
       return;
-   // NOTE: pau のあとに音素が追加されていない（起きないはず？）
+   // NOTE:
+   // pau のあとに音素が追加されていない
+   // `JPCommonLabel_insert_pause()` の後に必ず音素追加が走っているので、起きないはず？
    if (strcmp(label->phoneme_tail->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0)
       return;
 
    /* make accent, phrase */
-   // NOTE:
-   // アクセント句と BreathGroup を更新する。
+   // NOTE: アクセント句と BreathGroup を更新する。
    if (label->word_head == label->word_tail) {
       /* first word */
       // NOTE: この呼び出しでワードを追加し、かつ Label にワードが1つだけなので、全体の first word である
