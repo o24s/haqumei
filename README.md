@@ -4,6 +4,8 @@ This repository is a fork of '***fork of open_jtalk***' ([`r9y9/open_jtalk`](htt
 I added only NOTE comments for analysis/understanding of Open JTalk.  
 The comments start with `NOTE:` notation.  
 
+For deep analysis of JPCommon, there is a branch [`analysis/jpcommon_min`](https://github.com/tarepan/analysis_open_jtalk/tree/analysis/jpcommon_min). In this branch, delete some codes for simplicity.
+
 NOTE: There are some differences between Open JTalk cvs and `r9y9/open_jtalk`.  
 Open JTalk cvs stop update at v1.10, but there is the Open JTalk v1.11 as archive file in official Open JTalk page.  
 `r9y9/open_jtalk` patch v1.11 into v1.10, prepare CIs, and fix bugs for Open JTalk users (especially for pyopenjtalk user).
