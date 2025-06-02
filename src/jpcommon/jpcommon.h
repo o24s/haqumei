@@ -142,11 +142,12 @@ void JPCommonLabel_print(JPCommonLabel * label);
 void JPCommonLabel_fprint(JPCommonLabel * label, FILE * fp);
 void JPCommonLabel_clear(JPCommonLabel * label);
 
-/* JPCommonNode */
-// NOTE:
-// ワード（単語）に相当するノード。
-// NJDNode から生成されるが、かなりの情報を落としてある。
-
+/* JPCommonNode
+     NOTE:
+     ワード（単語）に相当するノード。
+     NJDNode から生成されるが、かなりの情報を落としてある。
+     prev/next により連結リストとしても機能する。
+*/
 typedef struct _JPCommonNode {
    char *pron;                  /* pronunciation */
    char *pos;                   /* part of speech */
