@@ -65,6 +65,7 @@ void JPCommon_initialize(JPCommon * jpcommon)
 }
 
 void JPCommon_push(JPCommon * jpcommon, JPCommonNode * node)
+// NOTE: JPCommonNode を連結リストへ組み込んで JPCommon へ収納する。
 {
    if (jpcommon->head == NULL) {
       jpcommon->head = node;
@@ -76,6 +77,12 @@ void JPCommon_push(JPCommon * jpcommon, JPCommonNode * node)
 }
 
 void JPCommon_make_label(JPCommon * jpcommon)
+// NOTE:
+// JPCommon から JPCommonLabel を生成する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyopenjtalk `OpenJTalk.make_label()` 内で
 {
    JPCommonNode *node = jpcommon->head;
 
@@ -85,14 +92,21 @@ void JPCommon_make_label(JPCommon * jpcommon)
    else
       jpcommon->label = (JPCommonLabel *) calloc(1, sizeof(JPCommonLabel));
    JPCommonLabel_initialize(jpcommon->label);
+
    /* push word */
+   // NOTE:
+   // JPCommon に含まれる JPCommonNode を先頭から JPCommonLabel へ収納する。
+   // JPCommonNode は単語単位、JPCommonLabel は最小で音素単位であることに注意。
    for (node = jpcommon->head; node != NULL; node = node->next)
+      // NOTE: `JPCommonNode_get_*(node)` は全て単なるゲッター
       JPCommonLabel_push_word(jpcommon->label, JPCommonNode_get_pron(node),
                               JPCommonNode_get_pos(node),
                               JPCommonNode_get_ctype(node),
                               JPCommonNode_get_cform(node),
                               JPCommonNode_get_acc(node), JPCommonNode_get_chain_flag(node));
+
    /* make label */
+   // NOTE: フルコンテキストラベルをダンプして JPCommon.label.feature へ収納する
    JPCommonLabel_make(jpcommon->label);
 }
 
@@ -105,6 +119,12 @@ int JPCommon_get_label_size(JPCommon * jpcommon)
 }
 
 char **JPCommon_get_label_feature(JPCommon * jpcommon)
+// NOTE: フルコンテキストラベル系列を取得する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyopenjtalk `OpenJTalk.make_label()` 内で
+
 {
    if (jpcommon->label != NULL)
       return JPCommonLabel_get_feature(jpcommon->label);

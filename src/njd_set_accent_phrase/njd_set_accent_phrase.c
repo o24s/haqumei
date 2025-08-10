@@ -94,6 +94,12 @@ static int strtopcmp(const char *str, const char *pattern)
 }
 
 void njd_set_accent_phrase(NJD * njd)
+// NOTE:
+// 品詞と活用に基づき、全ての `.chain_flag` を `0` か `1` に設定する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyopenjtalk `OpenJTalk.run_frontend()` 内で
 {
    NJDNode *node;
 
@@ -101,7 +107,11 @@ void njd_set_accent_phrase(NJD * njd)
       return;
 
    for (node = njd->head->next; node != NULL; node = node->next) {
+
+      // NOTE: `.chain_flag` が `-1` でない（= `0` か `1` である）場合、何もしない。
       if (NJDNode_get_chain_flag(node) < 0) {
+
+         // NOTE: 全ての `.chain_flag` は `0` か `1` にセットされる。
          /* Rule 01 */
          NJDNode_set_chain_flag(node, 1);
 

@@ -69,6 +69,7 @@ void JPCommonNode_initialize(JPCommonNode * node)
    node->next = NULL;
 }
 
+// NOTE: ======== just set & get
 void JPCommonNode_set_pron(JPCommonNode * node, const char *str)
 {
    if (node->pron != NULL)
@@ -136,6 +137,7 @@ int JPCommonNode_get_chain_flag(JPCommonNode * node)
 {
    return node->chain_flag;
 }
+// NOTE: just set & get ========
 
 void JPCommonNode_copy(JPCommonNode * node1, JPCommonNode * node2)
 {

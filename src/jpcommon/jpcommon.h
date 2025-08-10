@@ -51,7 +51,17 @@
 
 JPCOMMON_H_START;
 
-/* JPCommonLabel */
+/* JPCommonLabel
+NOTE:
+Utterance 全体のフルコンテキストラベル情報を保持するクラス。
+クラス群は以下の階層構造を持つ (BG -> AP -> WD -> MR -> PN)：
+  `_JPCommonLabelBreathGroup` -> `_JPCommonLabelAccentPhrase` > `_JPCommonLabelWord` > `_JPCommonLabelMora` > `_JPCommonLabelPhoneme`
+各クラスは以下の構造をもつ:
+  - head/tail: 下位クラスの先頭・末尾インスタンス
+  - prev/next: 同クラスの前後インスタンス
+  - up: 上位クラスのインスタンス
+  - 個別属性: `phoneme` や `mora` など
+*/
 
 struct _JPCommonLabelPhoneme;
 struct _JPCommonLabelMora;
@@ -87,9 +97,11 @@ typedef struct _JPCommonLabelWord {
    struct _JPCommonLabelAccentPhrase *up;
 } JPCommonLabelWord;
 
+// NOTE:
+// 生成は全て「メモリ確保 + JPCommonLabelAccentPhrase_initialize()」のセットでおこなわれている
 typedef struct _JPCommonLabelAccentPhrase {
    int accent;
-   char *emotion;
+   char *emotion; // NOTE: 末尾の疑問形フラグ。Null | "1"。
    char *excl; // added by me
    struct _JPCommonLabelWord *head;
    struct _JPCommonLabelWord *tail;
@@ -106,8 +118,8 @@ typedef struct _JPCommonLabelBreathGroup {
 } JPCommonLabelBreathGroup;
 
 typedef struct _JPCommonLabel {
-   int size;
-   char **feature;
+   int size;       // NOTE: 音素の数
+   char **feature; // NOTE: フルコンテキストラベル文字列のリスト
    JPCommonLabelBreathGroup *breath_head;
    JPCommonLabelBreathGroup *breath_tail;
    JPCommonLabelAccentPhrase *accent_head;
@@ -131,8 +143,12 @@ void JPCommonLabel_print(JPCommonLabel * label);
 void JPCommonLabel_fprint(JPCommonLabel * label, FILE * fp);
 void JPCommonLabel_clear(JPCommonLabel * label);
 
-/* JPCommonNode */
-
+/* JPCommonNode
+     NOTE:
+     ワード（単語）に相当するノード。
+     NJDNode から生成されるが、かなりの情報を落としてある。
+     prev/next により連結リストとしても機能する。
+*/
 typedef struct _JPCommonNode {
    char *pron;                  /* pronunciation */
    char *pos;                   /* part of speech */
@@ -162,11 +178,12 @@ void JPCommonNode_fprint(JPCommonNode * node, FILE * fp);
 void JPCommonNode_clear(JPCommonNode * node);
 
 /* JPCommon */
-
+// NOTE:
+// ワードをフラットに並べた JPCommonNode 系と、階層化した JPCommonLabel 系の両方を保持する
 typedef struct _JPCommon {
    JPCommonNode *head;
    JPCommonNode *tail;
-   JPCommonLabel *label;
+   JPCommonLabel *label; // NOTE: ラベルの階層連結リスト
 } JPCommon;
 
 void JPCommon_initialize(JPCommon * jpcommon);

@@ -67,7 +67,7 @@ typedef struct _NJDNode {
    int acc;                     /* accent */
    int mora_size;
    char *chain_rule;
-   int chain_flag;
+   int chain_flag;              /* NOTE: アクセント句として連鎖するか否か。 -1|0|1 */
    struct _NJDNode *prev;
    struct _NJDNode *next;
 } NJDNode;

@@ -430,6 +430,7 @@ void NJDNode_load(NJDNode * node, const char *str)
    NJDNode *prev = NULL;
 
    /* load */
+   // example: `笑止千万,1347,1347,4640,名詞,形容動詞語幹,*,*,*,*,笑止:千万,ショウシ:センバン,ショーシ:センバン,1/3:0/4,C1`
    get_token_from_string(str, &index, buff_string, ',');
    get_token_from_string(str, &index, buff, ',');
    NJDNode_set_pos(node, buff);
@@ -466,7 +467,10 @@ void NJDNode_load(NJDNode * node, const char *str)
       return;
    }
 
-   /* count chained word */
+   /* count chained word 
+      NOTE: Count the number of `/` in the accent attribute.
+            In chained word, e.g. `1/3:0/4`, there are multiple `/`s.
+   **/
    for (i = 0, count = 0; buff_acc[i] != '\0'; i++)
       if (buff_acc[i] == '/')
          count++;
@@ -505,9 +509,11 @@ void NJDNode_load(NJDNode * node, const char *str)
    index_acc = 0;
    for (i = 0; i < count; i++) {
       if (i > 0) {
+         /* NOTE: Node for i-th sub-word. */
          node = (NJDNode *) calloc(1, sizeof(NJDNode));
          NJDNode_initialize(node);
          NJDNode_copy(node, prev);
+         /* NOTE: No needs of accent chaining because of explicit manual accent assignment. */
          NJDNode_set_chain_flag(node, 0);
          node->prev = prev;
          prev->next = node;

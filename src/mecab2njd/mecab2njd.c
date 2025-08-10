@@ -58,6 +58,11 @@ MECAB2NJD_C_START;
 #include "mecab2njd.h"
 
 void mecab2njd(NJD * njd, char **feature, int size)
+// NOTE: MeCab features から NJDNodes を生成し、NJD へ追加する。
+// 利用は以下：
+//   - `Open_JTalk_synthesis()` 内で
+//   - パブリック関数として外部で
+//     - pyopenjtalk `OpenJTalk.run_frontend()` 内で
 {
    int i;
    NJDNode *node;
