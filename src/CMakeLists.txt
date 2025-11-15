@@ -2,7 +2,7 @@
 # CMake configuration for open_jtalk
 #
 # adapted from https://gist.github.com/hkrn/889259/266e798f48a49d041d7f1e41a579d878134f1fca
-cmake_minimum_required(VERSION 2.8.12...3.31)
+cmake_minimum_required(VERSION 3.5)
 
 # set library version
 set(OPEN_JTALK_VERSION 1.11)
