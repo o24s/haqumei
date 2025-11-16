@@ -1,0 +1,374 @@
+use std::fs::File;
+use std::io::Read;
+use std::process::Command;
+use std::{env, fs};
+use std::error::Error;
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest, Sha256};
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let src_dir_str = "../pyopenjtalk-plus/lib/open_jtalk/src";
+    let src_dir = PathBuf::from(src_dir_str);
+    let out_dir = env::var("OUT_DIR")?;
+
+    println!("cargo:rerun-if-changed={}", src_dir.display());
+    println!("cargo:rerun-if-changed=wrapper.h");
+
+    let mut defines = vec![
+        // CMake: add_definitions(...), set(...)
+        ("DIC_VERSION", Some("102")),
+        ("MECAB_DEFAULT_RC", Some("\"dummy\"")),
+        ("MECAB_WITHOUT_SHARE_DIC", None),
+        ("PACKAGE", Some("\"open_jtalk\"")),
+        ("PACKAGE_VERSION", Some("\"1.11\"")),
+        ("VERSION", Some("\"1.11\"")),
+        ("PACKAGE_STRING", Some("\"open_jtalk 1.11\"")),
+        ("PACKAGE_BUGREPORT", Some("\"https://github.com/tsukumijima/open_jtalk/\"")),
+        ("PACKAGE_NAME", Some("\"open_jtalk\"")),
+        ("CHARSET_UTF_8", None),
+        ("MECAB_CHARSET", Some("\"utf-8\"")),
+        ("MECAB_UTF8_USE_ONLY", None),
+        ("HAVE_CTYPE_H", Some("1")),
+        ("HAVE_FCNTL_H", Some("1")),
+        ("HAVE_INTTYPES_H", Some("1")),
+        ("HAVE_MEMORY_H", Some("1")),
+        ("HAVE_SETJMP_H", Some("1")),
+        ("HAVE_STDINT_H", Some("1")),
+        ("HAVE_STDLIB_H", Some("1")),
+        ("HAVE_STRING_H", Some("1")),
+        ("HAVE_SYS_STAT_H", Some("1")),
+        ("HAVE_SYS_TYPES_H", Some("1")),
+        ("HAVE_GETENV", Some("1")),
+        ("HAVE_STRSTR", Some("1")),
+        ("SIZEOF_CHAR", Some("1")),
+        ("SIZEOF_SHORT", Some("2")),
+        ("SIZEOF_INT", Some("4")),
+        ("SIZEOF_LONG_LONG", Some("8")),
+    ];
+
+    if cfg!(unix) {
+        defines.extend(vec![
+            ("HAVE_DIRENT_H", Some("1")),
+            ("HAVE_STRINGS_H", Some("1")),
+            ("HAVE_SYS_MMAN_H", Some("1")),
+            ("HAVE_SYS_TIMES_H", Some("1")),
+            ("HAVE_UNISTD_H", Some("1")),
+            ("HAVE_GETPAGESIZE", Some("1")),
+            ("HAVE_MMAP", Some("1")),
+            ("HAVE_OPENDIR", Some("1")),
+            ("HAVE_SETJMP", Some("1")),
+            ("HAVE_LIBM", Some("1")),
+        ]);
+    }
+    if cfg!(windows) {
+        defines.extend(vec![
+            ("HAVE_WINDOWS_H", Some("1")),
+            ("HAVE_IO_H", Some("1")),
+        ]);
+    }
+
+    if cfg!(target_os = "windows") {
+        defines.push(("SIZEOF_LONG", Some("4")));
+    } else {
+        defines.push(("SIZEOF_LONG", Some("8")));
+    }
+
+    match env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap().as_str() {
+        "64" => defines.push(("SIZEOF_SIZE_T", Some("8"))),
+        "32" => defines.push(("SIZEOF_SIZE_T", Some("4"))),
+        w => panic!("Unsupported target pointer width: {}", w),
+    };
+
+    if cfg!(target_endian = "big") {
+        defines.push(("WORDS_BIGENDIAN", Some("1")));
+    }
+
+    let mut build = cc::Build::new();
+    build.cpp(true);
+
+    let include_dirs = [
+        "jpcommon", "mecab/src", "mecab2njd", "njd", "njd2jpcommon",
+        "njd_set_accent_phrase", "njd_set_accent_type", "njd_set_digit",
+        "njd_set_long_vowel", "njd_set_pronunciation",
+        "njd_set_unvoiced_vowel", "text2mecab",
+    ];
+    for dir in &include_dirs {
+        build.include(src_dir.join(dir));
+    }
+
+    for dir in &include_dirs {
+        for ext in ["c", "cpp"] {
+            let pattern = src_dir.join(dir).join(format!("*.{}", ext));
+            for entry in glob::glob(pattern.to_str().unwrap()).expect("Failed to read glob pattern") {
+                build.file(entry.unwrap());
+            }
+        }
+    }
+
+    for (key, value) in &defines {
+        build.define(key, value.map(|v| v));
+    }
+
+    // compiler flags
+    if build.get_compiler().is_like_msvc() {
+        build.define("_CRT_SECURE_NO_WARNINGS", None);
+        build.define("_CRT_NONSTDC_NO_WARNINGS", None);
+        build.flag("/source-charset:utf-8");
+        build.flag("/execution-charset:utf-8");
+
+        build.flag("/W3");
+        build.flag("/wd4100");
+        build.flag("/wd4065");
+    } else {
+        build.flag("-fPIC");
+        build.flag("-finput-charset=UTF-8");
+        build.flag("-fexec-charset=UTF-8");
+        build.flag("-Wno-narrowing");
+
+        build.flag("-Wno-unused-parameter");
+        build.flag("-Wno-write-strings");
+        build.flag("-Wno-type-limits");
+        build.flag("-Wno-class-memaccess");
+        build.flag("-Wno-missing-field-initializers");
+        build.flag("-Wno-implicit-fallthrough");
+        build.flag("-Wno-restrict");
+        build.flag("-Wno-sign-compare");
+        build.flag("-Wno-unused-function");
+        build.flag("-Wno-unused-variable");
+        build.flag("-Wno-ignored-qualifiers");
+        build.flag("-Wno-stringop-truncation");
+    }
+
+    if cfg!(unix) {
+        println!("cargo:rustc-link-lib=m");
+    }
+
+    build.compile("openjtalk");
+    let dict_indexer_path = build_dict_indexer(&src_dir, &out_dir, &defines, &include_dirs)?;
+
+    // println!("cargo:warning=Generating bindings for openjtalk...");
+
+    let mut bindgen_builder = bindgen::Builder::default()
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .blocklist_item("FP_NAN")
+        .blocklist_item("FP_INFINITE")
+        .blocklist_item("FP_ZERO")
+        .blocklist_item("FP_SUBNORMAL")
+        .blocklist_item("FP_NORMAL")
+        .clang_arg(format!("-I{}", src_dir_str));
+
+    for dir in &include_dirs {
+        bindgen_builder = bindgen_builder.clang_arg(format!("-I{}", src_dir.join(dir).display()));
+    }
+
+    for (key, value) in &defines {
+        let arg = if let Some(val) = value {
+            format!("-D{}={}", key, val)
+        } else {
+            format!("-D{}", key)
+        };
+        bindgen_builder = bindgen_builder.clang_arg(arg);
+    }
+
+    let bindings = bindgen_builder
+        .generate()
+        .expect("Unable to generate bindings");
+
+    let out_path = PathBuf::from(out_dir);
+
+    bindings.write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings to file");
+
+    if env::var("CARGO_FEATURE_EMBED_DICTIONARY").is_err() {
+        println!("'embed-dictionary' feature is not enabled. Skipping dictionary compilation.");
+        return Ok(());
+    }
+
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    let dict_src_dir = manifest_dir.join("./../dictionary");
+    let dict_out_dir = out_path.join("dictionary_out");
+    let compressed_dict_path = manifest_dir.join("dictionary.tar.zst");
+    let compressed_dict_hash_path = manifest_dir.join("dictionary.tar.zst.sha256");
+    let dict_hash_path = manifest_dir.join("dictionary.sha256");
+    let compiled_dict_hash_path = manifest_dir.join("compiled_dictionary.sha256");
+
+    if !dict_src_dir.exists() {
+        println!("cargo:warning=dictionary({dict_src_dir:?}) not found, skipping dictionary compilation.");
+        return Ok(());
+    }
+
+    println!("cargo:rerun-if-changed={}", dict_src_dir.display());
+
+    if dict_hash_path.exists()
+        && dict_src_dir.exists()
+        && compressed_dict_path.exists()
+        && compressed_dict_hash_path.exists()
+        && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&compressed_dict_path)
+        && let Ok(dict_hash) = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])
+        && let Ok(saved_dict_hash_path) = fs::read_to_string(&dict_hash_path)
+        && let Ok(saved_compressed_dict_hash_path) = fs::read_to_string(&compressed_dict_hash_path)
+        && saved_dict_hash_path == dict_hash
+        && saved_compressed_dict_hash_path == compressed_dict_hash {
+            println!("Dictionary cache in MANIFEST_DIR is up-to-date. Skipping compilation.");
+            return Ok(());
+        }
+
+    fs::create_dir_all(&dict_out_dir)?;
+
+    run_dict_indexer(&dict_indexer_path, &dict_src_dir, &dict_out_dir)?;
+
+    let tar_file = File::create(&compressed_dict_path)?;
+
+    {
+        let zstd_writer = zstd::Encoder::new(tar_file, 22)?.auto_finish();
+        let mut tar_builder = tar::Builder::new(zstd_writer);
+
+        tar_builder.append_dir_all(".", &dict_out_dir)?;
+        tar_builder.finish()?;
+    }
+
+    let dict_hash = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])?;
+    let compressed_dict_hash = calculate_compressed_dict_hash(&compressed_dict_path)?;
+    let compiled_dict_hash = calculate_hash_for_extensions(&dict_out_dir, &["dic", "bin"])?;
+    fs::write(&dict_hash_path, dict_hash)?;
+    fs::write(&compiled_dict_hash_path, compiled_dict_hash)?;
+    fs::write(&compressed_dict_hash_path, compressed_dict_hash)?;
+    if dict_out_dir.exists() {
+        fs::remove_dir_all(dict_out_dir)?;
+    }
+    // println!("cargo:warning=Dictionary compressed to {}", compressed_dict_path.display());
+    Ok(())
+}
+
+fn build_dict_indexer(
+    src_dir: &Path,
+    out_dir: &str,
+    defines: &[(&str, Option<&str>)],
+    include_dirs: &[&str],
+) -> Result<PathBuf, Box<dyn Error>> {
+    let out_path = PathBuf::from(out_dir);
+
+    let main_wrapper_src = r#"
+#include "mecab.h"
+
+int main(int argc, char **argv) {
+  return mecab_dict_index(argc, argv);
+}
+"#;
+    let main_wrapper_path = out_path.join("main_wrapper.cpp");
+    fs::write(&main_wrapper_path, main_wrapper_src)?;
+
+    let mut build = cc::Build::new();
+    build.cpp(true);
+    let compiler = build.get_compiler();
+    let mut command = compiler.to_command();
+
+    let exe_name = if cfg!(target_os = "windows") { "mecab-dict-index.exe" } else { "mecab-dict-index" };
+    let exe_path = out_path.join(exe_name);
+
+    command.arg(&main_wrapper_path);
+    command.arg("-o").arg(&exe_path);
+
+    for dir in include_dirs {
+        command.arg(format!("-I{}", src_dir.join(dir).display()));
+    }
+
+    for (key, value) in defines {
+        let arg = if let Some(val) = value {
+            format!("-D{}={}", key, val)
+        } else {
+            format!("-D{}", key)
+        };
+        command.arg(arg);
+    }
+
+    if compiler.is_like_msvc() {
+        command.arg(format!("/LIBPATH:{}", out_dir));
+        command.arg("openjtalk.lib");
+    } else {
+        command.arg(format!("-L{}", out_dir));
+        command.arg("-lopenjtalk");
+        if cfg!(unix) {
+            command.arg("-lm");
+        }
+    }
+
+    let output = command.output()?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to build mecab-dict-index executable.\nStatus: {}\nStdout: {}\nStderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ).into());
+    }
+
+    Ok(exe_path)
+}
+
+fn run_dict_indexer(indexer_path: &Path, dict_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
+    let dict_dir_str = dict_dir.to_str().ok_or("Dictionary path contains invalid UTF-8")?;
+    let out_dir_str = out_dir.to_str().ok_or("Dictionary path contains invalid UTF-8")?;
+
+    let output = Command::new(indexer_path)
+        .arg("-d").arg(dict_dir_str)
+        .arg("-o").arg(out_dir_str)
+        .arg("-f").arg("utf-8")
+        .arg("-t").arg("utf-8")
+        .output()?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "mecab-dict-index execution failed.\nstatus: {}\nstdout: {}\nstderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+fn calculate_compressed_dict_hash(path: &Path) -> Result<String, Box<dyn Error>> {
+    let mut hasher = Sha256::new();
+
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    hasher.update(&buffer);
+
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn calculate_hash_for_extensions(dir: &Path, extensions: &[&str]) -> Result<String, Box<dyn Error>> {
+    let mut hasher = Sha256::new();
+    let mut paths = Vec::new();
+
+    for entry in walkdir::WalkDir::new(dir) {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file()
+            && let Some(ext_str) = path.extension().and_then(|s| s.to_str())
+            && extensions.contains(&ext_str) {
+                paths.push(path.to_path_buf());
+            }
+    }
+
+    paths.sort();
+
+    for path in paths {
+        let relative_path = path.strip_prefix(dir)?;
+        hasher.update(relative_path.to_string_lossy().as_bytes());
+        let mut file = File::open(&path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        hasher.update(&buffer);
+    }
+
+    Ok(hex::encode(hasher.finalize()))
+}

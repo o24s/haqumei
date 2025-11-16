@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+    "haqumei",
+]
+exclude = [
+    "vendor/crawdad-rkyv",
+    "vendor/rucrf-rkyv"
+]
