@@ -23,15 +23,14 @@ use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    open_jtalk::{Dictionary, OpenJTalk},
-    utils::{modify_filler_accent, retreat_acc_nuc, vibrato_analysis},
+    open_jtalk::OpenJTalk,
+    utils::{modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc, vibrato_analysis},
 };
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> = LazyLock::new(|| Cache::new(1000));
 
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
-    mecab_dict: Dictionary,
     tokenizer: vibrato_rkyv::Tokenizer,
     data_dir: PathBuf,
     predictor: NaniPredictor,
@@ -39,8 +38,6 @@ pub struct Haqumei {
 
 impl Haqumei {
     pub fn new() -> Result<Self, HaqumeiError> {
-        let mecab_dict = Dictionary::from_embedded()?;
-        open_jtalk::update_global_mecab_dictionary(mecab_dict.clone());
         let open_jtalk = OpenJTalk::new()?;
 
         let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
@@ -48,14 +45,13 @@ impl Haqumei {
         };
 
         let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
-            PresetDictionaryKind::BccwjUnidic,
+            PresetDictionaryKind::UnidicCsj,
             &data_dir,
         )?;
 
         let tokenizer = vibrato_rkyv::Tokenizer::new(vibrato_dict);
         Ok(Haqumei {
             open_jtalk,
-            mecab_dict,
             data_dir,
             tokenizer,
             predictor: NaniPredictor::new()?,
@@ -122,6 +118,8 @@ impl Haqumei {
         modify_filler_accent(&mut njd_features);
         self.modify_kanji_yomi(text, &mut njd_features);
         retreat_acc_nuc(&mut njd_features);
+        modify_acc_after_chaining(&mut njd_features);
+        process_odori_features(&mut njd_features, &mut self.open_jtalk)?;
         Ok(njd_features)
     }
 

@@ -1,9 +1,17 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{collections::HashSet, fs::File, io::Read, path::Path, sync::LazyLock};
 
 use sha2::{Digest, Sha256};
 use vibrato_rkyv::tokenizer::worker::Worker;
 
-use crate::{Haqumei, NjdFeature, VIBRATO_CACHE, data::MULTI_READ_KANJI_LIST, errors::HaqumeiError, features::UnidicFeature};
+use crate::{
+    Haqumei,
+    NjdFeature,
+    VIBRATO_CACHE,
+    data::{MULTI_READ_KANJI_LIST, TO_DAKUON, TO_SEION},
+    errors::HaqumeiError,
+    features::UnidicFeature,
+    open_jtalk::OpenJTalk
+};
 
 pub fn calculate_compiled_dir_hash(dir: &Path) -> Result<String, HaqumeiError> {
     let mut hasher = Sha256::new();
@@ -198,5 +206,411 @@ pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
                 acc -= njd_features[i].mora_size;
             }
         }
+    }
+}
+
+
+/// 品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
+///   書きます → か[きま]す, 参ります → ま[いりま]す
+///   書いております → [か]いております
+pub fn modify_acc_after_chaining(njd_features: &mut [NjdFeature]) {
+    if njd_features.is_empty() {
+        return;
+    }
+
+    const SUFFIXES_TO_MODIFY_ACC: &[&str] = &["れる", "られる", "すぎる", "せる", "させる"];
+
+    let mut head_index = 0;
+    let mut acc = 0;
+
+    // アクセント核を含むノードを過ぎたかどうか
+    let mut is_after_nuc = false;
+    // アクセント句の先頭からのモーラ数
+    let mut phase_len = 0;
+
+    for i in 0..njd_features.len() {
+        // アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
+        if njd_features[i].chain_flag == 0 || njd_features[i].chain_flag == -1 {
+            is_after_nuc = false;
+            head_index = i;
+            acc = njd_features[head_index].acc;
+            phase_len = 0;
+        }
+
+        // acc = 0 の場合は「特殊・マス」は存在しないと考えてよい
+        if acc == 0 {
+            continue;
+        }
+
+        let mora_size = njd_features[i].mora_size;
+        if is_after_nuc {
+            let njd = &njd_features[i];
+
+            if njd.ctype == "特殊・マス" {
+                njd_features[head_index].acc = if njd.cform != "未然形" {
+                    phase_len + 1
+                } else {
+                    phase_len + 2
+                };
+            } else if njd.ctype == "特殊・ナイ" {
+                njd_features[head_index].acc = phase_len;
+            } else if SUFFIXES_TO_MODIFY_ACC.contains(&njd.orig.as_str()) {
+                njd_features[head_index].acc = phase_len + njd.acc;
+            } else {
+                is_after_nuc = false;
+                acc = 0;
+            }
+
+            phase_len += mora_size;
+        } else {
+            phase_len += mora_size;
+            if acc <= mora_size {
+                is_after_nuc = true;
+            } else {
+                acc -= mora_size;
+            }
+        }
+    }
+}
+
+/// 踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを適切に処理する後処理関数
+pub fn process_odori_features(
+    njd_features: &mut Vec<NjdFeature>,
+    open_jtalk: &mut OpenJTalk,
+) -> Result<(), HaqumeiError> {
+    let mut i = 0;
+    while i < njd_features.len() {
+        let orig = njd_features[i].orig.clone();
+
+        if is_dancing(&orig) {
+            // 踊り字「々」の処理
+
+            // 再解析が必要なケース
+            let mut reanalysis_result = None;
+            if i > 0 {
+                let prev = &njd_features[i - 1];
+
+                if count_odori(&orig) == 1 && is_kanji_token(prev) {
+                    let prev_chars: Vec<char> = prev.orig.chars().collect();
+                    if prev_chars.len() > 1 {
+                        let last_char = *prev_chars.last().unwrap();
+                        if is_kanji(last_char) {
+                            // 後続トークンのチェック
+                            let next_token_opt = if i + 1 < njd_features.len() {
+                                Some(&njd_features[i + 1])
+                            } else {
+                                None
+                            };
+
+                            // 後続が1文字の漢字なら巻き込んで再解析
+                            let (target_text, consumed_next) = if let Some(next) = next_token_opt {
+                                if is_single_kanji_token(next) {
+                                    (format!("{}{}", last_char, next.orig), true)
+                                } else {
+                                    (last_char.to_string(), false)
+                                }
+                            } else {
+                                (last_char.to_string(), false)
+                            };
+
+                            reanalysis_result = Some((target_text, consumed_next));
+                        }
+                    }
+                }
+            }
+
+            // 再解析実行と適用
+            if let Some((text, consumed_next)) = reanalysis_result {
+                let analyzed = open_jtalk.run_frontend(&text)?;
+
+                let range_end = if consumed_next { i + 2 } else { i + 1 };
+                let analyzed_len = analyzed.len();
+
+                if range_end <= njd_features.len() {
+                    njd_features.splice(i..range_end, analyzed);
+
+                    if !consumed_next && analyzed_len > 0 {
+                        let feat = &mut njd_features[i];
+                        feat.pos = "名詞".to_string();
+                        feat.pos_group1 = "一般".to_string();
+                        feat.pos_group2 = "*".to_string();
+                        feat.pos_group3 = "*".to_string();
+                        feat.ctype = "*".to_string();
+                        feat.cform = "*".to_string();
+                        i += 1;
+                    } else {
+                        i += analyzed_len;
+                    }
+                    continue;
+                }
+            }
+
+            // 連続踊り字の展開処理
+            let start = i;
+            let mut end = i;
+            let mut total_odori = 0;
+            while end < njd_features.len() && is_dancing(&njd_features[end].orig) {
+                total_odori += count_odori(&njd_features[end].orig);
+                end += 1;
+            }
+
+            // 直前の漢字トークンを収集
+            let mut normal_indices = Vec::new();
+            let mut j = start;
+            let mut collected_chars = 0;
+            let needed_chars = if total_odori >= 2 { 2 } else { 1 };
+
+            while j > 0 {
+                j -= 1;
+                if is_kanji_token(&njd_features[j]) {
+                    normal_indices.push(j);
+                    collected_chars += njd_features[j].orig.chars().count();
+                    if collected_chars >= needed_chars {
+                        break;
+                    }
+                }
+            }
+            normal_indices.reverse();
+
+            if normal_indices.is_empty() {
+                i = end;
+                continue;
+            }
+
+            // 置換用データの作成
+            let is_single_kanji = normal_indices.len() == 1
+                && njd_features[normal_indices[0]].orig.chars().count() == 1;
+
+            let (base_read, base_pron, base_mora_size) = if is_single_kanji {
+                let f = &njd_features[normal_indices[0]];
+                (f.read.clone(), f.pron.clone(), f.mora_size)
+            } else {
+                let mut r = String::new();
+                let mut p = String::new();
+                let mut m = 0;
+                for &idx in &normal_indices {
+                    r.push_str(&njd_features[idx].read);
+                    p.push_str(&njd_features[idx].pron);
+                    m += njd_features[idx].mora_size;
+                }
+                (r, p, m)
+            };
+
+            // 踊り字トークンの書き換え
+            (start..end).for_each(|k| {
+                let current_odori = count_odori(&njd_features[k].orig);
+                let feat = &mut njd_features[k];
+
+                if is_single_kanji {
+                    feat.read = base_read.repeat(current_odori);
+                    feat.pron = base_pron.repeat(current_odori);
+                    feat.mora_size = base_mora_size * current_odori as i32;
+                } else {
+                    feat.read = base_read.clone();
+                    feat.pron = base_pron.clone();
+                    feat.mora_size = base_mora_size;
+                }
+
+                if feat.pos == "記号" {
+                    feat.pos = "名詞".to_string();
+                    feat.pos_group1 = "一般".to_string();
+                    feat.pos_group2 = "*".to_string();
+                    feat.pos_group3 = "*".to_string();
+                    feat.ctype = "*".to_string();
+                    feat.cform = "*".to_string();
+                }
+            });
+            i = end;
+
+        } else if is_odoriji(&orig) {
+            // 一の字点（ゝ、ゞ、ヽ、ヾ）の処理
+            if i > 0 {
+                // 直前が記号でないか
+                if njd_features[i - 1].pos != "記号" {
+                    let mut prev_index = None;
+                    let mut k = i;
+                    while k > 0 {
+                        k -= 1;
+                        if njd_features[k].pos != "記号" && njd_features[k].mora_size > 0 {
+                            prev_index = Some(k);
+                            break;
+                        }
+                    }
+
+                    if let Some(pidx) = prev_index {
+                        let prev_read = njd_features[pidx].read.clone();
+                        let prev_pron = njd_features[pidx].pron.clone();
+                        let prev_mora_size = njd_features[pidx].mora_size;
+
+                        let curr = &mut njd_features[i];
+                        apply_odoriji_logic(curr, &prev_read, &prev_pron, prev_mora_size);
+                    }
+                }
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    Ok(())
+}
+
+#[inline(always)]
+fn is_dancing(orig: &str) -> bool {
+    !orig.is_empty() && orig.chars().all(|c| c == '々')
+}
+
+#[inline(always)]
+fn is_odoriji(orig: &str) -> bool {
+    !orig.is_empty() && orig.chars().all(|c| matches!(c, 'ゝ' | 'ゞ' | 'ヽ' | 'ヾ'))
+}
+
+#[inline(always)]
+fn count_odori(orig: &str) -> usize {
+    orig.chars().filter(|&c| c == '々').count()
+}
+
+#[inline(always)]
+fn is_kanji(c: char) -> bool {
+    ('\u{4E00}'..='\u{9FFF}').contains(&c)
+}
+
+#[inline(always)]
+fn is_kanji_token(token: &NjdFeature) -> bool {
+    if token.pos == "記号" {
+        return false;
+    }
+    token.orig.chars().any(is_kanji)
+}
+
+#[inline(always)]
+fn is_single_kanji_token(token: &NjdFeature) -> bool {
+    is_kanji_token(token)
+        && token.orig.chars().count() == 1
+        && is_kanji(token.orig.chars().next().unwrap())
+}
+
+/// 一の字点のロジック適用（読み分割、濁点化など）
+#[inline(always)]
+fn apply_odoriji_logic(
+    odori_feature: &mut NjdFeature,
+    prev_read: &str,
+    prev_pron: &str,
+    prev_mora_size: i32,
+) {
+    // 読みと発音をモーラ単位（小書き文字考慮）で分割
+    let prev_read_chars = split_kana_mora(prev_read);
+
+    // 発音記号からアクセント境界'を除去
+    let prev_pron_source = prev_pron.replace('’', "");
+    let prev_pron_source = if prev_pron_source.is_empty() {
+        prev_read
+    } else {
+        &prev_pron_source
+    };
+    let prev_pron_chars = split_kana_mora(prev_pron_source);
+
+    // モーラサイズ計算 (最後の文字のものを使用するロジック)
+    // Python版では全文字に等分しているが、最終的に使うのは最後の文字の値のみ
+    if prev_read_chars.is_empty() {
+        return;
+    }
+
+    let mora_val = prev_mora_size / prev_read_chars.len() as i32;
+
+    let target_read = prev_read_chars.last().unwrap();
+    let target_pron = prev_pron_chars.last().unwrap_or(target_read); // pronが短すぎる場合のフォールバック
+
+    let odori_char = odori_feature.orig.chars().next().unwrap_or('ゝ');
+
+    if ['ゝ', 'ヽ'].contains(&odori_char) {
+        // 清音化
+        odori_feature.read = TO_SEION.get(target_read).unwrap_or(&target_read.as_str()).to_string();
+        odori_feature.pron = TO_SEION.get(target_pron).unwrap_or(&target_pron.as_str()).to_string();
+        odori_feature.mora_size = mora_val;
+    } else if ['ゞ', 'ヾ'].contains(&odori_char) {
+        // 濁音化
+        odori_feature.read = TO_DAKUON.get(target_read).unwrap_or(&target_read.as_str()).to_string();
+        odori_feature.pron = TO_DAKUON.get(target_pron).unwrap_or(&target_pron.as_str()).to_string();
+        odori_feature.mora_size = mora_val;
+    }
+
+    if odori_feature.pos == "記号" {
+        odori_feature.pos = "名詞".to_string();
+        odori_feature.pos_group1 = "一般".to_string();
+        odori_feature.pos_group2 = "*".to_string();
+        odori_feature.pos_group3 = "*".to_string();
+        odori_feature.ctype = "*".to_string();
+        odori_feature.cform = "*".to_string();
+    }
+}
+
+static SMALL_KANA: LazyLock<HashSet<char>> = LazyLock::new(|| ['ャ', 'ュ', 'ョ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ'].into());
+
+/// 文字列をモーラ単位（小書き文字を前の文字に結合）で分割
+#[inline(always)]
+fn split_kana_mora(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut result = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if i + 1 < chars.len() && SMALL_KANA.contains(&chars[i + 1]) {
+            result.push(format!("{}{}", c, chars[i + 1]));
+            i += 2;
+        } else {
+            result.push(c.to_string());
+            i += 1;
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_modify_acc_after_chaining_mut() {
+        let mut features = [
+            NjdFeature {
+                string: "参り".to_string(),
+                pos: "動詞".to_string(),
+                pos_group1: "自立".to_string(),
+                pos_group2: "*".to_string(),
+                pos_group3: "*".to_string(),
+                ctype: "五段・ラ行".to_string(),
+                cform: "連用形".to_string(),
+                orig: "参る".to_string(),
+                read: "マイリ".to_string(),
+                pron: "マイリ".to_string(),
+                acc: 1,
+                mora_size: 3,
+                chain_rule: "*".to_string(),
+                chain_flag: -1,
+            },
+            NjdFeature {
+                string: "ます".to_string(),
+                pos: "助動詞".to_string(),
+                pos_group1: "*".to_string(),
+                pos_group2: "*".to_string(),
+                pos_group3: "*".to_string(),
+                ctype: "特殊・マス".to_string(),
+                cform: "基本形".to_string(),
+                orig: "ます".to_string(),
+                read: "マス".to_string(),
+                pron: "マス’".to_string(),
+                acc: 1,
+                mora_size: 2,
+                chain_rule: "動詞%F2@1/助詞%F2@1".to_string(),
+                chain_flag: 1,
+            },
+        ];
+
+        modify_acc_after_chaining(&mut features);
+
+        let 参り = features.first().unwrap();
+        assert_eq!(参り.acc, 4);
     }
 }

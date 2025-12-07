@@ -121,7 +121,7 @@ impl OpenJTalk {
         let c_user_dict: Option<CString> = user_dict
             .as_ref()
             .map(|p| path_to_cstring(p.as_ref()))
-            .transpose()?; // Option<Result<T, E>> -> Result<Option<T>, E>
+            .transpose()?;
 
         let result = unsafe {
             if let Some(user_dict) = c_user_dict.as_ref().filter(|s| !s.to_bytes().is_empty()) {
@@ -200,7 +200,7 @@ impl OpenJTalk {
             ffi::text2mecab(
                 buffer.as_mut_ptr() as *mut i8,
                 BUFFER_SIZE,
-                c_text.as_ptr(), // *const i8
+                c_text.as_ptr(),
             )
         };
 

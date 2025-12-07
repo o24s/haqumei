@@ -25,7 +25,7 @@ rayon = "1.11.0"
 sha2 = "0.10.9"
 tar = "0.4.44"
 thiserror = "2.0.17"
-vibrato-rkyv = { path = "./../vendor/vibrato-rkyv/vibrato", features = ["legacy"]}
+vibrato-rkyv = { path = "./../vendor/vibrato-rkyv/vibrato", features = ["legacy"] }
 walkdir = "2.5.0"
 zstd = "0.13.3"
 

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let src_dir_str = "../pyopenjtalk-plus/lib/open_jtalk/src";
+    let src_dir_str = "../vendor/open_jtalk/src";
     let src_dir = PathBuf::from(src_dir_str);
     let out_dir = env::var("OUT_DIR")?;
 
