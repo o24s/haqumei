@@ -50,6 +50,7 @@ impl Haqumei {
         )?;
 
         let tokenizer = vibrato_rkyv::Tokenizer::new(vibrato_dict);
+
         Ok(Haqumei {
             open_jtalk,
             data_dir,

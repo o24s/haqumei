@@ -35,28 +35,77 @@ impl Dictionary {
 
     #[cfg(feature = "embed-dictionary")]
     pub fn from_embedded() -> Result<Self, HaqumeiError> {
-        use crate::utils::calculate_compiled_dir_hash;
+        use crate::utils::collect_dict_files;
+        use crate::utils::compute_metadata_key;
+
+        use sha2::{Digest, Sha256};
+        use std::{fs::File, io::Read};
 
         const DICTIONARY_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/dictionary.tar.zst"));
         const EXPECTED_DICT_HASH: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/compiled_dictionary.sha256"));
 
-        let cache_dir_base = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?;
-        let dict_path = cache_dir_base.join("haqumei").join("dict");
+        let cache_dir = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?.join("haqumei");
+        let dict_path = cache_dir.join("dict");
+
+        let hash_files_full = |paths: &Vec<PathBuf>| -> Result<_, HaqumeiError> {
+            let mut file_hasher = Sha256::new();
+
+            for path in paths {
+                let relative_path = path.strip_prefix(&dict_path)?;
+                file_hasher.update(relative_path.to_string_lossy().as_bytes());
+
+                let mut file = File::open(path)?;
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer)?;
+                file_hasher.update(&buffer);
+            }
+
+            Ok(file_hasher.finalize())
+        };
 
         let mut needs_unpack = true;
 
         if dict_path.exists() {
-            match calculate_compiled_dir_hash(&dict_path) {
-                Ok(actual_hash) if actual_hash == EXPECTED_DICT_HASH.trim() => {
-                    needs_unpack = false;
+            let paths = collect_dict_files(&dict_path)?;
+
+            let mut metadata_hasher = Sha256::new();
+
+            for path in &paths {
+                metadata_hasher.update(compute_metadata_key(&fs::metadata(path)?));
+            }
+
+            let metadata_hash = hex::encode(metadata_hasher.finalize());
+
+            let meta_cache_dir = cache_dir.join(".cache");
+            let metadata_hash_path = meta_cache_dir.join(format!("{metadata_hash}.sha256"));
+
+            if metadata_hash_path.exists() {
+                return Self::from_path(dict_path, None);
+            }
+
+            let full_hash = hex::encode(hash_files_full(&paths)?);
+
+            if full_hash == EXPECTED_DICT_HASH.trim() {
+                needs_unpack = false;
+                if !meta_cache_dir.exists() {
+                    fs::create_dir_all(&meta_cache_dir)?;
                 }
-                _ => {
-                    use std::fs;
-                    fs::remove_dir_all(&dict_path).map_err(|source| HaqumeiError::CacheIo {
-                        path: dict_path.clone(),
-                        source,
-                    })?;
+
+                if let Ok(entries) = fs::read_dir(&meta_cache_dir) {
+                    for entry in entries.flatten() {
+                        if let Ok(file_type) = entry.file_type()
+                            && file_type.is_file() {
+                                let _ = fs::remove_file(entry.path());
+                            }
+                    }
                 }
+
+                File::create(metadata_hash_path)?;
+            } else {
+                fs::remove_dir_all(&dict_path).map_err(|source| HaqumeiError::CacheIo {
+                    path: dict_path.clone(),
+                    source,
+                })?;
             }
         }
 
@@ -72,13 +121,14 @@ impl Dictionary {
             let mut archive = tar::Archive::new(decoder);
             archive.unpack(&dict_path)?;
 
-            let actual_hash = calculate_compiled_dir_hash(&dict_path)?;
+            let paths = collect_dict_files(&dict_path)?;
 
-            let expected_hash_trimmed = EXPECTED_DICT_HASH.trim();
-            if actual_hash != expected_hash_trimmed {
+            let actual_hash = hex::encode(hash_files_full(&paths)?);
+
+            if actual_hash != EXPECTED_DICT_HASH.trim() {
                 return Err(HaqumeiError::DictionaryVerification {
                     path: dict_path,
-                    expected: expected_hash_trimmed.to_string(),
+                    expected: EXPECTED_DICT_HASH.to_string(),
                     actual: actual_hash,
                 });
             }

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs::File, io::Read, path::Path, sync::LazyLock};
+use std::{collections::HashSet, fs::Metadata, path::{Path, PathBuf}, sync::LazyLock};
 
 use sha2::{Digest, Sha256};
 use vibrato_rkyv::tokenizer::worker::Worker;
@@ -13,11 +13,10 @@ use crate::{
     open_jtalk::OpenJTalk
 };
 
-pub fn calculate_compiled_dir_hash(dir: &Path) -> Result<String, HaqumeiError> {
-    let mut hasher = Sha256::new();
+pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut paths = Vec::new();
 
-    for entry in walkdir::WalkDir::new(dir).sort_by_file_name() {
+    for entry in walkdir::WalkDir::new(dir) {
         let entry = entry?;
         let path = entry.path();
         if path.is_file()
@@ -29,19 +28,72 @@ pub fn calculate_compiled_dir_hash(dir: &Path) -> Result<String, HaqumeiError> {
 
     paths.sort();
 
-    for path in paths {
-        let relative_path = path.strip_prefix(dir)?;
-        hasher.update(relative_path.to_string_lossy().as_bytes());
-
-        let mut file = File::open(&path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        hasher.update(&buffer);
-    }
-
-    Ok(hex::encode(hasher.finalize()))
+    Ok(paths)
 }
 
+#[inline(always)]
+pub(crate) fn compute_metadata_key(meta: &Metadata) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        hasher.update(meta.dev().to_le_bytes());
+        hasher.update(meta.ino().to_le_bytes());
+        hasher.update(meta.size().to_le_bytes());
+        hasher.update(meta.mtime().to_le_bytes());
+        hasher.update(meta.mtime_nsec().to_le_bytes());
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        hasher.update(meta.file_size().to_le_bytes());
+        hasher.update(meta.last_write_time().to_le_bytes());
+        hasher.update(meta.creation_time().to_le_bytes());
+        hasher.update(meta.file_attributes().to_le_bytes());
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        use std::time::SystemTime;
+
+        fn update_system_time(
+            time: Result<SystemTime, std::io::Error>,
+            hasher: &mut Sha256,
+        ) {
+            match time.and_then(|t| {
+                t.duration_since(SystemTime::UNIX_EPOCH)
+                    .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+            }) {
+                Ok(duration) => {
+                    hasher.update(duration.as_secs().to_le_bytes());
+                    hasher.update(duration.subsec_nanos().to_le_bytes());
+                }
+                Err(_) => {
+                    hasher.update([0u8; 12]);
+                }
+            }
+        }
+
+        let file_type = meta.file_type();
+        let type_byte: u8 = if file_type.is_file() { 0x01 }
+        else if file_type.is_dir() { 0x02 }
+        else if file_type.is_symlink() { 0x03 }
+        else { 0x00 };
+        hasher.update([type_byte]);
+
+        let readonly_byte: u8 = if meta.permissions().readonly() { 0x01 } else { 0x00 };
+        hasher.update([readonly_byte]);
+
+        hasher.update(meta.len().to_le_bytes());
+
+        update_system_time(meta.modified(), &mut hasher);
+
+        update_system_time(meta.created(), &mut hasher);
+    }
+
+    hasher.finalize().into()
+}
 
 pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
     let mut is_after_filler = false;
@@ -102,7 +154,7 @@ impl Haqumei {
                 && candidate.range_char.start == current_char_pos && candidate.surface == *node_orig {
                     let correct_yomi_token = unidic_iter.next().unwrap();
 
-                    if false { // *node_orig == "何"
+                    if *node_orig == "何" {
                         let is_read_nan = self.predict_is_nan(next_node_feature);
                         let yomi = if is_read_nan { "ナン" } else { "ナニ" };
                         pron_to_set = Some(yomi.to_string());
