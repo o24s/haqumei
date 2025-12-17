@@ -4,6 +4,9 @@ mod mecab;
 mod model;
 pub mod njd;
 
+#[cfg(test)]
+mod tests;
+
 use crate::NjdFeature;
 use crate::open_jtalk::njd::{apply_plus_rules, njd_to_features};
 use crate::{errors::HaqumeiError, ffi};

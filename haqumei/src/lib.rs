@@ -29,6 +29,7 @@ use crate::{
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> = LazyLock::new(|| Cache::new(1000));
 
+#[allow(unused)]
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
     tokenizer: vibrato_rkyv::Tokenizer,

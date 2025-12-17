@@ -39,6 +39,3 @@ walkdir = "2.5.0"
 sha2 = "0.10.9"
 tar = "0.4.44"
 zstd = "0.13.3"
-
-[profile.release]
-debug = true
