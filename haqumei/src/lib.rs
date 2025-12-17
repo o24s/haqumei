@@ -15,7 +15,7 @@ mod utils;
 use std::{path::PathBuf, sync::LazyLock};
 
 use moka::sync::Cache;
-pub use features::NjdFeature;
+pub use {open_jtalk::{OpenJTalk, ParallelJTalk}, features::NjdFeature};
 
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
@@ -23,7 +23,6 @@ use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    open_jtalk::OpenJTalk,
     utils::{modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc, vibrato_analysis},
 };
 

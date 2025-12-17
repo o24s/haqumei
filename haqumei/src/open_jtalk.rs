@@ -16,6 +16,7 @@ use mecab::Mecab;
 use model::MecabModel;
 use njd::Njd;
 use jp_common::JpCommon;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use std::cell::Cell;
 use std::ffi::{CStr, CString, c_char};
@@ -146,6 +147,20 @@ impl OpenJTalk {
         }
 
         Ok(Self { mecab, njd, jp_common, dict: None, _marker: PhantomData })
+    }
+
+    pub fn from_shared_dictionary(dict: Arc<Dictionary>) -> Result<Self, HaqumeiError> {
+        let mecab = Mecab::from_model(&dict.model)?;
+        let njd = Njd::new()?;
+        let jp_common = JpCommon::new()?;
+
+        Ok(Self {
+            mecab,
+            njd,
+            jp_common,
+            dict: Some(dict),
+            _marker: PhantomData,
+        })
     }
 
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
@@ -383,6 +398,52 @@ impl OpenJTalk {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ParallelJTalk {
+    dict: Arc<Dictionary>,
+}
+
+impl ParallelJTalk {
+    pub fn new() -> Result<Self, HaqumeiError> {
+        let dict = GLOBAL_MECAB_DICTIONARY.load_full();
+        if !dict.model.is_initialized() {
+            return Err(HaqumeiError::GlobalDictionaryNotInitialized);
+        }
+        Ok(Self { dict })
+    }
+
+    pub fn from_dictionary(dict: Dictionary) -> Self {
+        Self { dict: Arc::new(dict) }
+    }
+
+    pub fn from_arc_dictionary(dict: Arc<Dictionary>) -> Self {
+        Self { dict }
+    }
+
+    /// 複数のテキストに対して並列に `g2p` を実行します。
+    pub fn g2p(&self, texts: &[String], kana: bool) -> Result<Vec<String>, HaqumeiError> {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.g2p(text, kana)
+            )
+            .collect()
+    }
+
+    pub fn run_frontend(&self, texts: &[String]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError> {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.run_frontend(text)
+            )
+            .collect()
     }
 }
 
