@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use vibrato_rkyv::dictionary::{LexType, WordIdx};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NjdFeature {
     pub string: String,
     pub pos: String,

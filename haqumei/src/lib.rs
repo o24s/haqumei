@@ -12,7 +12,7 @@ mod nani_predict;
 pub mod open_jtalk;
 mod utils;
 
-use std::{path::PathBuf, sync::LazyLock};
+use std::{path::PathBuf, sync::{LazyLock, Mutex}};
 
 use moka::sync::Cache;
 pub use {open_jtalk::{OpenJTalk, ParallelJTalk}, features::NjdFeature};
@@ -27,19 +27,25 @@ use crate::{
 };
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> = LazyLock::new(|| Cache::new(1000));
+static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|| Cache::new(1000));
+pub static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
+    Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
+});
 
 #[allow(unused)]
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
     tokenizer: vibrato_rkyv::Tokenizer,
     data_dir: PathBuf,
-    predictor: NaniPredictor,
 }
 
 impl Haqumei {
     pub fn new() -> Result<Self, HaqumeiError> {
-        let open_jtalk = OpenJTalk::new()?;
+        Self::from_open_jtalk(OpenJTalk::new()?)
+    }
 
+    #[inline]
+    pub fn from_open_jtalk(open_jtalk: OpenJTalk) -> Result<Self, HaqumeiError> {
         let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
             Err(HaqumeiError::DataDirectoryNotFound)?
         };
@@ -55,7 +61,6 @@ impl Haqumei {
             open_jtalk,
             data_dir,
             tokenizer,
-            predictor: NaniPredictor::new()?,
         })
     }
 
@@ -125,6 +130,13 @@ impl Haqumei {
     }
 
     pub(crate) fn predict_is_nan(&mut self, prev_node: Option<&NjdFeature>) -> bool {
-        self.predictor.predict_is_nan(prev_node)
+        let prev_node = match prev_node {
+            Some(node) => node,
+            None => return false,
+        };
+
+        NANI_PREDICTOR_CACHE.get_with(prev_node.clone(), || {
+            NANI_PREDICTOR.lock().unwrap().predict_is_nan(Some(prev_node))
+        })
     }
 }
