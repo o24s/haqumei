@@ -171,7 +171,7 @@ impl OpenJTalk {
 
     pub fn g2p(&mut self, text: &str, kana: bool) -> Result<String, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
-        let mecab_features = self.run_mecab(text)?;
+        let mecab_features = self.run_mecab(text.as_ref())?;
         let njd_features = self.run_njd_from_mecab(&mecab_features)?;
 
         if njd_features.is_empty() {
@@ -424,18 +424,24 @@ impl ParallelJTalk {
     }
 
     /// 複数のテキストに対して並列に `g2p` を実行します。
-    pub fn g2p(&self, texts: &[String], kana: bool) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2p<S>(&self, texts: &[S], kana: bool) -> Result<Vec<String>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
         texts
             .par_iter()
             .map_init(
                 || OpenJTalk::from_shared_dictionary(self.dict.clone())
                     .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p(text, kana)
+                |ojt, text| ojt.g2p(text.as_ref(), kana)
             )
             .collect()
     }
 
-    pub fn run_frontend(&self, texts: &[String]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError> {
+    pub fn run_frontend<S>(&self, texts: &[String]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
         texts
             .par_iter()
             .map_init(

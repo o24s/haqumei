@@ -58,7 +58,7 @@ pub enum HaqumeiError {
     VibratoError(#[from] vibrato_rkyv::errors::VibratoError),
 
     #[error(transparent)]
-    OnnxError(#[from] ort::Error),
+    OrtError(#[from] ort::Error),
 }
 
 impl From<NulError> for HaqumeiError {
