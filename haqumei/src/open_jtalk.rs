@@ -438,7 +438,7 @@ impl ParallelJTalk {
             .collect()
     }
 
-    pub fn run_frontend<S>(&self, texts: &[String]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError>
+    pub fn run_frontend<S>(&self, texts: &[S]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError>
     where
         S: AsRef<str> + Sync,
     {
@@ -447,7 +447,7 @@ impl ParallelJTalk {
             .map_init(
                 || OpenJTalk::from_shared_dictionary(self.dict.clone())
                     .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.run_frontend(text)
+                |ojt, text| ojt.run_frontend(text.as_ref())
             )
             .collect()
     }

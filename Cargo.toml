@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "haqumei",
+    "haqumei-eval",
 ]
 exclude = [
     "vendor/crawdad-rkyv",
