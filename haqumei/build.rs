@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let src_dir_str = "../vendor/open_jtalk/src";
     let src_dir = PathBuf::from(src_dir_str);
     let out_dir = env::var("OUT_DIR")?;
+    let out_path = PathBuf::from(&out_dir);
 
     println!("cargo:rerun-if-changed={}", src_dir.display());
     println!("cargo:rerun-if-changed=wrapper.h");
@@ -84,6 +85,40 @@ fn main() -> Result<(), Box<dyn Error>> {
         defines.push(("WORDS_BIGENDIAN", Some("1")));
     }
 
+    // <stdio.h> を先に読み込ませてから、マクロで名前を上書きする
+    let redirect_header_content = r#"
+#ifndef FPRINTF_REDIRECT_H
+#define FPRINTF_REDIRECT_H
+
+#ifdef __cplusplus
+  #include <cstdio>
+  #include <stdio.h>
+#else
+  #include <stdio.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    int custom_fprintf(FILE *stream, const char *format, ...);
+#ifdef __cplusplus
+}
+#endif
+
+#define fprintf custom_fprintf
+
+#endif // FPRINTF_REDIRECT_H
+    "#;
+
+    let redirect_header_path = out_path.join("redirect_fprintf.h");
+    fs::write(&redirect_header_path, redirect_header_content)?;
+    let redirect_flag = format!("{}", redirect_header_path.display());
+
+
+    let mut hook_build = cc::Build::new();
+    hook_build.file("hook.c");
+    hook_build.compile("openjtalk_hook");
+
     let mut build = cc::Build::new();
     build.cpp(true);
 
@@ -112,6 +147,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // compiler flags
     if build.get_compiler().is_like_msvc() {
+        build.flag(format!("/FI{}", redirect_flag));
+
         build.define("_CRT_SECURE_NO_WARNINGS", None);
         build.define("_CRT_NONSTDC_NO_WARNINGS", None);
         build.flag("/source-charset:utf-8");
@@ -121,6 +158,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         build.flag("/wd4100");
         build.flag("/wd4065");
     } else {
+        build.flag("-include");
+        build.flag(&redirect_flag);
+
         build.flag("-fPIC");
         build.flag("-finput-charset=UTF-8");
         build.flag("-fexec-charset=UTF-8");
@@ -145,6 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     build.compile("openjtalk");
+
     let dict_indexer_path = build_dict_indexer(&src_dir, &out_dir, &defines, &include_dirs)?;
 
     // println!("cargo:warning=Generating bindings for openjtalk...");

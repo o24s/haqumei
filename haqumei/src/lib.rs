@@ -5,6 +5,34 @@ mod ffi {
     #![allow(dead_code)]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
+
+/// # Safety
+///
+/// This function is intended to be called from C code via FFI.
+/// The caller must ensure that:
+/// - `msg` is a valid pointer to a null-terminated C string.
+/// - The memory pointed to by `msg` is accessible and not modified concurrently during this call.
+/// - `msg` is not null (though the function checks for this, the pointer itself must be valid).
+///
+/// この関数はFFI経由でC言語のコードから呼び出されることを想定しています。
+/// 呼び出し元 (C側のコード) は以下の点を保証する責任があります:
+/// - `msg` が有効な、ヌル (`\0`) 終端されたC文字列を指していること。
+/// - `msg` が指すメモリ領域が読み取り可能であり、この呼び出し中に他から変更されないこと。
+/// - `msg` がダングリングポインタ (無効なメモリを指すポインタ) ではないこと。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_log_redirect(msg: *const libc::c_char, is_stderr: libc::c_int) { unsafe {
+    if msg.is_null() { return; }
+    let c_str = std::ffi::CStr::from_ptr(msg);
+    let s = c_str.to_string_lossy();
+    let s = s.trim_end();
+
+    if is_stderr != 0 {
+        log::warn!("[OpenJTalk] {}", s);
+    } else {
+        log::info!("[OpenJTalk] {}", s);
+    }
+}}
+
 mod data;
 mod errors;
 pub mod features;
