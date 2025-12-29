@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use regex::Regex;
+use std::env;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -38,6 +39,7 @@ fn load_rohan_data(path: &Path) -> Result<Vec<RohanEntry>, Box<dyn Error>> {
 
 fn calculate_bleu_with_pyo3(references: Vec<String>, hypotheses: Vec<String>) -> PyResult<()> {
     Python::attach(|py| {
+        setup_local_venv(py)?;
         let nltk_bleu = py.import("nltk.translate.bleu_score")?;
         let smoothing_function_class = nltk_bleu.getattr("SmoothingFunction")?;
 
@@ -78,7 +80,7 @@ fn calculate_bleu_with_pyo3(references: Vec<String>, hypotheses: Vec<String>) ->
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading ROHAN4600 data...");
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rohan_data_path = manifest_dir.join("resources").join("Rohan4600_transcript_utf8.txt");
+    let rohan_data_path = manifest_dir.join("../resources").join("Rohan4600_transcript_utf8.txt");
     let rohan_data = load_rohan_data(&rohan_data_path)?;
     println!("> Loaded {} entries.", rohan_data.len());
 
@@ -144,5 +146,38 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("\nDetails of failed cases have been saved to 'failed_cases.csv'.");
 
+    Ok(())
+}
+
+/// カレントディレクトリの .venv を探し、sys.path に追加する
+fn setup_local_venv(py: Python) -> PyResult<()> {
+    let current_dir = env::current_dir()?;
+    let venv_dir = current_dir.join(".venv");
+
+    if venv_dir.exists() {
+        let lib_dir = venv_dir.join("lib");
+
+        if let Ok(entries) = fs::read_dir(lib_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir()
+                    && let Some(name) = path.file_name()
+                    && name.to_string_lossy().starts_with("python") {
+                        let site_packages = path.join("site-packages");
+
+                        if site_packages.exists() {
+                            let sys = py.import("sys")?;
+                            let sys_path = sys.getattr("path")?;
+
+                            if let Some(sp_str) = site_packages.to_str() {
+                                sys_path.call_method1("insert", (0, sp_str))?;
+                                println!("> Auto-detected venv: {}", sp_str);
+                            }
+                            break;
+                        }
+                    }
+            }
+        }
+    }
     Ok(())
 }
