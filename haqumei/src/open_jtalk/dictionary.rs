@@ -8,6 +8,7 @@ use crate::{errors::HaqumeiError, ffi, open_jtalk::model::MecabModel};
 #[derive(Debug, Clone)]
 pub struct Dictionary {
     pub(crate) model: Arc<MecabModel>,
+    pub(crate) dict_dir: PathBuf,
 }
 
 impl Dictionary {
@@ -30,6 +31,7 @@ impl Dictionary {
         let model = MecabModel::new(&dict_dir_str, user_dict_str.as_deref())?;
         Ok(Self {
             model: Arc::new(model),
+            dict_dir: dict_dir.as_ref().to_path_buf()
         })
     }
 

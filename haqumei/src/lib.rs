@@ -44,7 +44,7 @@ use std::{path::PathBuf, sync::{LazyLock, Mutex}};
 
 use moka::sync::Cache;
 
-pub use open_jtalk::{OpenJTalk, ParallelJTalk, update_global_mecab_dictionary};
+pub use open_jtalk::{OpenJTalk, ParallelJTalk, update_global_dictionary, unset_user_dictionary};
 pub use features::NjdFeature;
 
 use vibrato_rkyv::dictionary::PresetDictionaryKind;

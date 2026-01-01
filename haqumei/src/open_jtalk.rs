@@ -46,8 +46,18 @@ pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::ne
 ///
 /// この関数を呼び出した後、新たに `OpenJTalk::new()` を呼び出す際には、この辞書が使用されるようになります。
 /// 既存のインスタンスについては、次のメソッド呼び出し時に新しい辞書に更新されます。
-pub fn update_global_mecab_dictionary(new_dict: Dictionary) {
+pub fn update_global_dictionary(new_dict: Dictionary) {
     GLOBAL_MECAB_DICTIONARY.store(Arc::new(new_dict));
+}
+
+/// `OpenJTalk::new()` で使用されるグローバル辞書のユーザー辞書を外します。
+pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
+    GLOBAL_MECAB_DICTIONARY.store(
+        Arc::new(
+            Dictionary::from_path(&GLOBAL_MECAB_DICTIONARY.load_full().dict_dir, None)?
+        )
+    );
+    Ok(())
 }
 
 #[derive(Debug)]
