@@ -738,6 +738,7 @@ impl ParallelJTalk {
             .collect()
     }
 
+    /// 複数のテキストに対して並列に `g2p_kana` を実行します。
     pub fn g2p_kana<S>(&self, texts: &[S]) -> Result<Vec<String>, HaqumeiError>
     where
         S: AsRef<str> + Sync,
@@ -748,6 +749,36 @@ impl ParallelJTalk {
                 || OpenJTalk::from_shared_dictionary(self.dict.clone())
                     .expect("Failed to initialize OpenJTalk worker"),
                 |ojt, text| ojt.g2p_kana(text.as_ref())
+            )
+            .collect()
+    }
+
+    /// 複数のテキストに対して並列に `g2p_per_word` を実行します。
+    pub fn g2p_per_word<S>(&mut self, texts: &[S]) -> Result<Vec<Vec<Vec<String>>>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.g2p_per_word(text.as_ref())
+            )
+            .collect()
+    }
+
+    /// 複数のテキストに対して並列に `g2p_mapping` を実行します。
+    pub fn g2p_mapping<S>(&mut self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeMap>>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.g2p_mapping(text.as_ref())
             )
             .collect()
     }
