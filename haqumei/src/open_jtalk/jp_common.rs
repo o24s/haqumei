@@ -22,7 +22,7 @@ impl JpCommon {
                 Some(inner) => Ok(Self { inner }),
                 None => {
                     let _ = Box::from_raw(raw_ptr);
-                    Err(HaqumeiError::AllocationError)
+                    Err(HaqumeiError::AllocationError("_JPCommon"))
                 }
             }
         }

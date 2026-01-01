@@ -4,8 +4,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum HaqumeiError {
-    #[error("Failed to allocate internal structures.")]
-    AllocationError,
+    #[error("Failed to allocate internal structures: {0}")]
+    AllocationError(&'static str),
 
     #[error("The provided dictionary path is invalid: {0}")]
     InvalidDictionaryPath(String),

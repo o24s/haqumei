@@ -22,7 +22,7 @@ impl Mecab {
                 Some(inner) => Ok(Self { inner, owns_model: true }),
                 None => {
                     let _ = Box::from_raw(raw_ptr);
-                    Err(HaqumeiError::AllocationError)
+                    Err(HaqumeiError::AllocationError("_Mecab"))
                 }
             }
         }
@@ -32,14 +32,14 @@ impl Mecab {
         unsafe {
             let tagger_ptr = ffi::mecab_model_new_tagger(model.ptr);
             if tagger_ptr.is_null() {
-                return Err(HaqumeiError::AllocationError);
+                return Err(HaqumeiError::AllocationError("mecab_t"));
             }
 
             let lattice_ptr = ffi::mecab_model_new_lattice(model.ptr);
             if lattice_ptr.is_null() {
                 ffi::mecab_destroy(tagger_ptr);
 
-                return Err(HaqumeiError::AllocationError);
+                return Err(HaqumeiError::AllocationError("mecab_lattice_t"));
             }
 
             let mut mecab_uninit = Box::new(MaybeUninit::<ffi::Mecab>::uninit());
