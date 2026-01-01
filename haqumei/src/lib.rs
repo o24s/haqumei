@@ -20,7 +20,7 @@ mod ffi {
 /// - `msg` が指すメモリ領域が読み取り可能であり、この呼び出し中に他から変更されないこと。
 /// - `msg` がダングリングポインタ (無効なメモリを指すポインタ) ではないこと。
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_log_redirect(msg: *const libc::c_char, is_stderr: libc::c_int) { unsafe {
+unsafe extern "C" fn rust_log_redirect(msg: *const libc::c_char, is_stderr: libc::c_int) { unsafe {
     if msg.is_null() { return; }
     let c_str = std::ffi::CStr::from_ptr(msg);
     let s = c_str.to_string_lossy();
@@ -43,7 +43,9 @@ mod utils;
 use std::{path::PathBuf, sync::{LazyLock, Mutex}};
 
 use moka::sync::Cache;
-pub use {open_jtalk::{OpenJTalk, ParallelJTalk}, features::NjdFeature};
+
+pub use open_jtalk::{OpenJTalk, ParallelJTalk, update_global_mecab_dictionary};
+pub use features::NjdFeature;
 
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
@@ -142,6 +144,14 @@ impl Haqumei {
             vibrato_analysis(&mut worker, text);
         });
         self.apply_postprocessing(text, njd_features?)
+    }
+
+    pub fn extract_fullcontext(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<String>, HaqumeiError> {
+        let njd_features = self.run_frontend(text)?;
+        self.open_jtalk.make_label(&njd_features)
     }
 
     fn apply_postprocessing(

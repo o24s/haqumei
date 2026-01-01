@@ -33,7 +33,7 @@ zstd = "0.13.3"
 
 [build-dependencies]
 bindgen = "0.72.1"
-cc = "1.2.49"
+cc = "1.2.51"
 glob = "0.3.3"
 hex = "0.4.3"
 walkdir = "2.5.0"
