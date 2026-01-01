@@ -69,6 +69,12 @@ pub struct Haqumei {
     data_dir: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WordPhonemeMap {
+    pub word: String,
+    pub phonemes: Vec<String>,
+}
+
 impl Haqumei {
     pub fn new() -> Result<Self, HaqumeiError> {
         Self::from_open_jtalk(OpenJTalk::new()?)
@@ -94,43 +100,115 @@ impl Haqumei {
         })
     }
 
-    pub fn g2p(
-        &mut self,
-        text: &str,
-        kana: bool,
-    ) -> Result<String, HaqumeiError> {
+    /// 入力テキストを音素列 (フラットなリスト) に変換します。
+    ///
+    /// pyopenjtalk と同様の出力を得るためには、`.join(" ")` をチェーンしてください。
+    ///
+    /// # Examples
+    /// ```rust
+    /// use haqumei::Haqumei;
+    ///
+    /// let mut haqumei = Haqumei::new().unwrap();
+    /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a"])
+    /// println!("{:?}", haqumei.g2p("こんにちは"));
+    /// ```
+    pub fn g2p(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         let features = self.run_frontend(text)?;
 
         if features.is_empty() {
-            return Ok(String::new());
+            return Ok(Vec::new());
         }
 
-        if !kana {
-            let labels = self.open_jtalk.make_label(&features)?;
+        self.open_jtalk.extract_phonemes(&features)
+    }
 
-            // python: `lambda s: s.split("-")[1].split("+")[0]`
-            let phonemes: Vec<_> = labels
-                .iter()
-                .skip(1)
-                .take(labels.len() - 2)
-                .filter_map(|s| {
-                    s.split_once('-')
-                    .and_then(|(_, after_minus)| after_minus.split_once('+'))
-                    .map(|(p, _)| p)
-                })
-                .collect();
+    /// 入力テキストをカタカナに変換します。
+    ///
+    /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
+    pub fn g2p_kana(&mut self, text: &str) -> Result<String, HaqumeiError> {
+        let features = self.run_frontend(text)?;
 
-            Ok(phonemes.join(" "))
-        } else {
-            let kana_string: String = features
-                .iter()
-                .map(|f| {
-                    let p = if f.pos == "記号" { &f.string } else { &f.pron };
-                    p.replace('’', "")
-                })
-                .collect();
-            Ok(kana_string)
+        let kana_string: String = features
+            .iter()
+            .map(|f| {
+                let p = if f.pos == "記号" { &f.string } else { &f.pron };
+                p.replace('’', "")
+            })
+            .collect();
+
+        Ok(kana_string)
+    }
+
+    /// 単語（形態素）単位に分割された音素リストを返します。
+    ///
+    /// # Returns
+    ///
+    /// 単語ごとの音素リストのベクタ。
+    ///
+    /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
+    pub fn g2p_per_word(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<Vec<String>>, HaqumeiError> {
+        let features = self.run_frontend(text)?;
+
+        if features.is_empty() {
+            return Ok(Vec::new());
         }
+
+        self.open_jtalk.extract_phonemes_per_word(&features)
+    }
+
+    /// 入力テキストの形態素ごとの音素マッピングを返します。
+    ///
+    /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+    ///
+    /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
+    ///   音素リストとして `["pau"]` が割り当てられます。
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use haqumei::Haqumei;
+    ///
+    /// let mut haqumei = Haqumei::new().unwrap();
+    /// let mapping = haqumei.g2p_mapping("𰻞𰻞麺＆お冷を頼んだ").unwrap();
+    ///
+    /// // 出力:
+    /// // [WordPhonemeMap {
+    /// //     word: "𰻞𰻞",
+    /// //     phonemes: ["pau"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "麺",
+    /// //     phonemes: ["m", "e", "N"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "＆",
+    /// //     phonemes: ["a", "N", "d", "o"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "お冷",
+    /// //     phonemes: ["o", "h", "i", "y", "a"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "を",
+    /// //     phonemes: ["o"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "頼ん",
+    /// //     phonemes: ["t", "a", "n", "o", "N"]
+    /// // }, WordPhonemeMap {
+    /// //     word: "だ",
+    /// //     phonemes: ["d", "a"]
+    /// // }]
+    /// // ```
+    pub fn g2p_mapping(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
+        let features = self.run_frontend(text)?;
+
+        if features.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.open_jtalk.g2p_mapping_inner(&features)
     }
 
     pub fn run_frontend(

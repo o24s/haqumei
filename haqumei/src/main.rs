@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf, time::Instant};
 
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
@@ -12,8 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let mut ojt = haqumei::OpenJTalk::new()?;
 
     let start = Instant::now();
-    let result = pojt.g2p(&waganeko, true).unwrap();
-    // let result: Vec<String> = waganeko.iter().map(|l| ojt.g2p(l, false).unwrap()).collect();
+    let result = pojt.g2p(&waganeko).unwrap();
+    // let result: Vec<Vec<String>> = waganeko.iter().map(|l| ojt.g2p(l).unwrap()).collect();
     let elapsed = start.elapsed();
 
     let sentences_per_sec = waganeko.len() as f64 / elapsed.as_secs_f64();

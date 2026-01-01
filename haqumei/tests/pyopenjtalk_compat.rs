@@ -54,7 +54,7 @@ mod tests {
         ];
 
         for (text, expected) in cases {
-            let p = haqumei.g2p(text, true).unwrap();
+            let p = haqumei.g2p_kana(text).unwrap();
             assert_eq!(p, expected, "Failed for text: {}", text);
         }
     }
@@ -70,7 +70,7 @@ mod tests {
         ];
 
         for (text, expected) in cases {
-            let p = haqumei.g2p(text, false).unwrap();
+            let p = haqumei.g2p(text).unwrap().join(" ");
             assert_eq!(p, expected, "Failed for text: {}", text);
         }
     }
@@ -110,7 +110,7 @@ mod tests {
         ];
 
         for (text, expected) in cases {
-            let p = haqumei.g2p(text, true).unwrap();
+            let p = haqumei.g2p_kana(text).unwrap();
             assert_eq!(p, expected, "Nani model check failed for: {}", text);
         }
     }

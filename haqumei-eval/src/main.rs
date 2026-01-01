@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let hypotheses: Vec<String> = rohan_data
         .iter()
         .map(|entry| {
-            haqumei.g2p(&entry.text, true).unwrap()
+            haqumei.g2p_kana(&entry.text).unwrap()
         })
         .collect();
 
@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut correct_count = 0;
 
     for entry in rohan_data.iter() {
-        let haqumei_result = haqumei.g2p(&entry.text, true).unwrap_or_default();
+        let haqumei_result = haqumei.g2p_kana(&entry.text).unwrap_or_default();
 
         if haqumei_result != entry.label {
             failed_cases.push((
