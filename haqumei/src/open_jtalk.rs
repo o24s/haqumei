@@ -7,15 +7,17 @@ pub mod njd;
 #[cfg(test)]
 mod tests;
 
+use crate::ffi;
+use crate::open_jtalk::{
+    model::MecabModel,
+    njd::{Njd, apply_plus_rules, njd_to_features},
+    jp_common::JpCommon,
+};
 use crate::{NjdFeature, WordPhonemeMap};
-use crate::open_jtalk::njd::{apply_plus_rules, njd_to_features};
-use crate::{errors::HaqumeiError, ffi};
+use crate::errors::HaqumeiError;
+
 use arc_swap::ArcSwap;
 use mecab::Mecab;
-#[cfg(not(feature = "embed-dictionary"))]
-use model::MecabModel;
-use njd::Njd;
-use jp_common::JpCommon;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use std::cell::Cell;
@@ -24,6 +26,9 @@ use std::ffi::{CStr, CString, c_char};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
+
+#[cfg(not(feature = "embed-dictionary"))]
+use model::MecabModel;
 
 pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 
@@ -41,6 +46,30 @@ pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::ne
         ArcSwap::from(Arc::new(dummy_dict))
     }
 });
+
+/// # Safety
+///
+/// これらの実装は、以下の条件を満たす。
+///
+/// - `Drop` 実装は純粋に `free` 相当の解放のみである。
+///   - (TLSを触っておらず、スレッドセーフな `free` を通して唯一の C/C++ のヒープ上のリソースを、Rustの RAII モデルに則って安全に解放できる)
+/// - C/C++ 側が Thread Local Storage に依存していない。
+/// - C/C++ 側で非 atomic な参照カウントや非同期変更されうる可変なグローバル状態を持たない。
+unsafe impl Send for Mecab {}
+unsafe impl Send for Njd {}
+unsafe impl Send for JpCommon {}
+
+/// # Safety
+///
+/// `MecabModel` は `Dictionary` を通しアクセスされる共有オブジェクトとして `Send` / `Sync` を実装している。
+///
+/// - `Drop` 実装は純粋に `free` 相当の解放のみである。
+///   - (TLSを触っておらず、スレッドセーフな `free` を通して唯一の C/C++ のヒープ上のリソースを、Rustの RAII モデルに則って安全に解放できる)
+/// - C/C++ 側が Thread Local Storage に依存していない。
+/// - C/C++ 側で非 atomic な参照カウントや非同期変更されうる可変なグローバル状態を持たない。
+/// - これは不変オブジェクトとして、`Dictionary` を通して `Arc` で保護されるため、スレッド間で `*mut mecab_model_t` は変更されない。
+unsafe impl Send for MecabModel {}
+unsafe impl Sync for MecabModel {}
 
 /// `OpenJTalk::new()` で使用されるグローバル辞書を更新します (設定します)。
 ///
@@ -251,7 +280,7 @@ impl OpenJTalk {
     ///
     /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
     ///
-    /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
+    /// 記号・未知語の処理: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
     ///   音素リストとして `["pau"]` が割り当てられます。
     ///
     /// # Examples
@@ -754,7 +783,7 @@ impl ParallelJTalk {
     }
 
     /// 複数のテキストに対して並列に `g2p_per_word` を実行します。
-    pub fn g2p_per_word<S>(&mut self, texts: &[S]) -> Result<Vec<Vec<Vec<String>>>, HaqumeiError>
+    pub fn g2p_per_word<S>(&self, texts: &[S]) -> Result<Vec<Vec<Vec<String>>>, HaqumeiError>
     where
         S: AsRef<str> + Sync,
     {
@@ -769,7 +798,7 @@ impl ParallelJTalk {
     }
 
     /// 複数のテキストに対して並列に `g2p_mapping` を実行します。
-    pub fn g2p_mapping<S>(&mut self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeMap>>, HaqumeiError>
+    pub fn g2p_mapping<S>(&self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeMap>>, HaqumeiError>
     where
         S: AsRef<str> + Sync,
     {

@@ -7,9 +7,6 @@ pub(crate) struct MecabModel {
     pub(crate) ptr: *mut ffi::mecab_model_t,
 }
 
-unsafe impl Send for MecabModel {}
-unsafe impl Sync for MecabModel {}
-
 impl MecabModel {
     pub fn new(dict_dir: &str, user_dict: Option<&str>) -> Result<Self, HaqumeiError> {
         let mut argv: Vec<*mut c_char> = Vec::new();
