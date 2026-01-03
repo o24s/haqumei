@@ -89,6 +89,15 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
     Ok(())
 }
 
+/// Open JTalk をバインディングしたG2Pエンジン。
+///
+/// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
+///
+/// `g2p_**`の実装において、フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
+/// g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
+/// また、他のバインディングにない以下の関数が実装されています。
+/// - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
+/// - `g2p_mapping`: テキストを解析し、単語と音素のマッピング情報を返します。
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
@@ -189,6 +198,7 @@ impl OpenJTalk {
         Ok(Self { mecab, njd, jp_common, dict: None, _marker: PhantomData })
     }
 
+    /// `Arc` でラップされた `Dictionary` からインスタンスを作成します。
     pub fn from_shared_dictionary(dict: Arc<Dictionary>) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::from_model(&dict.model)?;
         let njd = Njd::new()?;

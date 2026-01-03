@@ -16,3 +16,6 @@ dev = [
     "maturin>=1.10.2",
     "pytest>=9.0.2",
 ]
+
+[tool.maturin]
+include = ["haqumei.pyi"]
