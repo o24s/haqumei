@@ -101,9 +101,13 @@ impl PyWordPhonemeMap {
 #[pyclass(name = "WordPhonemeDetail", module = "haqumei")]
 #[derive(Clone)]
 pub struct PyWordPhonemeDetail {
+    #[pyo3(get)]
     pub word: String,
+    #[pyo3(get)]
     pub phonemes: Vec<String>,
+    #[pyo3(get)]
     pub is_unknown: bool,
+    #[pyo3(get)]
     pub is_ignored: bool,
 }
 
