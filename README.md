@@ -4,7 +4,7 @@
     Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust.
   </p>
   <p>
-    English | <a href="README.ja.md">日本語</a>
+    English | <a href="https://github.com/stellanomia/haqumei/blob/main/README.ja.md">日本語</a>
   </p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
@@ -90,7 +90,7 @@ print(f"Katakana reading: {kana}")
 
 ### Getting Phoneme Mapping with Original Words
 
-Haqumei implements `g2p_mapping`, which allows you to get the correspondence between phonemes and their original words—something that was difficult to achieve with the original Open JTalk.
+Haqumei implements `g2p_mapping`, enabling accurate mapping between phonemes and their corresponding words, which was difficult to achieve with the original Open JTalk.
 This was implemented by traversing the `JPCommon` structure and tracking the pointers of each phoneme to its respective word.
 
 ```rust

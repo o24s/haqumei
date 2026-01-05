@@ -4,7 +4,7 @@
     Haqumeiは、Rustで実装された日本語の Grapheme-to-Phoneme (G2P) ライブラリです。
   </p>
   <p>
-    <a href="README.md">English</a> | 日本語
+    <a href="https://github.com/stellanomia/haqumei/">English</a> | 日本語
   </p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
