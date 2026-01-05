@@ -6,6 +6,6 @@ members = [
     "haqumei-python",
 ]
 exclude = [
-    "vendor/crawdad-rkyv",
-    "vendor/rucrf-rkyv"
+    "haqumei/vendor/crawdad-rkyv",
+    "haqumei/vendor/rucrf-rkyv"
 ]

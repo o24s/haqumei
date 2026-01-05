@@ -6,11 +6,24 @@ authors = ["stellanomia <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
 license = "Apache-2.0"
 readme = "../README.md"
-build = "build.rs"
 homepage = "https://github.com/stellanomia/haqumei"
 repository = "https://github.com/stellanomia/haqumei"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
+include = [
+    "src",
+    "build.rs",
+    "hook.c",
+    "wrapper.h",
+    "yomi_model",
+    "dictionary",
+    "vendor/open_jtalk/src",
+    "dictionary.tar.zst",
+    "dictionary.sha256",
+    "dictionary.tar.zst.sha256",
+    "compiled_dictionary.sha256",
+    "tests/"
+]
 
 [features]
 default = ["embed-dictionary"]

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let src_dir_str = "../vendor/open_jtalk/src";
+    let src_dir_str = "vendor/open_jtalk/src";
     let src_dir = PathBuf::from(src_dir_str);
     let out_dir = env::var("OUT_DIR")?;
     let out_path = PathBuf::from(&out_dir);
@@ -228,7 +228,7 @@ extern "C" {
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let dict_src_dir = manifest_dir.join("./../dictionary");
+    let dict_src_dir = manifest_dir.join("dictionary");
     let dict_out_dir = out_path.join("dictionary_out");
     let compressed_dict_path = manifest_dir.join("dictionary.tar.zst");
     let compressed_dict_hash_path = manifest_dir.join("dictionary.tar.zst.sha256");
