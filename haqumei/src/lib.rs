@@ -36,7 +36,7 @@ unsafe extern "C" fn rust_log_redirect(msg: *const libc::c_char, is_stderr: libc
 mod data;
 mod errors;
 pub mod features;
-mod nani_predict;
+pub mod nani_predict;
 pub mod open_jtalk;
 mod utils;
 
@@ -50,15 +50,17 @@ pub use features::NjdFeature;
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
+    open_jtalk::MecabMorph,
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
     utils::{modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc, vibrato_analysis},
 };
 
+
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> = LazyLock::new(|| Cache::new(1000));
 static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|| Cache::new(1000));
-pub static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
+static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
 
@@ -73,6 +75,19 @@ pub struct Haqumei {
 pub struct WordPhonemeMap {
     pub word: String,
     pub phonemes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WordPhonemeDetail {
+    pub word: String,
+    pub phonemes: Vec<String>,
+
+    /// MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
+    pub is_unknown: bool,
+
+    /// `OpenJTalk` のパイプラインで無視される対象かどうか。
+    /// (e.g, "記号,空白")
+    pub is_ignored: bool,
 }
 
 impl Haqumei {
@@ -120,6 +135,73 @@ impl Haqumei {
         }
 
         self.open_jtalk.extract_phonemes(&features)
+    }
+
+    /// すべてのトークンを保持する詳細な G2P 変換。
+    ///
+    /// - 既知語: 通常の音素列 (読点などは `pau`)
+    /// - 未知語: `unk`
+    /// - 空白等: `sp` (Space)
+    ///
+    /// pyopenjtalk のような音素文字列を得るためには、`.join(" ")` をチェーンしてください。
+    ///
+    /// # Examples
+    /// ```rust
+    /// use haqumei::Haqumei;
+    ///
+    /// let mut haqumei = Haqumei::new().unwrap();
+    /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"])
+    /// println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺"));
+    /// ```
+    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        let (njd_features, morphs) = {
+            let (res, _) = rayon::join(
+                || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+                    self.open_jtalk.ensure_dictionary_is_latest()?;
+                    let morphs = self.open_jtalk.run_mecab_detailed(text.as_ref())?;
+                    let valid_features_str: Vec<String> = morphs.iter()
+                        .filter(|m| !m.is_ignored)
+                        .map(|m| m.feature.clone())
+                        .collect();
+                    let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
+
+                    Ok((njd_features, morphs))
+                },
+                || {
+                    let mut worker = self.tokenizer.new_worker();
+                    vibrato_analysis(&mut worker, text);
+                }
+            );
+
+            let (njd_features, morphs) = res?;
+            (self.apply_postprocessing(text, njd_features)?, morphs)
+        };
+
+        if njd_features.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
+
+        let mut result_phonemes = Vec::new();
+        let mut map_idx = 0;
+
+        for morph in morphs {
+            if morph.is_ignored {
+                result_phonemes.push("sp".to_string());
+            } else {
+                let map = &mapping[map_idx];
+                map_idx += 1;
+
+                if morph.is_unknown {
+                    result_phonemes.push("unk".to_string());
+                } else {
+                    result_phonemes.extend(map.phonemes.iter().cloned());
+                }
+            }
+        }
+
+        Ok(result_phonemes)
     }
 
     /// 入力テキストをカタカナに変換します。
@@ -211,16 +293,158 @@ impl Haqumei {
         self.open_jtalk.g2p_mapping_inner(&features)
     }
 
+    /// 入力テキストの形態素ごとの音素マッピングを未知語などの情報とともに返します。
+    ///
+    /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+    ///
+    /// - 既知語: 通常の音素列 (読点などは `pau`)
+    /// - 未知語: `unk`
+    /// - 空白等: `sp` (Space)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use haqumei::Haqumei;
+    ///
+    /// let mut haqumei = Haqumei::new().unwrap();
+    /// let mapping = haqumei.g2p_mapping_detailed("𰻞𰻞麺 お冷を頼んだ").unwrap();
+    ///
+    /// // 出力:
+    /// // [WordPhonemeDetail {
+    /// //     word: "𰻞𰻞",
+    /// //     phonemes: [
+    /// //         "unk",
+    /// //     ],
+    /// //     is_unknown: true,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "麺",
+    /// //     phonemes: [
+    /// //         "m",
+    /// //         "e",
+    /// //         "N",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "\u{3000}",
+    /// //     phonemes: [
+    /// //         "sp",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: true,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "を",
+    /// //     phonemes: [
+    /// //         "o",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "\u{3000}",
+    /// //     phonemes: [
+    /// //         "sp",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: true,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "食べる",
+    /// //     phonemes: [
+    /// //         "t",
+    /// //         "a",
+    /// //         "b",
+    /// //         "e",
+    /// //         "r",
+    /// //         "u",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // }]
+    /// // ```
+    pub fn g2p_mapping_detailed(&mut self, text: &str) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        let (njd_features, morphs) = {
+            let (res, _) = rayon::join(
+                || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
+                    let morphs = self.open_jtalk.run_mecab_detailed(text)?;
+
+                    let valid_features_str: Vec<String> = morphs.iter()
+                        .filter(|m| !m.is_ignored)
+                        .map(|m| m.feature.clone())
+                        .collect();
+
+                    let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
+                    Ok((njd_features, morphs, valid_features_str.is_empty()))
+                },
+                || {
+                    let mut worker = self.tokenizer.new_worker();
+                    vibrato_analysis(&mut worker, text);
+                }
+            );
+
+            let (njd_features, morphs, is_valid_features_empty) = res?;
+
+            if is_valid_features_empty {
+                return Ok(morphs.into_iter().map(|m| WordPhonemeDetail {
+                    word: m.surface,
+                    phonemes: vec!["sp".to_string()],
+                    is_unknown: m.is_unknown,
+                    is_ignored: true,
+                }).collect());
+            }
+
+            (self.apply_postprocessing(text, njd_features)?, morphs)
+        };
+
+        if njd_features.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
+
+        let mut result = Vec::with_capacity(morphs.len());
+        let mut map_idx = 0;
+
+        for morph in morphs {
+            let phonemes = if morph.is_ignored {
+                vec!["sp".to_string()]
+            } else {
+                let map = &mapping[map_idx];
+                map_idx += 1;
+
+                if morph.is_unknown {
+                    vec!["unk".to_string()]
+                } else {
+                    map.phonemes.clone()
+                }
+            };
+
+            result.push(WordPhonemeDetail {
+                word: morph.surface,
+                phonemes,
+                is_unknown: morph.is_unknown,
+                is_ignored: morph.is_ignored,
+            });
+        }
+
+        Ok(result)
+    }
+
     pub fn run_frontend(
         &mut self,
         text: &str,
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let (njd_features, _) = rayon::join(
-            || OpenJTalk::new()?.run_frontend(text),
+            || self.open_jtalk.run_frontend(text),
             || {
-            let mut worker = self.tokenizer.new_worker();
-            vibrato_analysis(&mut worker, text);
-        });
+                let mut worker = self.tokenizer.new_worker();
+                vibrato_analysis(&mut worker, text);
+            }
+        );
         self.apply_postprocessing(text, njd_features?)
     }
 

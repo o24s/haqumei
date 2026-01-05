@@ -2,7 +2,7 @@ pub mod dictionary;
 mod jp_common;
 mod mecab;
 mod model;
-pub mod njd;
+mod njd;
 
 #[cfg(test)]
 mod tests;
@@ -13,7 +13,7 @@ use crate::open_jtalk::{
     njd::{Njd, apply_plus_rules, njd_to_features},
     jp_common::JpCommon,
 };
-use crate::{NjdFeature, WordPhonemeMap};
+use crate::{NjdFeature, WordPhonemeMap, WordPhonemeDetail};
 use crate::errors::HaqumeiError;
 
 use arc_swap::ArcSwap;
@@ -107,6 +107,21 @@ pub struct OpenJTalk {
     _marker: PhantomData<Cell<()>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MecabMorph {
+    /// 形態素の表層形。
+    pub surface: String,
+
+    /// MeCab が出力した特徴量文字列。
+    pub feature: String,
+
+    /// MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
+    pub is_unknown: bool,
+
+    /// `OpenJTalk` のパイプラインで無視される対象かどうか。
+    /// (e.g, "記号,空白")
+    pub is_ignored: bool,
+}
 
 impl OpenJTalk {
     /// 現在のグローバルな辞書を使って、`OpenJTalk` インスタンスを作成します。
@@ -134,7 +149,7 @@ impl OpenJTalk {
         })
     }
 
-    fn ensure_dictionary_is_latest(&mut self) -> Result<(), HaqumeiError> {
+    pub(crate) fn ensure_dictionary_is_latest(&mut self) -> Result<(), HaqumeiError> {
         let latest_dict = GLOBAL_MECAB_DICTIONARY.load();
 
         if let Some(active_dict) = &self.dict && !Arc::ptr_eq(active_dict, &*latest_dict) {
@@ -243,6 +258,65 @@ impl OpenJTalk {
         self.extract_phonemes(&njd_features)
     }
 
+    /// より詳細な G2P 変換。
+    ///
+    /// - 既知語: 通常の音素列 (読点などは `pau`)
+    /// - 未知語: `unk`
+    /// - 空白等: `sp` (Space)
+    ///
+    /// pyopenjtalk のような音素文字列を得るためには、`.join(" ")` をチェーンしてください。
+    ///
+    /// # Examples
+    /// ```rust
+    /// use haqumei::OpenJTalk;
+    ///
+    /// let mut open_jtalk = OpenJTalk::new().unwrap();
+    /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"])
+    /// println!("{:?}", open_jtalk.g2p_detailed("こんにちは 𰻞𰻞麺"));
+    /// ```
+    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        self.ensure_dictionary_is_latest()?;
+
+        let morphs = self.run_mecab_detailed(text.as_ref())?;
+        let valid_features_str: Vec<String> = morphs.iter()
+            .filter(|m| !m.is_ignored)
+            .map(|m| m.feature.clone())
+            .collect();
+
+        let njd_features = self.run_njd_from_mecab(&valid_features_str)?;
+        #[cfg(debug_assertions)]
+        {
+            let features = self.run_frontend(text).unwrap();
+            assert_eq!(njd_features, features);
+        }
+
+        if njd_features.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mapping = self.g2p_mapping_inner(&njd_features)?;
+
+        let mut result_phonemes = Vec::new();
+        let mut map_idx = 0;
+
+        for morph in morphs {
+            if morph.is_ignored {
+                result_phonemes.push("sp".to_string());
+            } else {
+                let map = &mapping[map_idx];
+                map_idx += 1;
+
+                if morph.is_unknown {
+                    result_phonemes.push("unk".to_string());
+                } else {
+                    result_phonemes.extend(map.phonemes.iter().cloned());
+                }
+            }
+        }
+
+        Ok(result_phonemes)
+    }
+
     /// 入力テキストをカタカナに変換します。
     ///
     /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
@@ -335,6 +409,130 @@ impl OpenJTalk {
         }
 
         self.g2p_mapping_inner(&njd_features)
+    }
+
+    /// 入力テキストの形態素ごとの音素マッピングを返します。
+    ///
+    /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+    ///
+    /// - 既知語: 通常の音素列 (読点などは `pau`)
+    /// - 未知語: `unk`
+    /// - 空白等: `sp` (Space)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use haqumei::OpenJTalk;
+    ///
+    /// let mut open_jtalk = OpenJTalk::new().unwrap();
+    /// let mapping = open_jtalk.g2p_mapping_detailed("𰻞𰻞麺 お冷を頼んだ").unwrap();
+    ///
+    /// // 出力:
+    /// // [WordPhonemeDetail {
+    /// //     word: "𰻞𰻞",
+    /// //     phonemes: [
+    /// //         "unk",
+    /// //     ],
+    /// //     is_unknown: true,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "麺",
+    /// //     phonemes: [
+    /// //         "m",
+    /// //         "e",
+    /// //         "N",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "\u{3000}",
+    /// //     phonemes: [
+    /// //         "sp",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: true,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "を",
+    /// //     phonemes: [
+    /// //         "o",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "\u{3000}",
+    /// //     phonemes: [
+    /// //         "sp",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: true,
+    /// // },
+    /// // WordPhonemeDetail {
+    /// //     word: "食べる",
+    /// //     phonemes: [
+    /// //         "t",
+    /// //         "a",
+    /// //         "b",
+    /// //         "e",
+    /// //         "r",
+    /// //         "u",
+    /// //     ],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// // }]
+    /// // ```
+    pub fn g2p_mapping_detailed(&mut self, text: &str) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        self.ensure_dictionary_is_latest()?;
+
+        let morphs = self.run_mecab_detailed(text)?;
+
+        let valid_features_str: Vec<String> = morphs.iter()
+            .filter(|m| !m.is_ignored)
+            .map(|m| m.feature.clone())
+            .collect();
+
+        if valid_features_str.is_empty() {
+            return Ok(morphs.into_iter().map(|m| WordPhonemeDetail {
+                word: m.surface,
+                phonemes: vec!["sp".to_string()],
+                is_unknown: m.is_unknown,
+                is_ignored: true,
+            }).collect());
+        }
+
+        let njd_features = self.run_njd_from_mecab(&valid_features_str)?;
+
+        let mapping = self.g2p_mapping_inner(&njd_features)?;
+
+        let mut result = Vec::with_capacity(morphs.len());
+        let mut map_idx = 0;
+
+        for morph in morphs {
+            let phonemes = if morph.is_ignored {
+                vec!["sp".to_string()]
+            } else {
+                let map = &mapping[map_idx];
+                map_idx += 1;
+
+                if morph.is_unknown {
+                    vec!["unk".to_string()]
+                } else {
+                    map.phonemes.clone()
+                }
+            };
+
+            result.push(WordPhonemeDetail {
+                word: morph.surface,
+                phonemes,
+                is_unknown: morph.is_unknown,
+                is_ignored: morph.is_ignored,
+            });
+        }
+
+        Ok(result)
     }
 
     pub(crate) fn g2p_mapping_inner(&mut self, njd_features: &[NjdFeature]) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
@@ -461,6 +659,111 @@ impl OpenJTalk {
         Ok(filtered_morphs)
     }
 
+    /// MeCab解析を実行し、詳細な形態素情報を返します。
+    ///
+    /// 空白や記号など、通常 OpenJTalk で無視されるトークンも含め、
+    /// 全ての解析結果を返します。
+    pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
+        self.ensure_dictionary_is_latest()?;
+        const BUFFER_SIZE: usize = 16384;
+
+        let c_text = CString::new(text)?;
+        let mut buffer = vec![0u8; BUFFER_SIZE];
+
+        let result = unsafe {
+            ffi::text2mecab(
+                buffer.as_mut_ptr() as *mut i8,
+                BUFFER_SIZE,
+                c_text.as_ptr(),
+            )
+        };
+
+        match result {
+            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {},
+            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_RANGE_ERROR => {
+                return Err(HaqumeiError::Text2MecabError("Text is too long".to_string()));
+            },
+            _ => {
+                return Err(HaqumeiError::Text2MecabError("Error in text2mecab".to_string()));
+            }
+        }
+
+        // MeCab Analysis
+        unsafe {
+            ffi::Mecab_analysis(
+                self.mecab.inner.as_ptr(),
+                buffer.as_ptr() as *const i8,
+            );
+        }
+
+        // Lattice Traversal
+        let morphs = unsafe {
+            let mecab_ptr = self.mecab.inner.as_ptr();
+            let lattice = (*mecab_ptr).lattice as *mut ffi::mecab_lattice_t;
+
+            let mut node = ffi::mecab_lattice_get_bos_node(lattice);
+
+            let mut results = Vec::new();
+
+            while !node.is_null() {
+                let stat = (*node).stat; // 0=NOR, 1=UNK, 2=BOS, 3=EOS
+
+                if stat != 2 && stat != 3 {
+                    let surf_ptr = (*node).surface;
+                    let length = (*node).length as usize;
+                    let surface = if !surf_ptr.is_null() && length > 0 {
+                        let bytes = std::slice::from_raw_parts(surf_ptr as *const u8, length);
+                        String::from_utf8_lossy(bytes).into_owned()
+                    } else {
+                        String::new()
+                    };
+
+                    let feat_ptr = (*node).feature;
+                    let raw_feature = if !feat_ptr.is_null() {
+                        CStr::from_ptr(feat_ptr).to_string_lossy()
+                    } else {
+                        std::borrow::Cow::Borrowed("")
+                    };
+
+                    // mecab.cpp:
+                    // ```cpp
+                    // m->feature = (char **) calloc(m->size, sizeof(char *));
+                    // int index = 0;
+                    // for (const MeCab::Node* node = lattice->bos_node(); node; node = node->next) {
+                    //     if(node->stat != MECAB_BOS_NODE && node->stat != MECAB_EOS_NODE) {
+                    //         std::string f(node->surface, node->length);
+                    //         f += ",";
+                    //         f += node->feature;
+                    //         m->feature[index] = strdup(f.c_str());
+                    //         index++;
+                    //     }
+                    // }
+                    // ```
+                    let compatible_feature = format!("{},{}", surface, raw_feature);
+
+                    let is_unknown = stat == 1;
+                    let is_ignored = raw_feature.contains("記号,空白");
+
+                    results.push(MecabMorph {
+                        surface,
+                        feature: compatible_feature,
+                        is_unknown,
+                        is_ignored,
+                    });
+                }
+
+                node = (*node).next;
+            }
+            results
+        };
+
+        unsafe {
+            ffi::Mecab_refresh(self.mecab.inner.as_ptr());
+        }
+
+        Ok(morphs)
+    }
+
     pub fn run_njd_from_mecab(&mut self, mecab_features: &[String]) -> Result<Vec<NjdFeature>, HaqumeiError> {
         if mecab_features.is_empty() {
             return Ok(Vec::with_capacity(0));
@@ -475,7 +778,6 @@ impl OpenJTalk {
             .iter()
             .map(|cs| cs.as_ptr())
             .collect();
-
 
         unsafe {
             ffi::mecab2njd(
@@ -777,6 +1079,21 @@ impl ParallelJTalk {
             .collect()
     }
 
+    /// 複数のテキストに対して並列に `g2p_detailed` を実行します。
+    pub fn g2p_detailed<S>(&self, texts: &[S]) -> Result<Vec<Vec<String>>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.g2p_detailed(text.as_ref())
+            )
+            .collect()
+    }
+
     /// 複数のテキストに対して並列に `g2p_kana` を実行します。
     pub fn g2p_kana<S>(&self, texts: &[S]) -> Result<Vec<String>, HaqumeiError>
     where
@@ -818,6 +1135,21 @@ impl ParallelJTalk {
                 || OpenJTalk::from_shared_dictionary(self.dict.clone())
                     .expect("Failed to initialize OpenJTalk worker"),
                 |ojt, text| ojt.g2p_mapping(text.as_ref())
+            )
+            .collect()
+    }
+
+    /// 複数のテキストに対して並列に `g2p_mapping_detailed` を実行します。
+    pub fn g2p_mapping_detailed<S>(&self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeDetail>>, HaqumeiError>
+    where
+        S: AsRef<str> + Sync,
+    {
+        texts
+            .par_iter()
+            .map_init(
+                || OpenJTalk::from_shared_dictionary(self.dict.clone())
+                    .expect("Failed to initialize OpenJTalk worker"),
+                |ojt, text| ojt.g2p_mapping_detailed(text.as_ref())
             )
             .collect()
     }

@@ -60,6 +60,24 @@ class WordPhonemeMap:
     phonemes: List[str]
     """その単語に対応する音素のリスト。"""
 
+class WordPhonemeDetail:
+    """単語とその音素列の対応関係を表すデータクラス。
+
+    `g2p_mapping_detailed` メソッドによって生成されます。
+    """
+
+    word: str
+    """単語の表層形。"""
+
+    phonemes: List[str]
+    """その単語に対応する音素のリスト。"""
+
+    is_unknown: bool
+    """MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。"""
+
+    is_ignored: bool
+    """`OpenJTalk` のパイプラインで無視される対象かどうか。"""
+
 class Dictionary:
     """OpenJTalk用の辞書データを管理するクラス。
 
@@ -155,7 +173,7 @@ class OpenJTalk:
     def g2p(self, text: str) -> List[str]:
         """テキストを音素リストに変換します。
 
-        pyopenjtalk と同様の文字列を得るためには、
+        pyopenjtalk のような音素文字列を得るためには、
         `phonemes = " ".join(phonemes)` をしてください。
 
         Args:
@@ -165,6 +183,24 @@ class OpenJTalk:
             List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
         """
         ...
+
+    def g2p_detailed(self, text: str) -> List[str]:
+        """より詳細な G2P 変換。
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        pyopenjtalk のような音素文字列を得るためには、
+        `phonemes = " ".join(phonemes)` をしてください。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
+        """
+        ...
+
 
     def g2p_kana(self, text: str) -> str:
         """テキストをカタカナ読みに変換します。
@@ -199,6 +235,22 @@ class OpenJTalk:
 
         Returns:
             List[WordPhonemeMap]: 単語と音素のマッピングオブジェクトのリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+        """入力テキストの形態素ごとの音素マッピングを返します。
+        MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeDetail]: 単語と音素のマッピングオブジェクトのリスト。
         """
         ...
 
@@ -256,11 +308,31 @@ class Haqumei:
     def g2p(self, text: str) -> List[str]:
         """テキストを音素リストに変換します。
 
+        pyopenjtalk のような音素文字列を得るためには、
+        `phonemes = " ".join(phonemes)` をしてください。
+
         Args:
             text (str): 入力テキスト。
 
         Returns:
             List[str]: 音素記号のリスト。
+        """
+        ...
+
+    def g2p_detailed(self, text: str) -> List[str]:
+        """より詳細な G2P 変換。
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        pyopenjtalk のような音素文字列を得るためには、
+        `phonemes = " ".join(phonemes)` をしてください。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
         """
         ...
 
@@ -294,6 +366,22 @@ class Haqumei:
 
         Returns:
             List[WordPhonemeMap]: 単語と音素のマッピングオブジェクトのリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+        """入力テキストの形態素ごとの音素マッピングを返します。
+        MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeDetail]: 単語と音素のマッピングオブジェクトのリスト。
         """
         ...
 
@@ -348,6 +436,21 @@ class ParallelJTalk:
         """
         ...
 
+    def g2p_detailed(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストを並列処理で音素変換します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応する音素リストのリスト。
+        """
+        ...
+
     def g2p_kana(self, texts: List[str]) -> List[str]:
         """複数のテキストを並列処理でカタカナ変換します。
 
@@ -382,6 +485,21 @@ class ParallelJTalk:
 
         Returns:
             List[List[WordPhonemeMap]]: 各テキストに対応するマッピング情報のリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+        """複数のテキストを並列処理でより詳細な単語マッピング情報に変換します。
+
+        注意:
+            Rust 側での解析計算は並列化されますが、最終的な Python オブジェクトへの変換は
+            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeDetail]]: 各テキストに対応するマッピング情報のリスト。
         """
         ...
 
