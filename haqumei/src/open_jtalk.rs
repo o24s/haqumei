@@ -508,28 +508,64 @@ impl OpenJTalk {
         let mapping = self.g2p_mapping_inner(&njd_features)?;
 
         let mut result = Vec::with_capacity(morphs.len());
-        let mut map_idx = 0;
+        let mut morph_idx = 0;
 
-        for morph in morphs {
-            let phonemes = if morph.is_ignored {
-                vec!["sp".to_string()]
-            } else {
-                let map = &mapping[map_idx];
-                map_idx += 1;
+        for map in mapping {
+            while let Some(m) = morphs.get(morph_idx) && m.is_ignored {
+                result.push(WordPhonemeDetail {
+                    word: m.surface.clone(),
+                    phonemes: vec!["sp".to_string()],
+                    is_unknown: m.is_unknown,
+                    is_ignored: true,
+                });
+                morph_idx += 1;
+            }
 
-                if morph.is_unknown {
-                    vec!["unk".to_string()]
+            if map.word == morphs[morph_idx].surface {
+                if morphs[morph_idx].is_unknown {
+                    result.push(WordPhonemeDetail {
+                        word: map.word,
+                        phonemes: vec!["unk".to_string()],
+                        is_unknown: true,
+                        is_ignored: false,
+                    });
                 } else {
-                    map.phonemes.clone()
+                    result.push(WordPhonemeDetail {
+                        word: map.word,
+                        phonemes: map.phonemes,
+                        is_unknown: false,
+                        is_ignored: false,
+                    });
                 }
-            };
 
-            result.push(WordPhonemeDetail {
-                word: morph.surface,
-                phonemes,
-                is_unknown: morph.is_unknown,
-                is_ignored: morph.is_ignored,
-            });
+                morph_idx += 1;
+            } else if map.word.starts_with(&morphs[morph_idx].surface) {
+                let mut is_unknown_word = false;
+
+                // NJD によって、未知語は結合されることがなく、
+                // また、空白が word の中に含まれることもないことを仮定する。
+                while let Some(morph) = &morphs.get(morph_idx) && map.word.contains(&morph.surface) {
+                    let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
+                    is_unknown_word |= is_unknown;
+
+                    morph_idx += 1;
+                }
+
+                result.push(WordPhonemeDetail {
+                    word: map.word,
+                    phonemes: map.phonemes,
+                    is_unknown: is_unknown_word,
+                    is_ignored: false,
+                });
+            } else {
+                // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
+                result.push(WordPhonemeDetail {
+                    word: map.word,
+                    phonemes: map.phonemes,
+                    is_unknown: false,
+                    is_ignored: false,
+                });
+            }
         }
 
         Ok(result)
