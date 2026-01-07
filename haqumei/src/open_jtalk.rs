@@ -520,16 +520,45 @@ impl OpenJTalk {
                 });
                 morph_idx += 1;
             }
+            if let Some(morph) = morphs.get(morph_idx) {
+                if map.word == morph.surface {
+                    if morphs[morph_idx].is_unknown {
+                        result.push(WordPhonemeDetail {
+                            word: map.word,
+                            phonemes: vec!["unk".to_string()],
+                            is_unknown: true,
+                            is_ignored: false,
+                        });
+                    } else {
+                        result.push(WordPhonemeDetail {
+                            word: map.word,
+                            phonemes: map.phonemes,
+                            is_unknown: false,
+                            is_ignored: false,
+                        });
+                    }
 
-            if map.word == morphs[morph_idx].surface {
-                if morphs[morph_idx].is_unknown {
+                    morph_idx += 1;
+                } else if map.word.starts_with(&morph.surface) {
+                    let mut is_unknown_word = false;
+
+                    // NJD によって、未知語は結合されることがなく、
+                    // また、空白が word の中に含まれることもないことを仮定する。
+                    while let Some(morph) = &morphs.get(morph_idx) && map.word.contains(&morph.surface) {
+                        let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
+                        is_unknown_word |= is_unknown;
+
+                        morph_idx += 1;
+                    }
+
                     result.push(WordPhonemeDetail {
                         word: map.word,
-                        phonemes: vec!["unk".to_string()],
-                        is_unknown: true,
+                        phonemes: map.phonemes,
+                        is_unknown: is_unknown_word,
                         is_ignored: false,
                     });
                 } else {
+                    // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
                     result.push(WordPhonemeDetail {
                         word: map.word,
                         phonemes: map.phonemes,
@@ -537,34 +566,6 @@ impl OpenJTalk {
                         is_ignored: false,
                     });
                 }
-
-                morph_idx += 1;
-            } else if map.word.starts_with(&morphs[morph_idx].surface) {
-                let mut is_unknown_word = false;
-
-                // NJD によって、未知語は結合されることがなく、
-                // また、空白が word の中に含まれることもないことを仮定する。
-                while let Some(morph) = &morphs.get(morph_idx) && map.word.contains(&morph.surface) {
-                    let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
-                    is_unknown_word |= is_unknown;
-
-                    morph_idx += 1;
-                }
-
-                result.push(WordPhonemeDetail {
-                    word: map.word,
-                    phonemes: map.phonemes,
-                    is_unknown: is_unknown_word,
-                    is_ignored: false,
-                });
-            } else {
-                // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
-                result.push(WordPhonemeDetail {
-                    word: map.word,
-                    phonemes: map.phonemes,
-                    is_unknown: false,
-                    is_ignored: false,
-                });
             }
         }
 
