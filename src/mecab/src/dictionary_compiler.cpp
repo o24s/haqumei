@@ -86,8 +86,10 @@ class DictionaryComplier {
 #define DCONF(file) create_filename(dicdir, std::string(file)).c_str()
 #define OCONF(file) create_filename(outdir, std::string(file)).c_str()
 
-    CHECK_DIE(param.load(DCONF(DICRC)))
-        << "no such file or directory: " << DCONF(DICRC);
+    if (param.load(DCONF(DICRC)) == false) {
+      std::cerr << "no such file or directory: " << DCONF(DICRC) << std::endl;
+      return -1;
+    }
 
     std::vector<std::string> dic;
     if (userdic.empty()) {
@@ -97,13 +99,26 @@ class DictionaryComplier {
     }
 
     if (!userdic.empty()) {
-      CHECK_DIE(dic.size()) << "no dictionaries are specified";
+      if (dic.size() == 0) {
+        std::cerr << "no dictionaries are specified" << std::endl;
+        return -1;
+      }
       param.set("type", static_cast<int>(MECAB_USR_DIC));
       if (opt_assign_user_dictionary_costs) {
-        Dictionary::assignUserDictionaryCosts(param, dic,
-                                              userdic.c_str());
+        const bool is_compiled = Dictionary::assignUserDictionaryCosts(
+            param,
+            dic,
+            userdic.c_str());
+        if (is_compiled == false) {
+          std::cerr << "failed to compile user dictionary: " << userdic << std::endl;
+          return -1;
+        }
       } else {
-      Dictionary::compile(param, dic, userdic.c_str());
+        const bool is_compiled = Dictionary::compile(param, dic, userdic.c_str());
+        if (is_compiled == false) {
+          std::cerr << "failed to compile user dictionary: " << userdic << std::endl;
+          return -1;
+        }
       }
     } else {
       if (!opt_unknown && !opt_matrix && !opt_charcategory &&
@@ -139,9 +154,16 @@ class DictionaryComplier {
       }
 
       if (opt_sysdic) {
-        CHECK_DIE(dic.size()) << "no dictionaries are specified";
+        if (dic.size() == 0) {
+          std::cerr << "no dictionaries are specified" << std::endl;
+          return -1;
+        }
         param.set("type", static_cast<int>(MECAB_SYS_DIC));
-        Dictionary::compile(param, dic, OCONF(SYS_DIC_FILE));
+        const bool is_compiled = Dictionary::compile(param, dic, OCONF(SYS_DIC_FILE));
+        if (is_compiled == false) {
+          std::cerr << "failed to compile system dictionary" << std::endl;
+          return -1;
+        }
       }
 
       if (opt_matrix) {
