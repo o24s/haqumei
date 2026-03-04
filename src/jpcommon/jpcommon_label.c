@@ -54,6 +54,7 @@ JPCOMMON_LABEL_C_START;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "jpcommon.h"
 
@@ -85,6 +86,8 @@ JPCOMMON_LABEL_C_START;
 #define MAX_L     99
 #define MAX_LL    199
 
+static const char *nodata = "*";
+
 // NOTE:
 // string top compare の略 ?
 // 以下の振る舞いをする：
@@ -115,11 +118,56 @@ static int limit(int in, int min, int max)
    return in;
 }
 
+static int append_format(char *destination, size_t destination_size, const char *format, ...)
+{
+   size_t current_length;
+   int write_result;
+   va_list variable_arguments;
+
+   if (destination == NULL || format == NULL || destination_size == 0) {
+      return 0;
+   }
+
+   current_length = strlen(destination);
+   if (current_length >= destination_size) {
+      return 0;
+   }
+
+   va_start(variable_arguments, format);
+   write_result =
+      vsnprintf(destination + current_length, destination_size - current_length, format, variable_arguments);
+   va_end(variable_arguments);
+
+   if (write_result < 0) {
+      return 0;
+   }
+   if ((size_t) write_result >= destination_size - current_length) {
+      destination[destination_size - 1] = '\0';
+      return 0;
+   }
+
+   return 1;
+}
+
+static char *duplicate_or_nodata(const char *source)
+{
+   char *copied;
+
+   if (source == NULL) {
+      source = nodata;
+   }
+   copied = strdup(source);
+   if (copied == NULL) {
+      return (char *) nodata;
+   }
+   return copied;
+}
+
 static void JPCommonLabelPhoneme_initialize(JPCommonLabelPhoneme * p, const char *phoneme,
                                             JPCommonLabelPhoneme * prev,
                                             JPCommonLabelPhoneme * next, JPCommonLabelMora * up)
 {
-   p->phoneme = strdup(phoneme);
+   p->phoneme = duplicate_or_nodata(phoneme);
    p->prev = prev;
    p->next = next;
    p->up = up;
@@ -131,8 +179,10 @@ static void JPCommonLabelPhoneme_convert_unvoice(JPCommonLabelPhoneme * p)
 
    for (i = 0; jpcommon_unvoice_list[i] != NULL; i += 2) {
       if (strcmp(jpcommon_unvoice_list[i], p->phoneme) == 0) {
-         free(p->phoneme);
-         p->phoneme = strdup(jpcommon_unvoice_list[i + 1]);
+         if (p->phoneme != nodata) {
+            free(p->phoneme);
+         }
+         p->phoneme = duplicate_or_nodata(jpcommon_unvoice_list[i + 1]);
          return;
       }
    }
@@ -144,7 +194,9 @@ static void JPCommonLabelPhoneme_convert_unvoice(JPCommonLabelPhoneme * p)
 
 static void JPCommonLabelPhoneme_clear(JPCommonLabelPhoneme * p)
 {
-   free(p->phoneme);
+   if (p->phoneme != nodata) {
+      free(p->phoneme);
+   }
 }
 
 static void JPCommonLabelMora_initialize(JPCommonLabelMora * m, const char *mora,
@@ -152,7 +204,7 @@ static void JPCommonLabelMora_initialize(JPCommonLabelMora * m, const char *mora
                                          JPCommonLabelMora * prev, JPCommonLabelMora * next,
                                          JPCommonLabelWord * up)
 {
-   m->mora = strdup(mora);
+   m->mora = duplicate_or_nodata(mora);
    m->head = head;
    m->tail = tail;
    m->prev = prev;
@@ -162,7 +214,9 @@ static void JPCommonLabelMora_initialize(JPCommonLabelMora * m, const char *mora
 
 static void JPCommonLabelMora_clear(JPCommonLabelMora * m)
 {
-   free(m->mora);
+   if (m->mora != nodata) {
+      free(m->mora);
+   }
 }
 
 // NOTE: ワード情報をフォーマット変換して JPCommonLabelWord を生成する。
@@ -174,7 +228,7 @@ static void JPCommonLabelWord_initialize(JPCommonLabelWord * w, const char *pron
    int i, find;
 
    // NOTE: 発音を設定する
-   w->pron = strdup(pron);
+   w->pron = duplicate_or_nodata(pron);
 
    // NOTE: 品詞 ID を設定する
    for (i = 0, find = 0; jpcommon_pos_list[i] != NULL; i += 2) {
@@ -189,7 +243,7 @@ static void JPCommonLabelWord_initialize(JPCommonLabelWord * w, const char *pron
               pos);
       i = 0;
    }
-   w->pos = strdup(jpcommon_pos_list[i + 1]);
+   w->pos = duplicate_or_nodata(jpcommon_pos_list[i + 1]);
 
    // NOTE: 活用型 ID を設定する
    for (i = 0, find = 0; jpcommon_ctype_list[i] != NULL; i += 2) {
@@ -204,7 +258,7 @@ static void JPCommonLabelWord_initialize(JPCommonLabelWord * w, const char *pron
               ctype);
       i = 0;
    }
-   w->ctype = strdup(jpcommon_ctype_list[i + 1]);
+   w->ctype = duplicate_or_nodata(jpcommon_ctype_list[i + 1]);
 
    // NOTE: 活用形 ID を設定する
    for (i = 0, find = 0; jpcommon_cform_list[i] != NULL; i += 2) {
@@ -219,7 +273,7 @@ static void JPCommonLabelWord_initialize(JPCommonLabelWord * w, const char *pron
               cform);
       i = 0;
    }
-   w->cform = strdup(jpcommon_cform_list[i + 1]);
+   w->cform = duplicate_or_nodata(jpcommon_cform_list[i + 1]);
 
    // NOTE: head/tail/prev/next を設定する
    w->head = head;
@@ -230,10 +284,14 @@ static void JPCommonLabelWord_initialize(JPCommonLabelWord * w, const char *pron
 
 static void JPCommonLabelWord_clear(JPCommonLabelWord * w)
 {
-   free(w->pron);
-   free(w->pos);
-   free(w->ctype);
-   free(w->cform);
+   if (w->pron != nodata)
+      free(w->pron);
+   if (w->pos != nodata)
+      free(w->pos);
+   if (w->ctype != nodata)
+      free(w->ctype);
+   if (w->cform != nodata)
+      free(w->cform);
 }
 
 static void JPCommonLabelAccentPhrase_initialize(JPCommonLabelAccentPhrase * a, int acc,
@@ -245,12 +303,12 @@ static void JPCommonLabelAccentPhrase_initialize(JPCommonLabelAccentPhrase * a, 
 {
    a->accent = acc;
    if (emotion != NULL)
-      a->emotion = strdup(emotion);
+      a->emotion = duplicate_or_nodata(emotion);
    else
       a->emotion = NULL;
 
    if (excl != NULL)
-      a->excl = strdup(excl);
+      a->excl = duplicate_or_nodata(excl);
    else
       a->excl = NULL;
 
@@ -263,9 +321,9 @@ static void JPCommonLabelAccentPhrase_initialize(JPCommonLabelAccentPhrase * a, 
 
 static void JPCommonLabelAccentPhrase_clear(JPCommonLabelAccentPhrase * a)
 {
-   if (a->emotion != NULL)
+   if (a->emotion != NULL && a->emotion != nodata)
       free(a->emotion);
-   if (a->excl != NULL)
+   if (a->excl != NULL && a->excl != nodata)
       free(a->excl);
 }
 
@@ -435,6 +493,7 @@ static int count_mora_in_utterance(JPCommonLabelMora * m)
 
 void JPCommonLabel_initialize(JPCommonLabel * label)
 {
+   label->is_valid = 1;
    label->short_pause_flag = 0;
    label->breath_head = NULL;
    label->breath_tail = NULL;
@@ -470,6 +529,11 @@ static void JPCommonLabel_insert_pause(JPCommonLabel * label)
          // NOTE: up 無しの pau 音素を追加する
          label->phoneme_tail->next =
              (JPCommonLabelPhoneme *) calloc(1, sizeof(JPCommonLabelPhoneme));
+         if (label->phoneme_tail->next == NULL) {
+            fprintf(stderr, "WARNING: JPCommonLabel_insert_pause() in jpcommon_label.c: Failed to allocate phoneme.\n");
+            label->is_valid = 0;
+            return;
+         }
          JPCommonLabelPhoneme_initialize(label->phoneme_tail->next, JPCOMMON_PHONEME_SHORT_PAUSE,
                                          label->phoneme_tail, NULL, NULL);
          label->phoneme_tail = label->phoneme_tail->next;
@@ -510,11 +574,11 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
          if (strcmp(label->phoneme_tail->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0) {
             // NOTE: 「`a`→`pau`→`？`」の場合は `a` が所属するアクセント句に設定する
             if (label->phoneme_tail->prev->up->up->up->emotion == NULL)
-               label->phoneme_tail->prev->up->up->up->emotion = strdup(JPCOMMON_FLAG_QUESTION);
+               label->phoneme_tail->prev->up->up->up->emotion = duplicate_or_nodata(JPCOMMON_FLAG_QUESTION);
          } else {
             // NOTE: 「`a`→`？`」の場合は `a` が所属するアクセント句に設定する
             if (label->phoneme_tail->up->up->up->emotion == NULL)
-               label->phoneme_tail->up->up->up->emotion = strdup(JPCOMMON_FLAG_QUESTION);
+               label->phoneme_tail->up->up->up->emotion = duplicate_or_nodata(JPCOMMON_FLAG_QUESTION);
          }
       } else {
          // NOTE: 空 Label の先頭が「？」のときは警告を出して無視する
@@ -534,10 +598,10 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
       if (label->phoneme_tail != NULL) {
          if (strcmp(label->phoneme_tail->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0) {
             if (label->phoneme_tail->prev->up->up->up->excl == NULL)
-               label->phoneme_tail->prev->up->up->up->excl = strdup(JPCOMMON_FLAG_EXCLAMATION);
+               label->phoneme_tail->prev->up->up->up->excl = duplicate_or_nodata(JPCOMMON_FLAG_EXCLAMATION);
          } else {
             if (label->phoneme_tail->up->up->up->excl == NULL)
-               label->phoneme_tail->up->up->up->excl = strdup(JPCOMMON_FLAG_EXCLAMATION);
+               label->phoneme_tail->up->up->up->excl = duplicate_or_nodata(JPCOMMON_FLAG_EXCLAMATION);
          }
       } else {
          fprintf(stderr,
@@ -575,6 +639,19 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
             label->phoneme_tail->next =
                 (JPCommonLabelPhoneme *) calloc(1, sizeof(JPCommonLabelPhoneme));
             label->mora_tail->next = (JPCommonLabelMora *) calloc(1, sizeof(JPCommonLabelMora));
+            if (label->phoneme_tail->next == NULL || label->mora_tail->next == NULL) {
+               fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate long-vowel nodes.\n");
+               if (label->phoneme_tail->next != NULL) {
+                  free(label->phoneme_tail->next);
+                  label->phoneme_tail->next = NULL;
+               }
+               if (label->mora_tail->next != NULL) {
+                  free(label->mora_tail->next);
+                  label->mora_tail->next = NULL;
+               }
+               label->is_valid = 0;
+               return;
+            }
             JPCommonLabelPhoneme_initialize(label->phoneme_tail->next, label->phoneme_tail->phoneme,
                                             label->phoneme_tail, NULL, label->mora_tail->next);
             // NOTE: 長音は音素1つでモーラを作るので head == tail となる
@@ -624,6 +701,23 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
                       (JPCommonLabelPhoneme *) calloc(1, sizeof(JPCommonLabelPhoneme));
                   label->mora_tail = (JPCommonLabelMora *) calloc(1, sizeof(JPCommonLabelMora));
                   label->word_tail = (JPCommonLabelWord *) calloc(1, sizeof(JPCommonLabelWord));
+                  if (label->phoneme_tail == NULL || label->mora_tail == NULL || label->word_tail == NULL) {
+                     fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate initial word nodes.\n");
+                     if (label->phoneme_tail != NULL) {
+                        free(label->phoneme_tail);
+                        label->phoneme_tail = NULL;
+                     }
+                     if (label->mora_tail != NULL) {
+                        free(label->mora_tail);
+                        label->mora_tail = NULL;
+                     }
+                     if (label->word_tail != NULL) {
+                        free(label->word_tail);
+                        label->word_tail = NULL;
+                     }
+                     label->is_valid = 0;
+                     return;
+                  }
                   JPCommonLabelPhoneme_initialize(label->phoneme_tail, jpcommon_mora_list[i + 1],
                                                   NULL, NULL, label->mora_tail);
                   // NOTE: 1つめの音素・モーラしかまだ存在しないので head == tail となる
@@ -650,6 +744,24 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
                          (JPCommonLabelMora *) calloc(1, sizeof(JPCommonLabelMora));
                      label->word_tail->next =
                          (JPCommonLabelWord *) calloc(1, sizeof(JPCommonLabelWord));
+                     if (label->phoneme_tail->next == NULL || label->mora_tail->next == NULL ||
+                         label->word_tail->next == NULL) {
+                        fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate first-word continuation nodes.\n");
+                        if (label->phoneme_tail->next != NULL) {
+                           free(label->phoneme_tail->next);
+                           label->phoneme_tail->next = NULL;
+                        }
+                        if (label->mora_tail->next != NULL) {
+                           free(label->mora_tail->next);
+                           label->mora_tail->next = NULL;
+                        }
+                        if (label->word_tail->next != NULL) {
+                           free(label->word_tail->next);
+                           label->word_tail->next = NULL;
+                        }
+                        label->is_valid = 0;
+                        return;
+                     }
                      JPCommonLabelPhoneme_initialize(label->phoneme_tail->next,
                                                      jpcommon_mora_list[i + 1], label->phoneme_tail,
                                                      NULL, label->mora_tail->next);
@@ -673,6 +785,19 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
                          (JPCommonLabelPhoneme *) calloc(1, sizeof(JPCommonLabelPhoneme));
                      label->mora_tail->next =
                          (JPCommonLabelMora *) calloc(1, sizeof(JPCommonLabelMora));
+                     if (label->phoneme_tail->next == NULL || label->mora_tail->next == NULL) {
+                        fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate mora continuation nodes.\n");
+                        if (label->phoneme_tail->next != NULL) {
+                           free(label->phoneme_tail->next);
+                           label->phoneme_tail->next = NULL;
+                        }
+                        if (label->mora_tail->next != NULL) {
+                           free(label->mora_tail->next);
+                           label->mora_tail->next = NULL;
+                        }
+                        label->is_valid = 0;
+                        return;
+                     }
                      JPCommonLabelPhoneme_initialize(label->phoneme_tail->next,
                                                      jpcommon_mora_list[i + 1], label->phoneme_tail,
                                                      NULL, label->mora_tail->next);
@@ -695,6 +820,11 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
                   // NOTE: 2つめの音素を既存のモーラへ追加する
                   label->phoneme_tail->next =
                       (JPCommonLabelPhoneme *) calloc(1, sizeof(JPCommonLabelPhoneme));
+                  if (label->phoneme_tail->next == NULL) {
+                     fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate second phoneme.\n");
+                     label->is_valid = 0;
+                     return;
+                  }
                   JPCommonLabelPhoneme_initialize(label->phoneme_tail->next,
                                                   jpcommon_mora_list[i + 2], label->phoneme_tail,
                                                   NULL, label->mora_tail);
@@ -737,6 +867,19 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
       label->accent_tail =
           (JPCommonLabelAccentPhrase *) calloc(1, sizeof(JPCommonLabelAccentPhrase));
       label->breath_tail = (JPCommonLabelBreathGroup *) calloc(1, sizeof(JPCommonLabelBreathGroup));
+      if (label->accent_tail == NULL || label->breath_tail == NULL) {
+         fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate initial accent/breath group.\n");
+         if (label->accent_tail != NULL) {
+            free(label->accent_tail);
+            label->accent_tail = NULL;
+         }
+         if (label->breath_tail != NULL) {
+            free(label->breath_tail);
+            label->breath_tail = NULL;
+         }
+         label->is_valid = 0;
+         return;
+      }
       // NOTE: ワードにアクセント句を紐づける
       label->word_tail->up = label->accent_tail;
       // NOTE: 1つめのワード・アクセント句しかまだ存在しないので head == tail となる
@@ -761,6 +904,11 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
       // NOTE: pau がないため同じ BreathGroup で、連鎖していないので新しいアクセント句となる
       label->accent_tail->next =
           (JPCommonLabelAccentPhrase *) calloc(1, sizeof(JPCommonLabelAccentPhrase));
+      if (label->accent_tail->next == NULL) {
+         fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate accent phrase.\n");
+         label->is_valid = 0;
+         return;
+      }
       label->word_tail->up = label->accent_tail->next;
       // NOTE: 新しいアクセント句にワードが1つしかないので head==tail となる
       // NOTE: AP head word の acc を AP のアクセントとする
@@ -777,6 +925,19 @@ void JPCommonLabel_push_word(JPCommonLabel * label, const char *pron, const char
           (JPCommonLabelAccentPhrase *) calloc(1, sizeof(JPCommonLabelAccentPhrase));
       label->breath_tail->next =
           (JPCommonLabelBreathGroup *) calloc(1, sizeof(JPCommonLabelBreathGroup));
+      if (label->accent_tail->next == NULL || label->breath_tail->next == NULL) {
+         fprintf(stderr, "WARNING: JPCommonLabel_push_word() in jpcommon_label.c: Failed to allocate accent/breath next nodes.\n");
+         if (label->accent_tail->next != NULL) {
+            free(label->accent_tail->next);
+            label->accent_tail->next = NULL;
+         }
+         if (label->breath_tail->next != NULL) {
+            free(label->breath_tail->next);
+            label->breath_tail->next = NULL;
+         }
+         label->is_valid = 0;
+         return;
+      }
       label->word_tail->up = label->accent_tail->next;
       // NOTE: 新しいアクセント句にワードが1つしかないので head==tail となる
       // NOTE: AP head word の acc を AP のアクセントとする
@@ -795,13 +956,19 @@ void JPCommonLabel_make(JPCommonLabel * label)
 // NOTE: フルコンテキストラベル文字列を生成し、label->feature へ収納する
 {
    int i, tmp1, tmp2, tmp3;
-   char buff[MAXBUFLEN];
    JPCommonLabelPhoneme *p;
    JPCommonLabelWord *w;
    JPCommonLabelAccentPhrase *a;
    JPCommonLabelBreathGroup *b;
    char **phoneme_list;
    int short_pause_flag;
+   int is_feature_in_range;
+
+   if (label->is_valid == 0) {
+      fprintf(stderr, "WARNING: JPCommonLabel_make() in jpcommon_label.c: Label state is invalid.\n");
+      label->size = 0;
+      return;
+   }
 
    /* initialize */
    // NOTE: 音素数をカウントし必要なサイズを計算する
@@ -813,12 +980,40 @@ void JPCommonLabel_make(JPCommonLabel * label)
    }
    label->size += 2;
    label->feature = (char **) calloc(label->size, sizeof(char *)); // NOTE: フルコンテキストラベル系列の収納先
-   for (i = 0; i < label->size; i++)
+   if (label->feature == NULL) {
+      fprintf(stderr, "WARNING: JPCommonLabel_make() in jpcommon_label.c: Failed to allocate label feature.\n");
+      label->size = 0;
+      return;
+   }
+   for (i = 0; i < label->size; i++) {
       label->feature[i] = (char *) calloc(MAXBUFLEN, sizeof(char)); // NOTE: フルコンテキストラベルの収納先
+      if (label->feature[i] == NULL) {
+         int cleanup_index;
+
+         fprintf(stderr, "WARNING: JPCommonLabel_make() in jpcommon_label.c: Failed to allocate each label feature.\n");
+         for (cleanup_index = 0; cleanup_index < i; cleanup_index++) {
+            free(label->feature[cleanup_index]);
+         }
+         free(label->feature);
+         label->feature = NULL;
+         label->size = 0;
+         return;
+      }
+   }
 
    /* phoneme list */
    // NOTE: 前後に音素を足して ["xx", "xx", "sil", contents, "sil", "xx", "xx"] とする。
    phoneme_list = (char **) calloc(label->size + 4, sizeof(char *)); // NOTE: 音素の一覧
+   if (phoneme_list == NULL) {
+      fprintf(stderr, "WARNING: JPCommonLabel_make() in jpcommon_label.c: Failed to allocate phoneme list.\n");
+      for (i = 0; i < label->size; i++) {
+         free(label->feature[i]);
+      }
+      free(label->feature);
+      label->feature = NULL;
+      label->size = 0;
+      return;
+   }
    phoneme_list[0] = JPCOMMON_PHONEME_UNKNOWN;
    phoneme_list[1] = JPCOMMON_PHONEME_UNKNOWN;
    phoneme_list[2] = JPCOMMON_PHONEME_SILENT;
@@ -835,24 +1030,28 @@ void JPCommonLabel_make(JPCommonLabel * label)
          short_pause_flag = 1;
       else
          short_pause_flag = 0;
+      is_feature_in_range = 1;
 
       /* for phoneme */
       // NOTE: 音素を前後の音素ごとダンプする
-      sprintf(label->feature[i], "%s^%s-%s+%s=%s", phoneme_list[i], phoneme_list[i + 1],
-              phoneme_list[i + 2], phoneme_list[i + 3], phoneme_list[i + 4]);
+      if (snprintf(label->feature[i], MAXBUFLEN, "%s^%s-%s+%s=%s", phoneme_list[i], phoneme_list[i + 1],
+                   phoneme_list[i + 2], phoneme_list[i + 3], phoneme_list[i + 4]) >= MAXBUFLEN) {
+         label->feature[i][MAXBUFLEN - 1] = '\0';
+         is_feature_in_range = 0;
+      }
 
       /* for A: */
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1)
-         sprintf(buff, "/A:xx+xx+xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/A:xx+xx+xx") && is_feature_in_range;
       else {
          tmp1 = index_mora_in_accent_phrase(p->up);
          tmp2 =
              p->up->up->up->accent ==
              0 ? count_mora_in_accent_phrase(p->up) : p->up->up->up->accent;
-         sprintf(buff, "/A:%d+%d+%d", limit(tmp1 - tmp2, -MAX_M, MAX_M), limit(tmp1, 1, MAX_M),
-                 limit(count_mora_in_accent_phrase(p->up) - tmp1 + 1, 1, MAX_M));
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/A:%d+%d+%d", limit(tmp1 - tmp2, -MAX_M, MAX_M),
+                          limit(tmp1, 1, MAX_M), limit(count_mora_in_accent_phrase(p->up) - tmp1 + 1, 1, MAX_M)) && is_feature_in_range;
       }
-      strcat(label->feature[i], buff);
 
       /* for B: */
       // NOTE: 前の Word の品詞と活用をダンプする
@@ -865,18 +1064,17 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          w = p->up->up->prev;
       if (w == NULL)
-         sprintf(buff, "/B:xx-xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/B:xx-xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/B:%s-%s_%s", w->pos, w->ctype, w->cform);
-      strcat(label->feature[i], buff);
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/B:%s-%s_%s", w->pos, w->ctype, w->cform) && is_feature_in_range;
 
       /* for C: */
       // NOTE: この Word の品詞と活用をダンプする
       if (i == 0 || i == label->size - 1 || short_pause_flag)
-         sprintf(buff, "/C:xx_xx+xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/C:xx_xx+xx") && is_feature_in_range;
       else
-         sprintf(buff, "/C:%s_%s+%s", p->up->up->pos, p->up->up->ctype, p->up->up->cform);
-      strcat(label->feature[i], buff);
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/C:%s_%s+%s", p->up->up->pos, p->up->up->ctype, p->up->up->cform) && is_feature_in_range;
 
       /* for D: */
       // NOTE: 次の Word の品詞と活用をダンプする
@@ -889,10 +1087,9 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          w = p->up->up->next;
       if (w == NULL)
-         sprintf(buff, "/D:xx+xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/D:xx+xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/D:%s+%s_%s", w->pos, w->ctype, w->cform);
-      strcat(label->feature[i], buff);
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/D:%s+%s_%s", w->pos, w->ctype, w->cform) && is_feature_in_range;
 
       /* for E: */
       // NOTE: 前のアクセント句のモーラ数・アクセント・疑問形有無・ポーズ有無をダンプする
@@ -903,21 +1100,20 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          a = p->up->up->up->prev;
       if (a == NULL)
-         sprintf(buff, "/E:xx_xx!xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/E:xx_xx!xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/E:%d_%d!%s_%s",
-                 limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M),
-                 limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1,
-                       MAX_M), a->emotion == NULL ? "0" : a->emotion,
-                       a->excl == NULL ? "0" : a->excl);
-      strcat(label->feature[i], buff);
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/E:%d_%d!%s_%s",
+                          limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M),
+                          limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1, MAX_M),
+                          a->emotion == NULL ? "0" : a->emotion, a->excl == NULL ? "0" : a->excl) && is_feature_in_range;
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1 || a == NULL)
-         sprintf(buff, "-xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "-xx") && is_feature_in_range;
       else
-         sprintf(buff, "-%d",
-                 strcmp(a->tail->tail->tail->next->phoneme,
-                        JPCOMMON_PHONEME_SHORT_PAUSE) == 0 ? 0 : 1);
-      strcat(label->feature[i], buff);
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "-%d",
+                                             strcmp(a->tail->tail->tail->next->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0
+                                                ? 0
+                                                : 1) && is_feature_in_range;
 
       /* for F: */
       // NOTE: アクセント句のモーラ数・アクセントなどをダンプする
@@ -926,20 +1122,19 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          a = p->up->up->up;
       if (a == NULL)
-         sprintf(buff, "/F:xx_xx#xx_xx@xx_xx|xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/F:xx_xx#xx_xx@xx_xx|xx_xx") && is_feature_in_range;
       else {
          tmp1 = index_accent_phrase_in_breath_group(a);
          tmp2 = index_mora_in_breath_group(a->head->head);
-         sprintf(buff, "/F:%d_%d#%s_%s@%d_%d|%d_%d",
-                 limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M), // NOTE: f1. アクセント句に含まれるモーラの数
-                 limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1, // NOTE: f2. 句アクセントの位置
-                       MAX_M), a->emotion == NULL ? "0" : a->emotion, a->excl == NULL ? "0" : a->excl, // NOTE: f3. 疑問形フラグ、(f4無し)、f5. BreathGroup 内のアクセント句のインデックス
-                 limit(tmp1, 1, MAX_M),
-                 limit(count_accent_phrase_in_breath_group(a) - tmp1 + 1, 1, MAX_M), limit(tmp2, 1, // Note: f6.、f7.
-                                                                                           MAX_L),
-                 limit(count_mora_in_breath_group(a->head->head) - tmp2 + 1, 1, MAX_L)); // NOTE: f8.
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/F:%d_%d#%s_%s@%d_%d|%d_%d",
+                          limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M), // NOTE: f1. アクセント句に含まれるモーラの数
+                          limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1, MAX_M), // NOTE: f2. 句アクセントの位置
+                          a->emotion == NULL ? "0" : a->emotion, a->excl == NULL ? "0" : a->excl, // NOTE: f3. 疑問形フラグ、(f4無し)
+                          limit(tmp1, 1, MAX_M), // NOTE: f5. BreathGroup 内のアクセント句のインデックス
+                          limit(count_accent_phrase_in_breath_group(a) - tmp1 + 1, 1, MAX_M), limit(tmp2, 1, MAX_L), // NOTE: f6.、f7.
+                          limit(count_mora_in_breath_group(a->head->head) - tmp2 + 1, 1, MAX_L)) && is_feature_in_range; // NOTE: f8.
       }
-      strcat(label->feature[i], buff);
 
       /* for G: */
       if (short_pause_flag == 1)
@@ -949,20 +1144,20 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          a = p->up->up->up->next;
       if (a == NULL)
-         sprintf(buff, "/G:xx_xx%%xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/G:xx_xx%%xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/G:%d_%d%%%s_%s",
-                 limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M),
-                 limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1,
-                       MAX_M), a->emotion == NULL ? "0" : a->emotion, a->excl == NULL ? "0" : a->excl);
-      strcat(label->feature[i], buff);
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/G:%d_%d%%%s_%s",
+                          limit(count_mora_in_accent_phrase(a->head->head), 1, MAX_M),
+                          limit(a->accent == 0 ? count_mora_in_accent_phrase(a->head->head) : a->accent, 1, MAX_M),
+                          a->emotion == NULL ? "0" : a->emotion, a->excl == NULL ? "0" : a->excl) && is_feature_in_range;
       if (i == 0 || i == label->size - 1 || short_pause_flag == 1 || a == NULL)
-         sprintf(buff, "_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "_xx") && is_feature_in_range;
       else
-         sprintf(buff, "_%d",
-                 strcmp(a->head->head->head->prev->phoneme,
-                        JPCOMMON_PHONEME_SHORT_PAUSE) == 0 ? 0 : 1);
-      strcat(label->feature[i], buff);
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "_%d",
+                                             strcmp(a->head->head->head->prev->phoneme, JPCOMMON_PHONEME_SHORT_PAUSE) == 0
+                                                ? 0
+                                                : 1) && is_feature_in_range;
 
       /* for H: */
       // NOTE: 前の BreathGroup のアクセント句数とモーラ数をダンプする。
@@ -973,11 +1168,11 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          b = p->up->up->up->up->prev;
       if (b == NULL)
-         sprintf(buff, "/H:xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/H:xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/H:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
-                 limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L));
-      strcat(label->feature[i], buff);
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/H:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
+                          limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L)) && is_feature_in_range;
 
       /* for I: */
       // NOTE: BreathGroup のアクセント句数とモーラ数などをダンプする。
@@ -986,23 +1181,20 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          b = p->up->up->up->up;
       if (b == NULL)
-         sprintf(buff, "/I:xx-xx@xx+xx&xx-xx|xx+xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/I:xx-xx@xx+xx&xx-xx|xx+xx") && is_feature_in_range;
       else {
          tmp1 = index_breath_group_in_utterance(b);
          tmp2 = index_accent_phrase_in_utterance(b->head);
          tmp3 = index_mora_in_utterance(b->head->head->head);
-         sprintf(buff, "/I:%d-%d@%d+%d&%d-%d|%d+%d",
-                 limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
-                 limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L), limit(tmp1, 1,
-                                                                                         MAX_S), // Note: i3. breathGroup のインデックス
-                 limit(count_breath_group_in_utterance(b) - tmp1 + 1, 1, MAX_S), limit(tmp2, 1,
-                                                                                       MAX_M),
-                 limit(count_accent_phrase_in_utterance(b->head) - tmp2 + 1, 1, MAX_M), limit(tmp3,
-                                                                                              1,
-                                                                                              MAX_LL),
-                 limit(count_mora_in_utterance(b->head->head->head) - tmp3 + 1, 1, MAX_LL));
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/I:%d-%d@%d+%d&%d-%d|%d+%d",
+                          limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
+                          limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L),
+                          limit(tmp1, 1, MAX_S), // NOTE: i3. breathGroup のインデックス
+                          limit(count_breath_group_in_utterance(b) - tmp1 + 1, 1, MAX_S), limit(tmp2, 1, MAX_M),
+                          limit(count_accent_phrase_in_utterance(b->head) - tmp2 + 1, 1, MAX_M), limit(tmp3, 1, MAX_LL),
+                          limit(count_mora_in_utterance(b->head->head->head) - tmp3 + 1, 1, MAX_LL)) && is_feature_in_range;
       }
-      strcat(label->feature[i], buff);
 
       /* for J: */
       if (short_pause_flag == 1)
@@ -1012,18 +1204,22 @@ void JPCommonLabel_make(JPCommonLabel * label)
       else
          b = p->up->up->up->up->next;
       if (b == NULL)
-         sprintf(buff, "/J:xx_xx");
+         is_feature_in_range = append_format(label->feature[i], MAXBUFLEN, "/J:xx_xx") && is_feature_in_range;
       else
-         sprintf(buff, "/J:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
-                 limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L));
-      strcat(label->feature[i], buff);
+         is_feature_in_range =
+            append_format(label->feature[i], MAXBUFLEN, "/J:%d_%d", limit(count_accent_phrase_in_breath_group(b->head), 1, MAX_M),
+                          limit(count_mora_in_breath_group(b->head->head->head), 1, MAX_L)) && is_feature_in_range;
 
       /* for K: */
-      sprintf(buff, "/K:%d+%d-%d",
-              limit(count_breath_group_in_utterance(label->breath_head), 1, MAX_S),
-              limit(count_accent_phrase_in_utterance(label->accent_head), 1, MAX_M),
-              limit(count_mora_in_utterance(label->mora_head), 1, MAX_LL));
-      strcat(label->feature[i], buff);
+      is_feature_in_range =
+         append_format(label->feature[i], MAXBUFLEN, "/K:%d+%d-%d",
+                       limit(count_breath_group_in_utterance(label->breath_head), 1, MAX_S),
+                       limit(count_accent_phrase_in_utterance(label->accent_head), 1, MAX_M),
+                       limit(count_mora_in_utterance(label->mora_head), 1, MAX_LL)) && is_feature_in_range;
+      if (is_feature_in_range == 0) {
+         fprintf(stderr,
+                 "WARNING: JPCommonLabel_make() in jpcommon_label.c: Label buffer exceeded. Feature has been truncated.\n");
+      }
 
       // NOTE: 次の音素を設定する
       if (0 < i && i < label->size - 2)

@@ -82,21 +82,36 @@ NJD_SET_ACCENT_TYPE_C_START;
 
 #define MAXBUFLEN 1024
 
-static char get_token_from_string(const char *str, int *index, char *buff)
+static char get_token_from_string(const char *str, int *index, char *buff, size_t buff_size)
 {
    char c;
    int i = 0;
+   int is_truncated = 0;
+
+   if (buff == NULL || buff_size == 0) {
+      return '\0';
+   }
 
    c = str[(*index)];
    if (c != '\0') {
       while (c != '%' && c != '@' && c != '/' && c != '\0') {
-         buff[i++] = c;
+         if (i < (int) buff_size - 1) {
+            buff[i++] = c;
+         } else {
+            is_truncated = 1;
+         }
          c = str[++(*index)];
       }
       if (c == '%' || c == '@' || c == '/')
          (*index)++;
    }
    buff[i] = '\0';
+
+   if (is_truncated == 1) {
+      fprintf(stderr,
+              "WARNING: get_token_from_string() in njd_set_accent_type.c: Token is too long and has been truncated.\n");
+   }
+
    return c;
 }
 
@@ -108,15 +123,15 @@ static void get_rule(const char *input_rule, const char *prev_pos, char *rule, i
 
    if (input_rule) {
       while (c != '\0') {
-         c = get_token_from_string(input_rule, &index, buff);
+         c = get_token_from_string(input_rule, &index, buff, sizeof(buff));
          if ((c == '%' && strstr(prev_pos, buff) != NULL) || c == '@' || c == '/' || c == '\0') {
             /* find */
             if (c == '%')
-               c = get_token_from_string(input_rule, &index, rule);
+               c = get_token_from_string(input_rule, &index, rule, MAXBUFLEN);
             else
                strcpy(rule, buff);
             if (c == '@') {
-               c = get_token_from_string(input_rule, &index, buff);
+               c = get_token_from_string(input_rule, &index, buff, sizeof(buff));
                (*add_type) = atoi(buff);
             } else {
                (*add_type) = 0;
@@ -125,7 +140,7 @@ static void get_rule(const char *input_rule, const char *prev_pos, char *rule, i
          } else {
             /* skip */
             while (c == '%' || c == '@')
-               c = get_token_from_string(input_rule, &index, buff);
+               c = get_token_from_string(input_rule, &index, buff, sizeof(buff));
          }
       }
    }

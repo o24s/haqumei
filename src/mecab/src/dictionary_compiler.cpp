@@ -98,6 +98,14 @@ class DictionaryComplier {
       dic = param.rest_args();
     }
 
+    // NOTE: Open JTalk ビルドでは die クラスのデストラクタ内の exit() がコメントアウトされている
+    // (common.h 参照) ため、CHECK_DIE は失敗時に stderr へ出力するだけでプロセスを終了しない。
+    // ユーザー辞書パス (!userdic.empty()) で通るコード内の CHECK_DIE のうち、不正な CSV 入力で
+    // 未定義動作やクラッシュを引き起こしうるものは dictionary.cpp / dictionary_rewriter.cpp /
+    // context_id.cpp にて適切なエラーリターンに変換済み。不正なエントリは lid/rid >= 0 チェック等で
+    // 安全にスキップされる。
+    // システム辞書パス (else ブランチ) の Connector::compile / CharProperty::compile 等には
+    // CHECK_DIE が残っているが、同梱のシステム辞書ソースファイルが不正でない限り発動しない。
     if (!userdic.empty()) {
       if (dic.size() == 0) {
         std::cerr << "no dictionaries are specified" << std::endl;
@@ -128,23 +136,35 @@ class DictionaryComplier {
       }
 
       if (opt_charcategory || opt_unknown) {
-        CharProperty::compile(DCONF(CHAR_PROPERTY_DEF_FILE),
-                              DCONF(UNK_DEF_FILE),
-                              OCONF(CHAR_PROPERTY_FILE));
+        const bool is_compiled = CharProperty::compile(DCONF(CHAR_PROPERTY_DEF_FILE),
+                                                       DCONF(UNK_DEF_FILE),
+                                                       OCONF(CHAR_PROPERTY_FILE));
+        if (is_compiled == false) {
+          std::cerr << "failed to compile character category" << std::endl;
+          return -1;
+        }
       }
 
       if (opt_unknown) {
         std::vector<std::string> tmp;
         tmp.push_back(DCONF(UNK_DEF_FILE));
         param.set("type", static_cast<int>(MECAB_UNK_DIC));
-        Dictionary::compile(param, tmp, OCONF(UNK_DIC_FILE));
+        const bool is_compiled = Dictionary::compile(param, tmp, OCONF(UNK_DIC_FILE));
+        if (is_compiled == false) {
+          std::cerr << "failed to compile unknown dictionary" << std::endl;
+          return -1;
+        }
       }
 
       if (opt_model) {
         if (file_exists(DCONF(MODEL_DEF_FILE))) {
-          FeatureIndex::compile(param,
-                                DCONF(MODEL_DEF_FILE),
-                                OCONF(MODEL_FILE));
+          const bool is_compiled = FeatureIndex::compile(param,
+                                                         DCONF(MODEL_DEF_FILE),
+                                                         OCONF(MODEL_FILE));
+          if (is_compiled == false) {
+            std::cerr << "failed to compile model" << std::endl;
+            return -1;
+          }
         } else {
           if (!opt_quiet) {
             std::cout << DCONF(MODEL_DEF_FILE)
@@ -167,8 +187,12 @@ class DictionaryComplier {
       }
 
       if (opt_matrix) {
-        Connector::compile(DCONF(MATRIX_DEF_FILE),
-                           OCONF(MATRIX_FILE));
+        const bool is_compiled = Connector::compile(DCONF(MATRIX_DEF_FILE),
+                                                    OCONF(MATRIX_FILE));
+        if (is_compiled == false) {
+          std::cerr << "failed to compile connection matrix" << std::endl;
+          return -1;
+        }
       }
     }
 

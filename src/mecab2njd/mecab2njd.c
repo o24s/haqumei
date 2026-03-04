@@ -69,6 +69,10 @@ void mecab2njd(NJD * njd, char **feature, int size)
 
    for (i = 0; i < size; i++) {
       node = (NJDNode *) calloc(1, sizeof(NJDNode));
+      if (node == NULL) {
+         fprintf(stderr, "WARNING: mecab2njd() in mecab2njd.c: Failed to allocate NJDNode.\n");
+         return;
+      }
       NJDNode_initialize(node);
       NJDNode_load(node, feature[i]);
       NJD_push_node(njd, node);

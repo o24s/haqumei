@@ -87,6 +87,19 @@ void Mecab_print_load_error(const char *dicdir, const char *userdic) {
    }
 }
 
+void Mecab_free_argv(char **argv, int argc_to_free) {
+   int index;
+
+   if (argv == NULL) {
+      return;
+   }
+
+   for (index = 0; index < argc_to_free; ++index) {
+      free(argv[index]);
+   }
+   free(argv);
+}
+
 
 BOOL Mecab_load_with_userdic(Mecab *m, const char *dicdir, const char *userdic)
 {
@@ -108,6 +121,12 @@ BOOL Mecab_load_with_userdic(Mecab *m, const char *dicdir, const char *userdic)
    Mecab_clear(m);
 
    argv = (char **) malloc(sizeof(char *) * argc);
+   if (argv == NULL) {
+      return FALSE;
+   }
+   for (i = 0; i < argc; ++i) {
+      argv[i] = NULL;
+   }
 
    argv[0] = strdup("mecab");
    argv[1] = strdup("-d");
@@ -117,12 +136,16 @@ BOOL Mecab_load_with_userdic(Mecab *m, const char *dicdir, const char *userdic)
       argv[3] = strdup("-u");
       argv[4] = strdup(userdic);
    }
+   for (i = 0; i < argc; ++i) {
+      if (argv[i] == NULL) {
+         Mecab_free_argv(argv, argc);
+         return FALSE;
+      }
+   }
 
    MeCab::Model *model = MeCab::createModel(argc, argv);
 
-   for(i = 0; i < argc; i++)
-      free(argv[i]);
-   free(argv);
+   Mecab_free_argv(argv, argc);
 
    if(model == NULL) {
       Mecab_print_load_error(dicdir, userdic);
@@ -178,6 +201,11 @@ BOOL Mecab_analysis(Mecab *m, const char *str)
       return TRUE;
 
    m->feature = (char **) calloc(m->size, sizeof(char *));
+   if (m->feature == NULL) {
+      m->size = 0;
+      lattice->clear();
+      return FALSE;
+   }
    int index = 0;
    for (const MeCab::Node* node = lattice->bos_node(); node; node = node->next) {
       if(node->stat != MECAB_BOS_NODE && node->stat != MECAB_EOS_NODE) {
@@ -185,6 +213,16 @@ BOOL Mecab_analysis(Mecab *m, const char *str)
          f += ",";
          f += node->feature;
          m->feature[index] = strdup(f.c_str());
+         if (m->feature[index] == NULL) {
+            for (int cleanup_index = 0; cleanup_index < index; ++cleanup_index) {
+               free(m->feature[cleanup_index]);
+            }
+            free(m->feature);
+            m->feature = NULL;
+            m->size = 0;
+            lattice->clear();
+            return FALSE;
+         }
          index++;
       }
    }

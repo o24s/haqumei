@@ -249,6 +249,10 @@ void NJDNode_add_string(NJDNode * node, const char *str)
          node->string = strdup(str);
       } else {
          c = (char *) calloc(strlen(node->string) + strlen(str) + 1, sizeof(char));
+         if (c == NULL) {
+            fprintf(stderr, "WARNING: NJDNode_add_string() in njd_node.c: Failed to allocate memory.\n");
+            return;
+         }
          strcpy(c, node->string);
          strcat(c, str);
          free(node->string);
@@ -266,6 +270,10 @@ void NJDNode_add_orig(NJDNode * node, const char *str)
          node->orig = strdup(str);
       } else {
          c = (char *) calloc(strlen(node->orig) + strlen(str) + 1, sizeof(char));
+         if (c == NULL) {
+            fprintf(stderr, "WARNING: NJDNode_add_orig() in njd_node.c: Failed to allocate memory.\n");
+            return;
+         }
          strcpy(c, node->orig);
          strcat(c, str);
          free(node->orig);
@@ -283,6 +291,10 @@ void NJDNode_add_read(NJDNode * node, const char *str)
          node->read = strdup(str);
       } else {
          c = (char *) calloc(strlen(node->read) + strlen(str) + 1, sizeof(char));
+         if (c == NULL) {
+            fprintf(stderr, "WARNING: NJDNode_add_read() in njd_node.c: Failed to allocate memory.\n");
+            return;
+         }
          strcpy(c, node->read);
          strcat(c, str);
          free(node->read);
@@ -300,6 +312,10 @@ void NJDNode_add_pron(NJDNode * node, const char *str)
          node->pron = strdup(str);
       } else {
          c = (char *) calloc(strlen(node->pron) + strlen(str) + 1, sizeof(char));
+         if (c == NULL) {
+            fprintf(stderr, "WARNING: NJDNode_add_pron() in njd_node.c: Failed to allocate memory.\n");
+            return;
+         }
          strcpy(c, node->pron);
          strcat(c, str);
          free(node->pron);
@@ -524,6 +540,10 @@ void NJDNode_load(NJDNode * node, const char *str)
       if (i > 0) {
          /* NOTE: Node for i-th sub-word. */
          node = (NJDNode *) calloc(1, sizeof(NJDNode));
+         if (node == NULL) {
+            fprintf(stderr, "WARNING: NJDNode_load() in njd_node.c: Failed to allocate chained NJDNode.\n");
+            return;
+         }
          NJDNode_initialize(node);
          NJDNode_copy(node, prev);
          /* NOTE: No needs of accent chaining because of explicit manual accent assignment. */
@@ -573,14 +593,23 @@ NJDNode *NJDNode_insert(NJDNode * prev, NJDNode * next, NJDNode * node)
 {
    NJDNode *tail;
 
-   if (prev == NULL || next == NULL) {
-      fprintf(stderr, "ERROR: NJDNode_insert() in njd_node.c: NJDNodes are not specified.\n");
-      exit(1);
+   if (node == NULL) {
+      fprintf(stderr, "WARNING: NJDNode_insert() in njd_node.c: node is NULL.\n");
+      return prev;
+   }
+   // NOTE: prev == NULL は先頭挿入を意味するが、NJD.head の更新責任を持てないため拒否する
+   if (prev == NULL) {
+      fprintf(stderr, "WARNING: NJDNode_insert() in njd_node.c: prev is NULL.\n");
+      return node;
    }
    for (tail = node; tail->next != NULL; tail = tail->next);
    prev->next = node;
    node->prev = prev;
-   next->prev = tail;
+   // NOTE: next == NULL の場合は末尾挿入として動作する
+   // 呼び出し元で NJD.tail の修復が必要
+   if (next != NULL) {
+      next->prev = tail;
+   }
    tail->next = next;
 
    return tail;
@@ -621,12 +650,24 @@ void NJDNode_fprint(NJDNode * node, FILE * fp)
 
 void NJDNode_sprint(NJDNode * node, char *buff, const char *split_code)
 {
-   sprintf(buff, "%s%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d/%d,%s,%d%s", buff, NJDNode_get_string(node),
-           NJDNode_get_pos(node), NJDNode_get_pos_group1(node), NJDNode_get_pos_group2(node),
-           NJDNode_get_pos_group3(node), NJDNode_get_ctype(node), NJDNode_get_cform(node),
-           NJDNode_get_orig(node), NJDNode_get_read(node), NJDNode_get_pron(node),
-           NJDNode_get_acc(node), NJDNode_get_mora_size(node), NJDNode_get_chain_rule(node),
-           NJDNode_get_chain_flag(node), split_code);
+   size_t current_length;
+
+   if (node == NULL || buff == NULL) {
+      return;
+   }
+
+   if (split_code == NULL) {
+      split_code = "";
+   }
+
+   current_length = strlen(buff);
+
+   sprintf(buff + current_length, "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d/%d,%s,%d%s",
+           NJDNode_get_string(node), NJDNode_get_pos(node), NJDNode_get_pos_group1(node),
+           NJDNode_get_pos_group2(node), NJDNode_get_pos_group3(node), NJDNode_get_ctype(node),
+           NJDNode_get_cform(node), NJDNode_get_orig(node), NJDNode_get_read(node),
+           NJDNode_get_pron(node), NJDNode_get_acc(node), NJDNode_get_mora_size(node),
+           NJDNode_get_chain_rule(node), NJDNode_get_chain_flag(node), split_code);
 }
 
 void NJDNode_clear(NJDNode * node)

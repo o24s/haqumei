@@ -290,9 +290,19 @@ static void convert_digit_sequence_for_numerical_reading(NJDNode * start, NJDNod
          if (have == 1) {
             if (place > 0) {
                newnode = (NJDNode *) calloc(1, sizeof(NJDNode));
+               if (newnode == NULL) {
+                  fprintf(stderr, "WARNING: convert_digit_sequence_for_numerical_reading() in njd_set_digit.c: Failed to allocate NJDNode.\n");
+                  return;
+               }
                NJDNode_initialize(newnode);
                NJDNode_load(newnode, (char *) njd_set_digit_rule_numeral_list3[place]);
-               node = NJDNode_insert(node, node->next, newnode);
+               if (node->next == NULL) {
+                  node->next = newnode;
+                  newnode->prev = node;
+                  node = newnode;
+               } else {
+                  node = NJDNode_insert(node, node->next, newnode);
+               }
             }
             have = 0;
          }
@@ -307,9 +317,19 @@ static void convert_digit_sequence_for_numerical_reading(NJDNode * start, NJDNod
             have = 1;
          } else {
             newnode = (NJDNode *) calloc(1, sizeof(NJDNode));
+            if (newnode == NULL) {
+               fprintf(stderr, "WARNING: convert_digit_sequence_for_numerical_reading() in njd_set_digit.c: Failed to allocate NJDNode.\n");
+               return;
+            }
             NJDNode_initialize(newnode);
             NJDNode_load(newnode, (char *) njd_set_digit_rule_numeral_list2[index]);
-            node = NJDNode_insert(node, node->next, newnode);
+            if (node->next == NULL) {
+               node->next = newnode;
+               newnode->prev = node;
+               node = newnode;
+            } else {
+               node = NJDNode_insert(node, node->next, newnode);
+            }
             have = 1;
          }
       }
@@ -465,6 +485,9 @@ static void convert_digit_sequence(NJD * njd, NJDNode * s, NJDNode * e)
          }
       }
       convert_digit_sequence_for_numerical_reading(s, final_digit_before_period);
+      // NOTE: NJDNode_insert でリスト末尾にノードが追加された場合、njd->tail が古くなるため修復する
+      while (njd->tail->next != NULL)
+         njd->tail = njd->tail->next;
       if (final_digit_before_period != e)
          convert_digit_sequence(njd, final_digit_before_period->next, e);
    } else {
@@ -484,6 +507,9 @@ static void convert_digit_sequence(NJD * njd, NJDNode * s, NJDNode * e)
       if (numerical_reading == 1) {
          /* numerical reading until comma */
          convert_digit_sequence_for_numerical_reading(s, final_digit);
+         // NOTE: NJDNode_insert でリスト末尾にノードが追加された場合、njd->tail が古くなるため修復する
+         while (njd->tail->next != NULL)
+            njd->tail = njd->tail->next;
       } else {
          /* non-numerical reading */
          convert_digit_sequence_for_non_numerical_reading(s, final_digit);

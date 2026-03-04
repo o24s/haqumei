@@ -16,14 +16,19 @@ bool open_map(const char *filename,
               std::map<std::string, int> *cmap,
               Iconv *iconv) {
   std::ifstream ifs(WPATH(filename));
-  CHECK_DIE(ifs) << "no such file or directory: " << filename;
+  if (!ifs) {
+    std::cerr << "no such file or directory: " << filename << std::endl;
+    return false;
+  }
   cmap->clear();
   char *col[2];
   std::string line;
   while (std::getline(ifs, line)) {
-    CHECK_DIE(2 == tokenize2(const_cast<char *>(line.c_str()),
-                             " \t", col, 2))
-        << "format error: " << line;
+    if (2 != tokenize2(const_cast<char *>(line.c_str()),
+                       " \t", col, 2)) {
+      std::cerr << "format error: " << line << std::endl;
+      return false;
+    }
     std::string pos = col[1];
     if (iconv) {
       iconv->convert(&pos);
@@ -47,7 +52,10 @@ bool build(std::map<std::string, int> *cmap,
 bool save(const char* filename,
           std::map<std::string, int> *cmap) {
   std::ofstream ofs(WPATH(filename));
-  CHECK_DIE(ofs) << "permission denied: " << filename;
+  if (!ofs) {
+    std::cerr << "permission denied: " << filename << std::endl;
+    return false;
+  }
   for (std::map<std::string, int>::const_iterator it = cmap->begin();
        it != cmap->end(); ++it) {
     ofs << it->second << " " << it->first << std::endl;
@@ -93,15 +101,23 @@ bool ContextID::build() {
 
 int ContextID::lid(const char *l) const {
   std::map<std::string, int>::const_iterator it = left_.find(l);
-  CHECK_DIE(it != left_.end())
-      << "cannot find LEFT-ID  for " << l;
+  // NOTE: end() イテレータをデリファレンスする（未定義動作）代わりに -1 を返す
+  // 呼び出し元は lid >= 0 を確認してから結果を使用する
+  if (it == left_.end()) {
+    std::cerr << "cannot find LEFT-ID for " << l << std::endl;
+    return -1;
+  }
   return it->second;
 }
 
 int ContextID::rid(const char *r) const {
   std::map<std::string, int>::const_iterator it = right_.find(r);
-  CHECK_DIE(it != right_.end())
-      << "cannot find RIGHT-ID  for " << r;
+  // NOTE: end() イテレータをデリファレンスする（未定義動作）代わりに -1 を返す
+  // 呼び出し元は rid >= 0 を確認してから結果を使用する
+  if (it == right_.end()) {
+    std::cerr << "cannot find RIGHT-ID for " << r << std::endl;
+    return -1;
+  }
   return it->second;
 }
 }
