@@ -665,11 +665,15 @@ impl OpenJTalk {
             }
         }
 
-        unsafe {
+        let result = unsafe {
             ffi::Mecab_analysis(
                 self.mecab.inner.as_ptr(),
                 buffer.as_ptr() as *const i8,
-            );
+            )
+        };
+
+        if result != 1 {
+            return Err(HaqumeiError::MecabError("Mecab_analysis failed to parse the text".to_string()));
         }
 
         let morphs = unsafe {
@@ -726,11 +730,15 @@ impl OpenJTalk {
         }
 
         // MeCab Analysis
-        unsafe {
+        let result = unsafe {
             ffi::Mecab_analysis(
                 self.mecab.inner.as_ptr(),
                 buffer.as_ptr() as *const i8,
-            );
+            )
+        };
+
+        if result != 1 {
+            return Err(HaqumeiError::MecabError("Mecab_analysis failed to parse the text".to_string()));
         }
 
         // Lattice Traversal

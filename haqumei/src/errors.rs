@@ -26,6 +26,9 @@ pub enum HaqumeiError {
         source: io::Error,
     },
 
+    #[error("MeCab analysis failed (parsing error or invalid state): {0}")]
+    MecabError(String),
+
     #[error("text2mecab conversion failed: {0}")]
     Text2MecabError(String),
 
