@@ -10,7 +10,7 @@ fn to_py_err<E: std::fmt::Debug>(err: E) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(format!("{:?}", err))
 }
 
-#[pyclass(name = "NjdFeature", module = "haqumei")]
+#[pyclass(name = "NjdFeature", module = "haqumei", skip_from_py_object)]
 #[derive(Clone)]
 struct PyNjdFeature {
     #[pyo3(get)]
@@ -64,7 +64,7 @@ impl From<&NjdFeature> for PyNjdFeature {
     }
 }
 
-#[pyclass(name = "WordPhonemeMap", module = "haqumei")]
+#[pyclass(name = "WordPhonemeMap", module = "haqumei", skip_from_py_object)]
 #[derive(Clone)]
 struct PyWordPhonemeMap {
     #[pyo3(get)]
@@ -98,7 +98,7 @@ impl PyWordPhonemeMap {
     }
 }
 
-#[pyclass(name = "WordPhonemeDetail", module = "haqumei")]
+#[pyclass(name = "WordPhonemeDetail", module = "haqumei", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyWordPhonemeDetail {
     #[pyo3(get)]

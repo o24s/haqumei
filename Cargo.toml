@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "haqumei",
     "haqumei-eval",
@@ -9,3 +9,22 @@ exclude = [
     "haqumei/vendor/crawdad-rkyv",
     "haqumei/vendor/rucrf-rkyv"
 ]
+
+[workspace.dependencies]
+arc-swap = "1.8.2"
+dirs = "6.0.0"
+hex = "0.4.3"
+libc = "0.2.182"
+log = "0.4.29"
+moka = { version = "0.12.14", features = ["sync"] }
+ndarray = "0.17.2"
+ort = "=2.0.0-rc.11"
+phf = { version = "0.13.1", features = ["macros"] }
+pyo3 = { version = "0.28.2", features = ["auto-initialize"] }
+rayon = "1.11.0"
+sha2 = "0.10.9"
+tar = "0.4.44"
+thiserror = "2.0.18"
+vibrato-rkyv = { version = "0.7.4", features = ["legacy"] }
+walkdir = "2.5.0"
+zstd = "0.13.3"

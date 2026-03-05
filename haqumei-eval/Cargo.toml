@@ -7,10 +7,10 @@ publish = false
 
 [dependencies]
 csv = "1.4.0"
-haqumei = { path = "../haqumei" }
-pyo3 = { version = "0.27.2", features = ["auto-initialize"] }
-rayon = "1.11.0"
+haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
+pyo3.workspace = true
+rayon.workspace = true
 regex = "1.12.2"
 
 [build-dependencies]
-pyo3-build-config = "0.27.2"
+pyo3-build-config = "0.28.2"
