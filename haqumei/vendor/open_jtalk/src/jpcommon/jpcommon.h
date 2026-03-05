@@ -120,6 +120,7 @@ typedef struct _JPCommonLabelBreathGroup {
 typedef struct _JPCommonLabel {
    int size;       // NOTE: 音素の数
    char **feature; // NOTE: フルコンテキストラベル文字列のリスト
+   int is_valid;   // NOTE: 生成途中で致命的エラーが発生していないか
    JPCommonLabelBreathGroup *breath_head;
    JPCommonLabelBreathGroup *breath_tail;
    JPCommonLabelAccentPhrase *accent_head;

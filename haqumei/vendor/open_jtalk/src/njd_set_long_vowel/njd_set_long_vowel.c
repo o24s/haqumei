@@ -109,8 +109,8 @@ static int detect_byte(const char *str)
       }
    }
    if (byte < 0) {
-      fprintf(stderr, "ERROR: detect_byte() in njd_set_long_vowel.c: Wrong character.\n");
-      exit(1);
+      fprintf(stderr, "WARNING: detect_byte() in njd_set_long_vowel.c: Wrong character.\n");
+      return 1;
    }
    return byte;
 }

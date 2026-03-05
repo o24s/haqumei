@@ -102,15 +102,25 @@ bool RewritePattern::rewrite(size_t size,
           }
         }
      NEXT:
-        CHECK_DIE(n > 0 && (n - 1) < size)
-            << " out of range: [" << dpat_[i] << "] " << n;
+        // NOTE: input[] の範囲外アクセス（未定義動作）の代わりに false を返す
+        // ユーザー辞書 CSV の feature 列数がリライトパターンの期待より少ない場合に発生しうる
+        // （例: パターンが $7 を参照するが列は 6 つしかない）
+        if (!(n > 0 && (n - 1) < size)) {
+          std::cerr << "rewrite pattern out of range: [" << dpat_[i]
+                    << "] column " << n << ", but input has only "
+                    << size << " columns" << std::endl;
+          return false;
+        }
         elm += input[n - 1];
         if (p < end) elm += *p;
       } else {
         elm += *p;
       }
     }
-    CHECK_DIE(escape_csv_element(&elm));
+    if (!escape_csv_element(&elm)) {
+      std::cerr << "failed to escape CSV element in rewrite output" << std::endl;
+      return false;
+    }
     *output += elm;
     if (i + 1 != dpat_.size()) *output += ",";
   }
@@ -133,7 +143,10 @@ void DictionaryRewriter::clear() { cache_.clear(); }
 bool DictionaryRewriter::open(const char *filename,
                               Iconv *iconv) {
   std::ifstream ifs(WPATH(filename));
-  CHECK_DIE(ifs) << "no such file or directory: " << filename;
+  if (!ifs) {
+    std::cerr << "no such file or directory: " << filename << std::endl;
+    return false;
+  }
   int append_to = 0;
   std::string line;
   while (std::getline(ifs, line)) {
@@ -146,7 +159,10 @@ bool DictionaryRewriter::open(const char *filename,
     } else if (line == "[right rewrite]") {
       append_to = 3;
     } else {
-      CHECK_DIE(append_to != 0) << "no sections found";
+      if (append_to == 0) {
+        std::cerr << "no sections found" << std::endl;
+        return false;
+      }
       char *str = const_cast<char *>(line.c_str());
       switch (append_to) {
         case 1: append_rewrite_rule(&unigram_rewrite_, str); break;
@@ -165,10 +181,18 @@ bool DictionaryRewriter::rewrite(const std::string &feature,
                                  std::string *rfeature) const {
   scoped_fixed_array<char, BUF_SIZE> buf;
   scoped_fixed_array<char *, BUF_SIZE> col;
-  CHECK_DIE(feature.size() < buf.size() - 1) << "too long feature";
+  // NOTE: feature 文字列がバッファサイズを超える、または CSV 列が多すぎる場合は false を返す
+  // 切り詰められたデータで誤ったリライト結果を出すより安全である
+  if (feature.size() >= buf.size() - 1) {
+    std::cerr << "too long feature: length " << feature.size() << std::endl;
+    return false;
+  }
   std::strncpy(buf.get(), feature.c_str(), buf.size() - 1);
   const size_t n = tokenizeCSV(buf.get(), col.get(), col.size());
-  CHECK_DIE(n < col.size()) << "too long CSV entities";
+  if (n >= col.size()) {
+    std::cerr << "too many CSV entities: " << n << std::endl;
+    return false;
+  }
   return (unigram_rewrite_.rewrite(n, const_cast<const char **>(col.get()),
                                    ufeature) &&
           left_rewrite_.rewrite(n, const_cast<const char **>(col.get()),
@@ -229,10 +253,18 @@ bool POSIDGenerator::open(const char *filename,
 int POSIDGenerator::id(const char *feature) const {
   scoped_fixed_array<char, BUF_SIZE> buf;
   scoped_fixed_array<char *, BUF_SIZE> col;
-  CHECK_DIE(std::strlen(feature) < buf.size() - 1) << "too long feature";
+  // NOTE: feature 文字列がバッファサイズを超える、または CSV 列が多すぎる場合は -1 を返す
+  // 切り詰められたデータで誤った品詞 ID を出すより安全である
+  if (std::strlen(feature) >= buf.size() - 1) {
+    std::cerr << "too long feature for POS ID: " << feature << std::endl;
+    return -1;
+  }
   std::strncpy(buf.get(), feature, buf.size() - 1);
   const size_t n = tokenizeCSV(buf.get(), col.get(), col.size());
-  CHECK_DIE(n < col.size()) << "too long CSV entities";
+  if (n >= col.size()) {
+    std::cerr << "too many CSV entities for POS ID: " << n << std::endl;
+    return -1;
+  }
   std::string tmp;
   if (!rewrite_.rewrite(n, const_cast<const char **>(col.get()), &tmp)) {
     return -1;

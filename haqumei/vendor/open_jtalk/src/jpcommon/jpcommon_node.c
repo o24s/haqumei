@@ -57,6 +57,8 @@ JPCOMMON_NODE_C_START;
 
 #include "jpcommon.h"
 
+static const char *nodata = "*";
+
 void JPCommonNode_initialize(JPCommonNode * node)
 {
    node->pron = NULL;
@@ -74,28 +76,40 @@ void JPCommonNode_set_pron(JPCommonNode * node, const char *str)
 {
    if (node->pron != NULL)
       free(node->pron);
-   node->pron = strdup(str);
+   if (str == NULL)
+      node->pron = NULL;
+   else
+      node->pron = strdup(str);
 }
 
 void JPCommonNode_set_pos(JPCommonNode * node, const char *str)
 {
    if (node->pos != NULL)
       free(node->pos);
-   node->pos = strdup(str);
+   if (str == NULL)
+      node->pos = NULL;
+   else
+      node->pos = strdup(str);
 }
 
 void JPCommonNode_set_ctype(JPCommonNode * node, const char *str)
 {
    if (node->ctype != NULL)
       free(node->ctype);
-   node->ctype = strdup(str);
+   if (str == NULL)
+      node->ctype = NULL;
+   else
+      node->ctype = strdup(str);
 }
 
 void JPCommonNode_set_cform(JPCommonNode * node, const char *str)
 {
    if (node->cform != NULL)
       free(node->cform);
-   node->cform = strdup(str);
+   if (str == NULL)
+      node->cform = NULL;
+   else
+      node->cform = strdup(str);
 }
 
 void JPCommonNode_set_acc(JPCommonNode * node, int acc)
@@ -110,21 +124,29 @@ void JPCommonNode_set_chain_flag(JPCommonNode * node, int flag)
 
 const char *JPCommonNode_get_pron(JPCommonNode * node)
 {
+   if (node->pron == NULL)
+      return nodata;
    return node->pron;
 }
 
 const char *JPCommonNode_get_pos(JPCommonNode * node)
 {
+   if (node->pos == NULL)
+      return nodata;
    return node->pos;
 }
 
 const char *JPCommonNode_get_ctype(JPCommonNode * node)
 {
+   if (node->ctype == NULL)
+      return nodata;
    return node->ctype;
 }
 
 const char *JPCommonNode_get_cform(JPCommonNode * node)
 {
+   if (node->cform == NULL)
+      return nodata;
    return node->cform;
 }
 
@@ -156,7 +178,8 @@ void JPCommonNode_print(JPCommonNode * node)
 
 void JPCommonNode_fprint(JPCommonNode * node, FILE * fp)
 {
-   fprintf(fp, "%s,%s,%s,%s,%d,%d\n", node->pron, node->pos, node->ctype, node->cform, node->acc,
+   fprintf(fp, "%s,%s,%s,%s,%d,%d\n", JPCommonNode_get_pron(node), JPCommonNode_get_pos(node),
+           JPCommonNode_get_ctype(node), JPCommonNode_get_cform(node), node->acc,
            node->chain_flag);
 }
 

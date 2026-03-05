@@ -176,6 +176,10 @@ void NJD_load(NJD * njd, const char *str)
       if (get_token_from_string(str, &i, chain_flag, ',') <= 0)
          break;
       node = (NJDNode *) calloc(1, sizeof(NJDNode));
+      if (node == NULL) {
+         fprintf(stderr, "WARNING: NJD_load() in njd.c: Failed to allocate NJDNode.\n");
+         return;
+      }
       NJDNode_initialize(node);
       NJDNode_set_string(node, string);
       NJDNode_set_pos(node, pos);
@@ -243,6 +247,10 @@ void NJD_load_from_fp(NJD * njd, FILE * fp)
       if (get_token_from_fp(fp, chain_flag, ',') <= 0)
          break;
       node = (NJDNode *) calloc(1, sizeof(NJDNode));
+      if (node == NULL) {
+         fprintf(stderr, "WARNING: NJD_load_from_fp() in njd.c: Failed to allocate NJDNode.\n");
+         return;
+      }
       NJDNode_initialize(node);
       NJDNode_set_string(node, string);
       NJDNode_set_pos(node, pos);
@@ -341,7 +349,10 @@ void NJD_sprint(NJD * njd, char *buff, const char *split_code)
 {
    NJDNode *node;
 
-   strcpy(buff, "");
+   if (buff == NULL) {
+      return;
+   }
+   buff[0] = '\0';
    for (node = njd->head; node != NULL; node = node->next)
       NJDNode_sprint(node, buff, split_code);
 }

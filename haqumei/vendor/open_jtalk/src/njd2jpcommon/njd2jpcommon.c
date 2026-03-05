@@ -92,14 +92,14 @@ static void convert_pos(char *buff, const char *pos, const char *pos_group1, con
           strcmp(njd2jpcommon_pos_list[i + 1], pos_group1) == 0 &&
           strcmp(njd2jpcommon_pos_list[i + 2], pos_group2) == 0 &&
           strcmp(njd2jpcommon_pos_list[i + 3], pos_group3) == 0) {
-         strcpy(buff, njd2jpcommon_pos_list[i + 4]);
+         snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_pos_list[i + 4]);
          return;
       }
    }
    fprintf(stderr,
            "WARNING: convert_pos() in njd2jpcommon.c: %s %s %s %s are not appropriate POS.\n", pos,
            pos_group1, pos_group2, pos_group3);
-   strcpy(buff, njd2jpcommon_pos_list[4]);
+   snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_pos_list[4]);
 }
 
 static void convert_ctype(char *buff, const char *ctype)
@@ -108,14 +108,14 @@ static void convert_ctype(char *buff, const char *ctype)
 
    for (i = 0; njd2jpcommon_ctype_list[i] != NULL; i += 2) {
       if (strcmp(njd2jpcommon_ctype_list[i], ctype) == 0) {
-         strcpy(buff, njd2jpcommon_ctype_list[i + 1]);
+         snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_ctype_list[i + 1]);
          return;
       }
    }
    fprintf(stderr,
            "WARNING: convert_ctype() in njd2jpcommon.c: %s is not appropriate conjugation type.\n",
            ctype);
-   strcpy(buff, njd2jpcommon_ctype_list[1]);
+   snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_ctype_list[1]);
 }
 
 static void convert_cform(char *buff, const char *cform)
@@ -124,14 +124,14 @@ static void convert_cform(char *buff, const char *cform)
 
    for (i = 0; njd2jpcommon_cform_list[i] != NULL; i += 2) {
       if (strcmp(njd2jpcommon_cform_list[i], cform) == 0) {
-         strcpy(buff, njd2jpcommon_cform_list[i + 1]);
+         snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_cform_list[i + 1]);
          return;
       }
    }
    fprintf(stderr,
            "WARNING: convert_cform() in njd2jpcommon.c: %s is not appropriate conjugation form.\n",
            cform);
-   strcpy(buff, njd2jpcommon_cform_list[1]);
+   snprintf(buff, MAXBUFLEN, "%s", njd2jpcommon_cform_list[1]);
 }
 
 void njd2jpcommon(JPCommon * jpcommon, NJD * njd)
@@ -149,6 +149,10 @@ void njd2jpcommon(JPCommon * jpcommon, NJD * njd)
    for (inode = njd->head; inode != NULL; inode = inode->next) {
       // NOTE: NJDNode に対応する新しい JPCommonNode を用意する
       jnode = (JPCommonNode *) calloc(1, sizeof(JPCommonNode));
+      if (jnode == NULL) {
+         fprintf(stderr, "WARNING: njd2jpcommon() in njd2jpcommon.c: Failed to allocate JPCommonNode.\n");
+         return;
+      }
       JPCommonNode_initialize(jnode);
 
       // NOTE: 属性を必要に応じて変換し、詰め替える

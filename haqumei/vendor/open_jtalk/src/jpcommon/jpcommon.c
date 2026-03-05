@@ -91,19 +91,34 @@ void JPCommon_make_label(JPCommon * jpcommon)
       JPCommonLabel_clear(jpcommon->label);
    else
       jpcommon->label = (JPCommonLabel *) calloc(1, sizeof(JPCommonLabel));
+   if (jpcommon->label == NULL) {
+      fprintf(stderr, "WARNING: JPCommon_make_label() in jpcommon.c: Failed to allocate JPCommonLabel.\n");
+      return;
+   }
    JPCommonLabel_initialize(jpcommon->label);
 
    /* push word */
    // NOTE:
    // JPCommon に含まれる JPCommonNode を先頭から JPCommonLabel へ収納する。
    // JPCommonNode は単語単位、JPCommonLabel は最小で音素単位であることに注意。
-   for (node = jpcommon->head; node != NULL; node = node->next)
+   for (node = jpcommon->head; node != NULL; node = node->next) {
       // NOTE: `JPCommonNode_get_*(node)` は全て単なるゲッター
       JPCommonLabel_push_word(jpcommon->label, JPCommonNode_get_pron(node),
                               JPCommonNode_get_pos(node),
                               JPCommonNode_get_ctype(node),
                               JPCommonNode_get_cform(node),
                               JPCommonNode_get_acc(node), JPCommonNode_get_chain_flag(node));
+      // アロケーション失敗等で is_valid が 0 になった場合、壊れた構造体への
+      // 後続操作を防ぐため即座にループを中断する
+      if (jpcommon->label->is_valid == 0)
+         break;
+   }
+   if (jpcommon->label->is_valid == 0) {
+      fprintf(stderr, "WARNING: JPCommon_make_label() in jpcommon.c: Label generation aborted due to a previous error.\n");
+      JPCommonLabel_clear(jpcommon->label);
+      JPCommonLabel_initialize(jpcommon->label);
+      return;
+   }
 
    /* make label */
    // NOTE: フルコンテキストラベルをダンプして JPCommon.label.feature へ収納する

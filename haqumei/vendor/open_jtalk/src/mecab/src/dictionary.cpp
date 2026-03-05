@@ -31,10 +31,11 @@ int toInt(const char *str) {
   return std::atoi(str);
 }
 
-int calcCost(const std::string &w, const std::string &feature,
-             int factor,
-             DecoderFeatureIndex *fi, DictionaryRewriter *rewriter,
-             CharProperty *property) {
+bool calcCost(const std::string &w, const std::string &feature,
+              int factor,
+              DecoderFeatureIndex *fi, DictionaryRewriter *rewriter,
+              CharProperty *property,
+              int *out_cost) {
   CHECK_DIE(fi);
   CHECK_DIE(rewriter);
   CHECK_DIE(property);
@@ -54,10 +55,16 @@ int calcCost(const std::string &w, const std::string &feature,
                                                &mblen);
   path.rnode->char_type = cinfo.default_type;
   std::string ufeature, lfeature, rfeature;
-  rewriter->rewrite2(feature, &ufeature, &lfeature, &rfeature);
+  // NOTE: rewrite2() の戻り値を確認する
+  // 失敗時（例: 不正なユーザー辞書 feature）はコスト自動推定が不可能
+  if (!rewriter->rewrite2(feature, &ufeature, &lfeature, &rfeature)) {
+    std::cerr << "rewrite2 failed in calcCost: " << feature << std::endl;
+    return false;
+  }
   fi->buildUnigramFeature(&path, ufeature.c_str());
   fi->calcCost(&rnode);
-  return tocost(rnode.wcost, factor);
+  *out_cost = tocost(rnode.wcost, factor);
+  return true;
 }
 
 int progress_bar_darts(size_t current, size_t total) {
@@ -152,23 +159,41 @@ bool Dictionary::assignUserDictionaryCosts(
   const std::string from = param.get<std::string>("dictionary-charset");
 
   const int factor = param.get<int>("cost-factor");
-  CHECK_DIE(factor > 0)   << "cost factor needs to be positive value";
+  if (factor <= 0) {
+    std::cerr << "cost factor needs to be positive value" << std::endl;
+    return false;
+  }
 
   std::string config_charset = param.get<std::string>("config-charset");
   if (config_charset.empty()) {
     config_charset = from;
   }
 
-  CHECK_DIE(!from.empty()) << "input dictionary charset is empty";
+  if (from.empty()) {
+    std::cerr << "input dictionary charset is empty" << std::endl;
+    return false;
+  }
 
   Iconv config_iconv;
-  CHECK_DIE(config_iconv.open(config_charset.c_str(), from.c_str()))
-      << "iconv_open() failed with from=" << config_charset << " to=" << from;
+  if (config_iconv.open(config_charset.c_str(), from.c_str()) == false) {
+    std::cerr << "iconv_open() failed with from=" << config_charset
+              << " to=" << from << std::endl;
+    return false;
+  }
 
-  rewriter.open(rewrite_file.c_str(), &config_iconv);
-  CHECK_DIE(fi.open(param)) << "cannot open feature index";
+  if (rewriter.open(rewrite_file.c_str(), &config_iconv) == false) {
+    std::cerr << "cannot open rewrite file: " << rewrite_file << std::endl;
+    return false;
+  }
+  if (fi.open(param) == false) {
+    std::cerr << "cannot open feature index" << std::endl;
+    return false;
+  }
 
-  CHECK_DIE(property.open(param));
+  if (property.open(param) == false) {
+    std::cerr << "cannot open character property" << std::endl;
+    return false;
+  }
   property.set_charset(from.c_str());
 
   if (!matrix.openText(matrix_file.c_str()) &&
@@ -177,23 +202,35 @@ bool Dictionary::assignUserDictionaryCosts(
     matrix.set_right_size(1);
   }
 
-  cid.open(left_id_file.c_str(),
-           right_id_file.c_str(), &config_iconv);
-  CHECK_DIE(cid.left_size()  == matrix.left_size() &&
-            cid.right_size() == matrix.right_size())
-      << "Context ID files("
-      << left_id_file
-      << " or "
-      << right_id_file << " may be broken: "
-      << cid.left_size() << " " << matrix.left_size() << " "
-      << cid.right_size() << " " << matrix.right_size();
+  if (cid.open(left_id_file.c_str(),
+               right_id_file.c_str(), &config_iconv) == false) {
+    std::cerr << "cannot open context id files: " << left_id_file
+              << " or " << right_id_file << std::endl;
+    return false;
+  }
+  if (!(cid.left_size() == matrix.left_size() &&
+        cid.right_size() == matrix.right_size())) {
+    std::cerr << "Context ID files(" << left_id_file << " or "
+              << right_id_file << ") may be broken: "
+              << cid.left_size() << " " << matrix.left_size() << " "
+              << cid.right_size() << " " << matrix.right_size() << std::endl;
+    return false;
+  }
 
   std::ofstream ofs(output);
-  CHECK_DIE(ofs) << "permission denied: " << output;
+  if (!ofs) {
+    std::cerr << "permission denied: " << output << std::endl;
+    return false;
+  }
+  size_t valid_entry_count = 0;
+  size_t skipped_entry_count = 0;
 
   for (size_t i = 0; i < dics.size(); ++i) {
     std::ifstream ifs(WPATH(dics[i].c_str()));
-    CHECK_DIE(ifs) << "no such file or directory: " << dics[i];
+    if (!ifs) {
+      std::cerr << "no such file or directory: " << dics[i] << std::endl;
+      return false;
+    }
     std::cout << "reading " << dics[i] << " ... ";
     scoped_fixed_array<char, BUF_SIZE> line;
     while (ifs.getline(line.get(), line.size())) {
@@ -213,22 +250,51 @@ bool Dictionary::assignUserDictionaryCosts(
 #endif
       char *col[8];
       const size_t n = tokenizeCSV(line.get(), col, 5);
-      CHECK_DIE(n == 5) << "format error: " << line.get();
+      if (n != 5) {
+        std::cerr << "format error: " << line.get()
+                  << " (expected 5 columns, got " << n << ")"
+                  << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
       std::string w = col[0];
       const std::string feature = col[4];
-      const int cost = calcCost(w, feature, factor,
-                                &fi, &rewriter, &property);
+      int cost;
+      if (calcCost(w, feature, factor,
+                   &fi, &rewriter, &property, &cost) == false) {
+        std::cerr << "calcCost failed, skipping entry: " << w << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
       std::string ufeature, lfeature, rfeature;
-      CHECK_DIE(rewriter.rewrite(feature, &ufeature, &lfeature, &rfeature))
-          << "rewrite failed: " << feature;
+      if (rewriter.rewrite(feature, &ufeature, &lfeature, &rfeature) == false) {
+        std::cerr << "rewrite failed: " << feature << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
       const int lid = cid.lid(lfeature.c_str());
       const int rid = cid.rid(rfeature.c_str());
-      CHECK_DIE(lid >= 0 && rid >= 0 && matrix.is_valid(lid, rid))
-          << "invalid ids are found lid=" << lid << " rid=" << rid;
+      if (!(lid >= 0 && rid >= 0 && matrix.is_valid(lid, rid))) {
+        std::cerr << "invalid ids are found lid=" << lid
+                  << " rid=" << rid << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
       escape_csv_element(&w);
       ofs << w << ',' << lid << ',' << rid << ','
           << cost << ',' << feature << '\n';
+      ++valid_entry_count;
     }
+  }
+
+  if (valid_entry_count == 0) {
+    std::cerr << "no valid dictionary entries are found" << std::endl;
+    return false;
+  }
+
+  if (skipped_entry_count > 0) {
+    std::cerr << skipped_entry_count
+              << " dictionary entries were skipped due to errors" << std::endl;
   }
 
   return true;
@@ -269,7 +335,10 @@ bool Dictionary::compile(const Param &param,
   const int type = param.get<int>("type");
   const std::string node_format = param.get<std::string>("node-format");
   const int factor = param.get<int>("cost-factor");
-  CHECK_DIE(factor > 0)   << "cost factor needs to be positive value";
+  if (factor <= 0) {
+    std::cerr << "cost factor needs to be positive value" << std::endl;
+    return false;
+  }
 
   // for backward compatibility
   std::string config_charset = param.get<std::string>("config-charset");
@@ -277,16 +346,28 @@ bool Dictionary::compile(const Param &param,
     config_charset = from;
   }
 
-  CHECK_DIE(!from.empty()) << "input dictionary charset is empty";
-  CHECK_DIE(!to.empty())   << "output dictionary charset is empty";
+  if (from.empty()) {
+    std::cerr << "input dictionary charset is empty" << std::endl;
+    return false;
+  }
+  if (to.empty()) {
+    std::cerr << "output dictionary charset is empty" << std::endl;
+    return false;
+  }
 
   Iconv iconv;
-  CHECK_DIE(iconv.open(from.c_str(), to.c_str()))
-      << "iconv_open() failed with from=" << from << " to=" << to;
+  if (iconv.open(from.c_str(), to.c_str()) == false) {
+    std::cerr << "iconv_open() failed with from=" << from
+              << " to=" << to << std::endl;
+    return false;
+  }
 
   Iconv config_iconv;
-  CHECK_DIE(config_iconv.open(config_charset.c_str(), from.c_str()))
-      << "iconv_open() failed with from=" << config_charset << " to=" << from;
+  if (config_iconv.open(config_charset.c_str(), from.c_str()) == false) {
+    std::cerr << "iconv_open() failed with from=" << config_charset
+              << " to=" << from << std::endl;
+    return false;
+  }
 
   if (!node_format.empty()) {
     writer.reset(new Writer);
@@ -305,6 +386,7 @@ bool Dictionary::compile(const Param &param,
   posid->open(pos_id_file.c_str(), &config_iconv);
 
   std::istringstream iss(UNK_DEF_DEFAULT);
+  size_t skipped_entry_count = 0;
 
   for (size_t i = 0; i < dics.size(); ++i) {
     std::ifstream ifs(WPATH(dics[i].c_str()));
@@ -315,7 +397,9 @@ bool Dictionary::compile(const Param &param,
                   << " is not found. minimum setting is used." << std::endl;
         is = &iss;
       } else {
-        CHECK_DIE(ifs) << "no such file or directory: " << dics[i];
+        std::cerr << "no such file or directory: " << dics[i] << std::endl;
+        for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+        return false;
       }
     }
 
@@ -342,7 +426,13 @@ bool Dictionary::compile(const Param &param,
 #endif
       char *col[8];
       const size_t n = tokenizeCSV(line.get(), col, 5);
-      CHECK_DIE(n == 5) << "format error: " << line.get();
+      if (n != 5) {
+        std::cerr << "format error: " << line.get()
+                  << " (expected 5 columns, got " << n << ")"
+                  << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
 
       std::string w = col[0];
       int lid = toInt(col[1]);
@@ -352,64 +442,104 @@ bool Dictionary::compile(const Param &param,
       const int pid = posid->id(feature.c_str());
 
       if (cost == INT_MAX) {
-        CHECK_DIE(type == MECAB_USR_DIC)
-            << "cost field should not be empty in sys/unk dic.";
+        if (type != MECAB_USR_DIC) {
+          std::cerr << "cost field should not be empty in sys/unk dic." << std::endl;
+          for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+          return false;
+        }
         if (!rewrite.get()) {
           rewrite.reset(new DictionaryRewriter);
-          rewrite->open(rewrite_file.c_str(), &config_iconv);
+          if (rewrite->open(rewrite_file.c_str(), &config_iconv) == false) {
+            std::cerr << "cannot open rewrite file: " << rewrite_file << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
           fi.reset(new DecoderFeatureIndex);
-          CHECK_DIE(fi->open(param)) << "cannot open feature index";
+          if (fi->open(param) == false) {
+            std::cerr << "cannot open feature index" << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
           property.reset(new CharProperty);
-          CHECK_DIE(property->open(param));
+          if (property->open(param) == false) {
+            std::cerr << "cannot open character property" << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
           property->set_charset(from.c_str());
         }
-        cost = calcCost(w, feature, factor,
-                        fi.get(), rewrite.get(), property.get());
+        // コスト自動推定に失敗した場合はエントリをスキップする
+        if (calcCost(w, feature, factor,
+                     fi.get(), rewrite.get(), property.get(), &cost) == false) {
+          std::cerr << "calcCost failed, skipping entry: " << w << std::endl;
+          ++skipped_entry_count;
+          continue;
+        }
       }
 
       if (lid < 0  || rid < 0 || lid == INT_MAX || rid == INT_MAX) {
         if (!rewrite.get()) {
           rewrite.reset(new DictionaryRewriter);
-          rewrite->open(rewrite_file.c_str(), &config_iconv);
+          if (rewrite->open(rewrite_file.c_str(), &config_iconv) == false) {
+            std::cerr << "cannot open rewrite file: " << rewrite_file << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
         }
 
         std::string ufeature, lfeature, rfeature;
-        CHECK_DIE(rewrite->rewrite(feature, &ufeature, &lfeature, &rfeature))
-            << "rewrite failed: " << feature;
+        if (rewrite->rewrite(feature, &ufeature, &lfeature, &rfeature) == false) {
+          std::cerr << "rewrite failed: " << feature << std::endl;
+          ++skipped_entry_count;
+          continue;
+        }
 
         if (!cid.get()) {
           cid.reset(new ContextID);
-          cid->open(left_id_file.c_str(),
-                    right_id_file.c_str(), &config_iconv);
-          CHECK_DIE(cid->left_size()  == matrix.left_size() &&
-                    cid->right_size() == matrix.right_size())
-              << "Context ID files("
-              << left_id_file
-              << " or "
-              << right_id_file << " may be broken";
+          if (cid->open(left_id_file.c_str(),
+                        right_id_file.c_str(), &config_iconv) == false) {
+            std::cerr << "cannot open context id files: " << left_id_file
+                      << " or " << right_id_file << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
+          if (!(cid->left_size()  == matrix.left_size() &&
+                cid->right_size() == matrix.right_size())) {
+            std::cerr << "Context ID files(" << left_id_file << " or "
+                      << right_id_file << ") may be broken" << std::endl;
+            for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+            return false;
+          }
         }
 
         lid = cid->lid(lfeature.c_str());
         rid = cid->rid(rfeature.c_str());
       }
 
-      CHECK_DIE(lid >= 0 && rid >= 0 && matrix.is_valid(lid, rid))
-          << "invalid ids are found lid=" << lid << " rid=" << rid;
+      if (!(lid >= 0 && rid >= 0 && matrix.is_valid(lid, rid))) {
+        std::cerr << "invalid ids are found lid=" << lid
+                  << " rid=" << rid << std::endl;
+        ++skipped_entry_count;
+        continue;
+      }
 
       if (w.empty()) {
         std::cerr << "empty word is found, discard this line" << std::endl;
+        ++skipped_entry_count;
         continue;
       }
 
       if (!iconv.convert(&feature)) {
         std::cerr << "iconv conversion failed. skip this entry"
                   << std::endl;
+        ++skipped_entry_count;
         continue;
       }
 
       if (type != MECAB_UNK_DIC && !iconv.convert(&w)) {
         std::cerr << "iconv conversion failed. skip this entry"
                   << std::endl;
+        ++skipped_entry_count;
         continue;
       }
 
@@ -421,13 +551,18 @@ bool Dictionary::compile(const Param &param,
         node.posid   = pid;
         node.stat    = MECAB_NOR_NODE;
         lattice->set_sentence(w.c_str());
-        CHECK_DIE(os.get());
-        CHECK_DIE(writer.get());
+        if (!os.get() || !writer.get()) {
+          std::cerr << "writer resources are not initialized" << std::endl;
+          for (size_t j = 0; j < dic.size(); ++j) { delete dic[j].second; }
+          return false;
+        }
         os->clear();
-        CHECK_DIE(writer->writeNode(lattice.get(),
-                                    node_format.c_str(),
-                                    &node, &*os)) <<
-            "conversion error: " << feature << " with " << node_format;
+        if (writer->writeNode(lattice.get(), node_format.c_str(), &node, &*os) == false) {
+          std::cerr << "conversion error: " << feature
+                    << " with " << node_format << std::endl;
+          ++skipped_entry_count;
+          continue;
+        }
         *os << '\0';
         feature = os->str();
       }
@@ -464,6 +599,16 @@ bool Dictionary::compile(const Param &param,
     fbuf.append("\0", 1);
   }
 
+  if (skipped_entry_count > 0) {
+    std::cerr << skipped_entry_count
+              << " dictionary entries were skipped due to errors" << std::endl;
+  }
+
+  if (dic.empty()) {
+    std::cerr << "no valid dictionary entries are found" << std::endl;
+    return false;
+  }
+
   std::stable_sort(dic.begin(), dic.end(),
                    pair_1st_cmp<std::string, Token *>());
 
@@ -490,13 +635,19 @@ bool Dictionary::compile(const Param &param,
   len.push_back(dic[idx].first.size());
   val.push_back(bsize +(idx << 8));
 
-  CHECK_DIE(str.size() == len.size());
-  CHECK_DIE(str.size() == val.size());
+  if (str.size() != len.size() || str.size() != val.size()) {
+    std::cerr << "internal error: trie source vectors are inconsistent" << std::endl;
+    for (size_t i = 0; i < dic.size(); ++i) { delete dic[i].second; }
+    return false;
+  }
 
   Darts::DoubleArray da;
-  CHECK_DIE(da.build(str.size(), const_cast<char **>(&str[0]),
-                     &len[0], &val[0], &progress_bar_darts) == 0)
-      << "unkown error in building double-array";
+  if (da.build(str.size(), const_cast<char **>(&str[0]),
+               &len[0], &val[0], &progress_bar_darts) != 0) {
+    std::cerr << "unknown error in building double-array" << std::endl;
+    for (size_t i = 0; i < dic.size(); ++i) { delete dic[i].second; }
+    return false;
+  }
 
   std::string tbuf;
   for (size_t i = 0; i < dic.size(); ++i) {
@@ -526,7 +677,10 @@ bool Dictionary::compile(const Param &param,
   std::strncpy(charset, to.c_str(), 31);
 
   std::ofstream bofs(WPATH(output), std::ios::binary|std::ios::out);
-  CHECK_DIE(bofs) << "permission denied: " << output;
+  if (!bofs) {
+    std::cerr << "permission denied: " << output << std::endl;
+    return false;
+  }
 
   unsigned int magic = 0;
 
