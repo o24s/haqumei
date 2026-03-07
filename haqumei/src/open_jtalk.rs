@@ -7,14 +7,14 @@ mod njd;
 #[cfg(test)]
 mod tests;
 
+use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::open_jtalk::{
+    jp_common::JpCommon,
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
-    jp_common::JpCommon,
 };
-use crate::{NjdFeature, WordPhonemeMap, WordPhonemeDetail};
-use crate::errors::HaqumeiError;
+use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap};
 
 use arc_swap::ArcSwap;
 use mecab::Mecab;
@@ -42,7 +42,9 @@ pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::ne
     #[cfg(not(feature = "embed-dictionary"))]
     {
         let dummy_model = MecabModel::new_uninitialized();
-        let dummy_dict = Dictionary { model: Arc::new(dummy_model) };
+        let dummy_dict = Dictionary {
+            model: Arc::new(dummy_model),
+        };
         ArcSwap::from(Arc::new(dummy_dict))
     }
 });
@@ -81,11 +83,10 @@ pub fn update_global_dictionary(new_dict: Dictionary) {
 
 /// `OpenJTalk::new()` で使用されるグローバル辞書のユーザー辞書を外します。
 pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
-    GLOBAL_MECAB_DICTIONARY.store(
-        Arc::new(
-            Dictionary::from_path(&GLOBAL_MECAB_DICTIONARY.load_full().dict_dir, None)?
-        )
-    );
+    GLOBAL_MECAB_DICTIONARY.store(Arc::new(Dictionary::from_path(
+        &GLOBAL_MECAB_DICTIONARY.load_full().dict_dir,
+        None,
+    )?));
     Ok(())
 }
 
@@ -152,7 +153,9 @@ impl OpenJTalk {
     pub(crate) fn ensure_dictionary_is_latest(&mut self) -> Result<(), HaqumeiError> {
         let latest_dict = GLOBAL_MECAB_DICTIONARY.load();
 
-        if let Some(active_dict) = &self.dict && !Arc::ptr_eq(active_dict, &*latest_dict) {
+        if let Some(active_dict) = &self.dict
+            && !Arc::ptr_eq(active_dict, &*latest_dict)
+        {
             log::info!("OpenJTalk instance detected a dictionary update. Re-initializing Mecab.");
             let new_mecab = Mecab::from_model(&latest_dict.model)?;
 
@@ -167,10 +170,19 @@ impl OpenJTalk {
         let njd = Njd::new()?;
         let jp_common = JpCommon::new()?;
 
-        Ok(Self { mecab, njd, jp_common, dict: Some(Arc::new(dict)), _marker: PhantomData })
+        Ok(Self {
+            mecab,
+            njd,
+            jp_common,
+            dict: Some(Arc::new(dict)),
+            _marker: PhantomData,
+        })
     }
 
-    pub fn from_path<P: AsRef<Path>>(dict_dir: P, user_dict: Option<P>) -> Result<Self, HaqumeiError> {
+    pub fn from_path<P: AsRef<Path>>(
+        dict_dir: P,
+        user_dict: Option<P>,
+    ) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::new()?;
         let njd = Njd::new()?;
         let jp_common = JpCommon::new()?;
@@ -179,9 +191,8 @@ impl OpenJTalk {
             let path_str = p.to_str().ok_or_else(|| {
                 HaqumeiError::InvalidDictionaryPath(p.to_string_lossy().into_owned())
             })?;
-            CString::new(path_str).map_err(|_| {
-                HaqumeiError::InvalidDictionaryPath(path_str.to_string())
-            })
+            CString::new(path_str)
+                .map_err(|_| HaqumeiError::InvalidDictionaryPath(path_str.to_string()))
         };
 
         let c_dict_dir = path_to_cstring(dict_dir.as_ref())?;
@@ -199,10 +210,7 @@ impl OpenJTalk {
                     user_dict.as_ptr() as *mut c_char,
                 )
             } else {
-                ffi::Mecab_load(
-                    mecab.inner.as_ptr(),
-                    c_dict_dir.as_ptr() as *mut c_char,
-                )
+                ffi::Mecab_load(mecab.inner.as_ptr(), c_dict_dir.as_ptr() as *mut c_char)
             }
         };
 
@@ -210,7 +218,13 @@ impl OpenJTalk {
             return Err(HaqumeiError::MecabLoadError);
         }
 
-        Ok(Self { mecab, njd, jp_common, dict: None, _marker: PhantomData })
+        Ok(Self {
+            mecab,
+            njd,
+            jp_common,
+            dict: None,
+            _marker: PhantomData,
+        })
     }
 
     /// `Arc` でラップされた `Dictionary` からインスタンスを作成します。
@@ -278,7 +292,8 @@ impl OpenJTalk {
         self.ensure_dictionary_is_latest()?;
 
         let morphs = self.run_mecab_detailed(text.as_ref())?;
-        let valid_features_str: Vec<String> = morphs.iter()
+        let valid_features_str: Vec<String> = morphs
+            .iter()
             .filter(|m| !m.is_ignored)
             .map(|m| m.feature.clone())
             .collect();
@@ -332,7 +347,11 @@ impl OpenJTalk {
         let kana_string: String = njd_features
             .iter()
             .map(|f| {
-                let p = if f.pos == "記号" { &f.string } else { &f.pron };
+                let p = if f.pos == "記号" {
+                    &f.string
+                } else {
+                    &f.pron
+                };
                 p.replace('’', "")
             })
             .collect();
@@ -347,10 +366,7 @@ impl OpenJTalk {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
-    pub fn g2p_per_word(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<Vec<String>>, HaqumeiError> {
+    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
         let features = self.run_frontend(text)?;
 
         if features.is_empty() {
@@ -484,23 +500,30 @@ impl OpenJTalk {
     /// //     is_ignored: false,
     /// // }]
     /// // ```
-    pub fn g2p_mapping_detailed(&mut self, text: &str) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+    pub fn g2p_mapping_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         let morphs = self.run_mecab_detailed(text)?;
 
-        let valid_features_str: Vec<String> = morphs.iter()
+        let valid_features_str: Vec<String> = morphs
+            .iter()
             .filter(|m| !m.is_ignored)
             .map(|m| m.feature.clone())
             .collect();
 
         if valid_features_str.is_empty() {
-            return Ok(morphs.into_iter().map(|m| WordPhonemeDetail {
-                word: m.surface,
-                phonemes: vec!["sp".to_string()],
-                is_unknown: m.is_unknown,
-                is_ignored: true,
-            }).collect());
+            return Ok(morphs
+                .into_iter()
+                .map(|m| WordPhonemeDetail {
+                    word: m.surface,
+                    phonemes: vec!["sp".to_string()],
+                    is_unknown: m.is_unknown,
+                    is_ignored: true,
+                })
+                .collect());
         }
 
         let njd_features = self.run_njd_from_mecab(&valid_features_str)?;
@@ -511,7 +534,9 @@ impl OpenJTalk {
         let mut morph_idx = 0;
 
         for map in mapping {
-            while let Some(m) = morphs.get(morph_idx) && m.is_ignored {
+            while let Some(m) = morphs.get(morph_idx)
+                && m.is_ignored
+            {
                 result.push(WordPhonemeDetail {
                     word: m.surface.clone(),
                     phonemes: vec!["sp".to_string()],
@@ -544,7 +569,9 @@ impl OpenJTalk {
 
                     // NJD によって、未知語は結合されることがなく、
                     // また、空白が word の中に含まれることもないことを仮定する。
-                    while let Some(morph) = &morphs.get(morph_idx) && map.word.contains(&morph.surface) {
+                    while let Some(morph) = &morphs.get(morph_idx)
+                        && map.word.contains(&morph.surface)
+                    {
                         let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
                         is_unknown_word |= is_unknown;
 
@@ -572,7 +599,10 @@ impl OpenJTalk {
         Ok(result)
     }
 
-    pub(crate) fn g2p_mapping_inner(&mut self, njd_features: &[NjdFeature]) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
+    pub(crate) fn g2p_mapping_inner(
+        &mut self,
+        njd_features: &[NjdFeature],
+    ) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
         unsafe {
             self.prepare_jpcommon_label_internal(njd_features)?;
             let jp = self.jp_common.inner.as_mut();
@@ -622,9 +652,10 @@ impl OpenJTalk {
 
                     if current_word_ptr != 0
                         && let Some(&idx) = ptr_to_idx.get(&current_word_ptr)
-                            && let Some(target) = mapping.get_mut(idx) {
-                                target.phonemes.push(s);
-                            }
+                        && let Some(target) = mapping.get_mut(idx)
+                    {
+                        target.phonemes.push(s);
+                    }
                 }
                 p = (*p).next;
             }
@@ -645,35 +676,36 @@ impl OpenJTalk {
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
         let result = unsafe {
-            ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut i8,
-                BUFFER_SIZE,
-                c_text.as_ptr(),
-            )
+            ffi::text2mecab(buffer.as_mut_ptr() as *mut i8, BUFFER_SIZE, c_text.as_ptr())
         };
 
         match result {
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {},
+            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {}
             ffi::text2mecab_result_t_TEXT2MECAB_RESULT_RANGE_ERROR => {
-                return Err(HaqumeiError::Text2MecabError("Text is too long".to_string()));
-            },
+                return Err(HaqumeiError::Text2MecabError(
+                    "Text is too long".to_string(),
+                ));
+            }
             ffi::text2mecab_result_t_TEXT2MECAB_RESULT_INVALID_ARGUMENT => {
-                return Err(HaqumeiError::Text2MecabError("Invalid argument for text2mecab".to_string()));
-            },
+                return Err(HaqumeiError::Text2MecabError(
+                    "Invalid argument for text2mecab".to_string(),
+                ));
+            }
             _ => {
-                return Err(HaqumeiError::Text2MecabError(format!("Unknown error from text2mecab: {}", result)));
+                return Err(HaqumeiError::Text2MecabError(format!(
+                    "Unknown error from text2mecab: {}",
+                    result
+                )));
             }
         }
 
-        let result = unsafe {
-            ffi::Mecab_analysis(
-                self.mecab.inner.as_ptr(),
-                buffer.as_ptr() as *const i8,
-            )
-        };
+        let result =
+            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const i8) };
 
         if result != 1 {
-            return Err(HaqumeiError::MecabError("Mecab_analysis failed to parse the text".to_string()));
+            return Err(HaqumeiError::MecabError(
+                "Mecab_analysis failed to parse the text".to_string(),
+            ));
         }
 
         let morphs = unsafe {
@@ -712,33 +744,31 @@ impl OpenJTalk {
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
         let result = unsafe {
-            ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut i8,
-                BUFFER_SIZE,
-                c_text.as_ptr(),
-            )
+            ffi::text2mecab(buffer.as_mut_ptr() as *mut i8, BUFFER_SIZE, c_text.as_ptr())
         };
 
         match result {
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {},
+            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {}
             ffi::text2mecab_result_t_TEXT2MECAB_RESULT_RANGE_ERROR => {
-                return Err(HaqumeiError::Text2MecabError("Text is too long".to_string()));
-            },
+                return Err(HaqumeiError::Text2MecabError(
+                    "Text is too long".to_string(),
+                ));
+            }
             _ => {
-                return Err(HaqumeiError::Text2MecabError("Error in text2mecab".to_string()));
+                return Err(HaqumeiError::Text2MecabError(
+                    "Error in text2mecab".to_string(),
+                ));
             }
         }
 
         // MeCab Analysis
-        let result = unsafe {
-            ffi::Mecab_analysis(
-                self.mecab.inner.as_ptr(),
-                buffer.as_ptr() as *const i8,
-            )
-        };
+        let result =
+            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const i8) };
 
         if result != 1 {
-            return Err(HaqumeiError::MecabError("Mecab_analysis failed to parse the text".to_string()));
+            return Err(HaqumeiError::MecabError(
+                "Mecab_analysis failed to parse the text".to_string(),
+            ));
         }
 
         // Lattice Traversal
@@ -809,7 +839,10 @@ impl OpenJTalk {
         Ok(morphs)
     }
 
-    pub fn run_njd_from_mecab(&mut self, mecab_features: &[String]) -> Result<Vec<NjdFeature>, HaqumeiError> {
+    pub fn run_njd_from_mecab(
+        &mut self,
+        mecab_features: &[String],
+    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         if mecab_features.is_empty() {
             return Ok(Vec::with_capacity(0));
         }
@@ -819,10 +852,8 @@ impl OpenJTalk {
             .map(|s| CString::new(s.as_str()))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut c_string_pointers: Vec<*const c_char> = c_strings
-            .iter()
-            .map(|cs| cs.as_ptr())
-            .collect();
+        let mut c_string_pointers: Vec<*const c_char> =
+            c_strings.iter().map(|cs| cs.as_ptr()).collect();
 
         unsafe {
             ffi::mecab2njd(
@@ -854,7 +885,10 @@ impl OpenJTalk {
         Ok(final_features)
     }
 
-    pub(crate) fn make_label(&mut self, features: &[NjdFeature]) -> Result<Vec<String>, HaqumeiError> {
+    pub(crate) fn make_label(
+        &mut self,
+        features: &[NjdFeature],
+    ) -> Result<Vec<String>, HaqumeiError> {
         Self::features_to_njd(features, &mut self.njd)?;
 
         let (label_size, label_feature_ptr) = unsafe {
@@ -894,7 +928,7 @@ impl OpenJTalk {
     /// 文字列生成 (JPCommonLabel_make) は行わない。
     unsafe fn prepare_jpcommon_label_internal(
         &mut self,
-        features: &[NjdFeature]
+        features: &[NjdFeature],
     ) -> Result<(), HaqumeiError> {
         Self::features_to_njd(features, &mut self.njd)?;
 
@@ -1010,10 +1044,9 @@ impl OpenJTalk {
                     }
 
                     // 単語が変わったら、前の単語を確定して保存する
-                    if current_word_ptr != prev_word_ptr
-                        && !current_word_phonemes.is_empty() {
-                            result_vec.push(std::mem::take(&mut current_word_phonemes));
-                        }
+                    if current_word_ptr != prev_word_ptr && !current_word_phonemes.is_empty() {
+                        result_vec.push(std::mem::take(&mut current_word_phonemes));
+                    }
 
                     current_word_phonemes.push(s);
                     prev_word_ptr = current_word_ptr;
@@ -1033,7 +1066,10 @@ impl OpenJTalk {
         }
     }
 
-    pub(crate) fn features_to_njd(features: &[NjdFeature], njd: &mut Njd) -> Result<(), HaqumeiError> {
+    pub(crate) fn features_to_njd(
+        features: &[NjdFeature],
+        njd: &mut Njd,
+    ) -> Result<(), HaqumeiError> {
         unsafe {
             ffi::NJD_clear(njd.inner.as_mut());
         }
@@ -1057,7 +1093,8 @@ impl OpenJTalk {
             // そして確保された各ノードが正しく C 側の `NJD` 構造体に移譲されており、
             // Rust がそれを解放しないことで二重解放エラーを防いでいることによって保証されている。
             unsafe {
-                let node = libc::calloc(1, std::mem::size_of::<ffi::NJDNode>()) as *mut ffi::NJDNode;
+                let node =
+                    libc::calloc(1, std::mem::size_of::<ffi::NJDNode>()) as *mut ffi::NJDNode;
                 if node.is_null() {
                     return Err(HaqumeiError::AllocationError("ffi::NJDNode"));
                 }
@@ -1102,7 +1139,9 @@ impl ParallelJTalk {
     }
 
     pub fn from_dictionary(dict: Dictionary) -> Self {
-        Self { dict: Arc::new(dict) }
+        Self {
+            dict: Arc::new(dict),
+        }
     }
 
     pub fn from_arc_dictionary(dict: Arc<Dictionary>) -> Self {
@@ -1117,9 +1156,11 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p(text.as_ref()),
             )
             .collect()
     }
@@ -1132,9 +1173,11 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p_detailed(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p_detailed(text.as_ref()),
             )
             .collect()
     }
@@ -1147,9 +1190,11 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p_kana(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p_kana(text.as_ref()),
             )
             .collect()
     }
@@ -1162,9 +1207,11 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p_per_word(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p_per_word(text.as_ref()),
             )
             .collect()
     }
@@ -1177,24 +1224,31 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p_mapping(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p_mapping(text.as_ref()),
             )
             .collect()
     }
 
     /// 複数のテキストに対して並列に `g2p_mapping_detailed` を実行します。
-    pub fn g2p_mapping_detailed<S>(&self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeDetail>>, HaqumeiError>
+    pub fn g2p_mapping_detailed<S>(
+        &self,
+        texts: &[S],
+    ) -> Result<Vec<Vec<WordPhonemeDetail>>, HaqumeiError>
     where
         S: AsRef<str> + Sync,
     {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.g2p_mapping_detailed(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.g2p_mapping_detailed(text.as_ref()),
             )
             .collect()
     }
@@ -1206,15 +1260,19 @@ impl ParallelJTalk {
         texts
             .par_iter()
             .map_init(
-                || OpenJTalk::from_shared_dictionary(self.dict.clone())
-                    .expect("Failed to initialize OpenJTalk worker"),
-                |ojt, text| ojt.run_frontend(text.as_ref())
+                || {
+                    OpenJTalk::from_shared_dictionary(self.dict.clone())
+                        .expect("Failed to initialize OpenJTalk worker")
+                },
+                |ojt, text| ojt.run_frontend(text.as_ref()),
             )
             .collect()
     }
 }
 
-pub fn build_mecab_dictionary<P: AsRef<Path>>(path: P) -> Result<(), dictionary::DictCompilerError> {
+pub fn build_mecab_dictionary<P: AsRef<Path>>(
+    path: P,
+) -> Result<(), dictionary::DictCompilerError> {
     MecabDictIndexCompiler::new()
         .dict_dir(&path)
         .out_dir(&path)

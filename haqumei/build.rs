@@ -1,9 +1,9 @@
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
-use std::error::Error;
-use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
@@ -11,7 +11,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let src_dir_str = "vendor/open_jtalk/src";
     let src_dir = PathBuf::from(src_dir_str);
     let out_dir = env::var("OUT_DIR")?;
-    let out_path = PathBuf::from(&out_dir);
 
     println!("cargo:rerun-if-changed={}", src_dir.display());
     println!("cargo:rerun-if-changed=wrapper.h");
@@ -25,7 +24,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("PACKAGE_VERSION", Some("\"1.11\"")),
         ("VERSION", Some("\"1.11\"")),
         ("PACKAGE_STRING", Some("\"open_jtalk 1.11\"")),
-        ("PACKAGE_BUGREPORT", Some("\"https://github.com/tsukumijima/open_jtalk/\"")),
+        (
+            "PACKAGE_BUGREPORT",
+            Some("\"https://github.com/tsukumijima/open_jtalk/\""),
+        ),
         ("PACKAGE_NAME", Some("\"open_jtalk\"")),
         ("CHARSET_UTF_8", None),
         ("MECAB_CHARSET", Some("\"utf-8\"")),
@@ -85,48 +87,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         defines.push(("WORDS_BIGENDIAN", Some("1")));
     }
 
-    // <stdio.h> を先に読み込ませてから、マクロで名前を上書きする
-    let redirect_header_content = r#"
-#ifndef FPRINTF_REDIRECT_H
-#define FPRINTF_REDIRECT_H
-
-#ifdef __cplusplus
-  #include <cstdio>
-  #include <stdio.h>
-#else
-  #include <stdio.h>
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-    int custom_fprintf(FILE *stream, const char *format, ...);
-#ifdef __cplusplus
-}
-#endif
-
-#define fprintf custom_fprintf
-
-#endif // FPRINTF_REDIRECT_H
-    "#;
-
-    let redirect_header_path = out_path.join("redirect_fprintf.h");
-    fs::write(&redirect_header_path, redirect_header_content)?;
+    let redirect_header_path = Path::new("redirect.h");
     let redirect_flag = format!("{}", redirect_header_path.display());
 
-
-    let mut hook_build = cc::Build::new();
-    hook_build.file("hook.c");
-    hook_build.compile("openjtalk_hook");
+    cc::Build::new()
+        .file("redirect.c")
+        .compile("redirect_impl");
 
     let mut build = cc::Build::new();
     build.cpp(true);
 
     let include_dirs = [
-        "jpcommon", "mecab/src", "mecab2njd", "njd", "njd2jpcommon",
-        "njd_set_accent_phrase", "njd_set_accent_type", "njd_set_digit",
-        "njd_set_long_vowel", "njd_set_pronunciation",
-        "njd_set_unvoiced_vowel", "text2mecab",
+        "jpcommon",
+        "mecab/src",
+        "mecab2njd",
+        "njd",
+        "njd2jpcommon",
+        "njd_set_accent_phrase",
+        "njd_set_accent_type",
+        "njd_set_digit",
+        "njd_set_long_vowel",
+        "njd_set_pronunciation",
+        "njd_set_unvoiced_vowel",
+        "text2mecab",
     ];
     for dir in &include_dirs {
         build.include(src_dir.join(dir));
@@ -135,7 +118,8 @@ extern "C" {
     for dir in &include_dirs {
         for ext in ["c", "cpp"] {
             let pattern = src_dir.join(dir).join(format!("*.{}", ext));
-            for entry in glob::glob(pattern.to_str().unwrap()).expect("Failed to read glob pattern") {
+            for entry in glob::glob(pattern.to_str().unwrap()).expect("Failed to read glob pattern")
+            {
                 build.file(entry.unwrap());
             }
         }
@@ -219,7 +203,8 @@ extern "C" {
 
     let out_path = PathBuf::from(out_dir);
 
-    bindings.write_to_file(out_path.join("bindings.rs"))
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings to file");
 
     if env::var("CARGO_FEATURE_EMBED_DICTIONARY").is_err() {
@@ -236,7 +221,9 @@ extern "C" {
     let compiled_dict_hash_path = manifest_dir.join("compiled_dictionary.sha256");
 
     if !dict_src_dir.exists() {
-        println!("cargo:warning=dictionary({dict_src_dir:?}) not found, skipping dictionary compilation.");
+        println!(
+            "cargo:warning=dictionary({dict_src_dir:?}) not found, skipping dictionary compilation."
+        );
         return Ok(());
     }
 
@@ -251,10 +238,11 @@ extern "C" {
         && let Ok(saved_dict_hash_path) = fs::read_to_string(&dict_hash_path)
         && let Ok(saved_compressed_dict_hash_path) = fs::read_to_string(&compressed_dict_hash_path)
         && saved_dict_hash_path == dict_hash
-        && saved_compressed_dict_hash_path == compressed_dict_hash {
-            println!("Dictionary cache in MANIFEST_DIR is up-to-date. Skipping compilation.");
-            return Ok(());
-        }
+        && saved_compressed_dict_hash_path == compressed_dict_hash
+    {
+        println!("Dictionary cache in MANIFEST_DIR is up-to-date. Skipping compilation.");
+        return Ok(());
+    }
 
     fs::create_dir_all(&dict_out_dir)?;
 
@@ -306,7 +294,11 @@ int main(int argc, char **argv) {
     let compiler = build.get_compiler();
     let mut command = compiler.to_command();
 
-    let exe_name = if cfg!(target_os = "windows") { "mecab-dict-index.exe" } else { "mecab-dict-index" };
+    let exe_name = if cfg!(target_os = "windows") {
+        "mecab-dict-index.exe"
+    } else {
+        "mecab-dict-index"
+    };
     let exe_path = out_path.join(exe_name);
 
     command.arg(&main_wrapper_path);
@@ -344,21 +336,34 @@ int main(int argc, char **argv) {
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     Ok(exe_path)
 }
 
-fn run_dict_indexer(indexer_path: &Path, dict_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
-    let dict_dir_str = dict_dir.to_str().ok_or("Dictionary path contains invalid UTF-8")?;
-    let out_dir_str = out_dir.to_str().ok_or("Dictionary path contains invalid UTF-8")?;
+fn run_dict_indexer(
+    indexer_path: &Path,
+    dict_dir: &Path,
+    out_dir: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let dict_dir_str = dict_dir
+        .to_str()
+        .ok_or("Dictionary path contains invalid UTF-8")?;
+    let out_dir_str = out_dir
+        .to_str()
+        .ok_or("Dictionary path contains invalid UTF-8")?;
 
     let output = Command::new(indexer_path)
-        .arg("-d").arg(dict_dir_str)
-        .arg("-o").arg(out_dir_str)
-        .arg("-f").arg("utf-8")
-        .arg("-t").arg("utf-8")
+        .arg("-d")
+        .arg(dict_dir_str)
+        .arg("-o")
+        .arg(out_dir_str)
+        .arg("-f")
+        .arg("utf-8")
+        .arg("-t")
+        .arg("utf-8")
         .output()?;
 
     if !output.status.success() {
@@ -385,7 +390,10 @@ fn calculate_compressed_dict_hash(path: &Path) -> Result<String, Box<dyn Error>>
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn calculate_hash_for_extensions(dir: &Path, extensions: &[&str]) -> Result<String, Box<dyn Error>> {
+fn calculate_hash_for_extensions(
+    dir: &Path,
+    extensions: &[&str],
+) -> Result<String, Box<dyn Error>> {
     let mut hasher = Sha256::new();
     let mut paths = Vec::new();
 
@@ -395,9 +403,10 @@ fn calculate_hash_for_extensions(dir: &Path, extensions: &[&str]) -> Result<Stri
 
         if path.is_file()
             && let Some(ext_str) = path.extension().and_then(|s| s.to_str())
-            && extensions.contains(&ext_str) {
-                paths.push(path.to_path_buf());
-            }
+            && extensions.contains(&ext_str)
+        {
+            paths.push(path.to_path_buf());
+        }
     }
 
     paths.sort();

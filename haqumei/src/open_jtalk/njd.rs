@@ -1,4 +1,8 @@
-use std::{ffi::{CStr, c_char}, mem::MaybeUninit, ptr::NonNull};
+use std::{
+    ffi::{CStr, c_char},
+    mem::MaybeUninit,
+    ptr::NonNull,
+};
 
 use crate::{errors::HaqumeiError, features::NjdFeature, ffi};
 
@@ -43,10 +47,11 @@ fn cstr_to_string(ptr: *const c_char) -> String {
     if ptr.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
     }
 }
-
 
 pub(crate) fn njd_to_features(njd: &Njd) -> Vec<NjdFeature> {
     let mut features = Vec::new();
@@ -76,7 +81,6 @@ pub(crate) fn njd_to_features(njd: &Njd) -> Vec<NjdFeature> {
     }
     features
 }
-
 
 /// pyopenjtalk-plus の独自結合ルールを適用する
 pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
@@ -119,13 +123,19 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
         }
 
         // 連用形のアクセント核の登録を修正する
-        let is_renyoukei = matches!(njd.cform.as_str(), "連用形" | "連用タ接続" | "連用ゴザイ接続" | "連用テ接続");
+        let is_renyoukei = matches!(
+            njd.cform.as_str(),
+            "連用形" | "連用タ接続" | "連用ゴザイ接続" | "連用テ接続"
+        );
         if is_renyoukei && njd.acc == njd.mora_size && njd.mora_size > 1 {
             njd.acc -= 1;
         }
 
         // 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
-        let is_rareru_form = matches!(njd.orig.as_str(), "れる" | "られる" | "せる" | "させる" | "ちゃう");
+        let is_rareru_form = matches!(
+            njd.orig.as_str(),
+            "れる" | "られる" | "せる" | "させる" | "ちゃう"
+        );
         if is_rareru_form && next_njd.string == "た" {
             next_njd.chain_rule = "F2@1".to_string();
         }

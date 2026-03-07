@@ -19,7 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mapping = haqumei.g2p_mapping(text1)?;
     println!("Mapping result:");
     for word_map in &mapping {
-        println!("  Word: {:?} -> Phonemes: {:?}", word_map.word, word_map.phonemes);
+        println!(
+            "  Word: {:?} -> Phonemes: {:?}",
+            word_map.word, word_map.phonemes
+        );
     }
     println!();
 
@@ -44,7 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for detail in &detailed_mapping {
         println!("  Word: {:?}", detail.word);
         println!("    Phonemes: {:?}", detail.phonemes);
-        println!("    Unknown: {}, Ignored: {}", detail.is_unknown, detail.is_ignored);
+        println!(
+            "    Unknown: {}, Ignored: {}",
+            detail.is_unknown, detail.is_ignored
+        );
     }
     println!();
 

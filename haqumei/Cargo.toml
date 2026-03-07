@@ -13,7 +13,8 @@ categories = ["text-processing", "parsing"]
 include = [
     "src",
     "build.rs",
-    "hook.c",
+    "redirect.c",
+    "redirect.h",
     "wrapper.h",
     "yomi_model",
     "dictionary",

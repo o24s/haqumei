@@ -38,7 +38,9 @@ impl MecabModel {
 
     #[allow(unused)]
     pub(crate) fn new_uninitialized() -> Self {
-        Self { ptr: std::ptr::null_mut() }
+        Self {
+            ptr: std::ptr::null_mut(),
+        }
     }
 
     pub(crate) fn is_initialized(&self) -> bool {
@@ -48,6 +50,8 @@ impl MecabModel {
 
 impl Drop for MecabModel {
     fn drop(&mut self) {
-        unsafe { ffi::mecab_model_destroy(self.ptr); }
+        unsafe {
+            ffi::mecab_model_destroy(self.ptr);
+        }
     }
 }

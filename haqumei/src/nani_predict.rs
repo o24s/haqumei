@@ -1,5 +1,7 @@
-
-use ort::{session::Session, value::{Tensor, TensorRef, Value}};
+use ort::{
+    session::Session,
+    value::{Tensor, TensorRef, Value},
+};
 
 use crate::NjdFeature;
 
@@ -13,11 +15,9 @@ pub struct NaniPredictor {
 
 impl NaniPredictor {
     pub fn new() -> ort::Result<Self> {
-        let enc_session = Session::builder()?
-            .commit_from_memory(ENC_MODEL_BYTES)?;
+        let enc_session = Session::builder()?.commit_from_memory(ENC_MODEL_BYTES)?;
 
-        let model_session = Session::builder()?
-            .commit_from_memory(MODEL_BYTES)?;
+        let model_session = Session::builder()?.commit_from_memory(MODEL_BYTES)?;
 
         Ok(Self {
             enc_session,

@@ -94,7 +94,7 @@ fn test_jpcommon() {
 /// ```
 #[test]
 fn test_njd() {
-    let njd =  Njd::new().unwrap();
+    let njd = Njd::new().unwrap();
 
     let njd_raw = unsafe { njd.inner.as_ref() };
 

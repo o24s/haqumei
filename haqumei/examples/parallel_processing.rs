@@ -13,7 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let elapsed = start.elapsed();
 
     let sentences_per_sec = waganeko.len() as f64 / elapsed.as_secs_f64();
-    println!("finished in {:.2?}. ({:.2} sentences/sec)", elapsed, sentences_per_sec);
+    println!(
+        "finished in {:.2?}. ({:.2} sentences/sec)",
+        elapsed, sentences_per_sec
+    );
 
     (0..3).for_each(|i| println!("{:?}", result[i]));
 

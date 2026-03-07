@@ -20,18 +20,22 @@ mod ffi {
 /// - `msg` が指すメモリ領域が読み取り可能であり、この呼び出し中に他から変更されないこと。
 /// - `msg` がダングリングポインタ (無効なメモリを指すポインタ) ではないこと。
 #[unsafe(no_mangle)]
-unsafe extern "C" fn rust_log_redirect(msg: *const libc::c_char, is_stderr: libc::c_int) { unsafe {
-    if msg.is_null() { return; }
-    let c_str = std::ffi::CStr::from_ptr(msg);
-    let s = c_str.to_string_lossy();
-    let s = s.trim_end();
+unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: libc::c_int) {
+    unsafe {
+        if msg.is_null() {
+            return;
+        }
+        let c_str = std::ffi::CStr::from_ptr(msg);
+        let s = c_str.to_string_lossy();
+        let s = s.trim_end();
 
-    if is_stderr != 0 {
-        log::warn!("[OpenJTalk] {}", s);
-    } else {
-        log::info!("[OpenJTalk] {}", s);
+        if is_stderr != 0 {
+            log::warn!("[OpenJTalk] {}", s);
+        } else {
+            log::info!("[OpenJTalk] {}", s);
+        }
     }
-}}
+}
 
 mod data;
 pub mod errors;
@@ -40,25 +44,34 @@ pub mod nani_predict;
 pub mod open_jtalk;
 mod utils;
 
-use std::{path::PathBuf, sync::{LazyLock, Mutex}};
+use std::{
+    path::PathBuf,
+    sync::{LazyLock, Mutex},
+};
 
 use moka::sync::Cache;
 
-pub use open_jtalk::{OpenJTalk, ParallelJTalk, update_global_dictionary, unset_user_dictionary, MecabDictIndexCompiler};
 pub use features::NjdFeature;
+pub use open_jtalk::{
+    MecabDictIndexCompiler, OpenJTalk, ParallelJTalk, unset_user_dictionary,
+    update_global_dictionary,
+};
 
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
-    open_jtalk::MecabMorph,
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    utils::{modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc, vibrato_analysis},
+    open_jtalk::MecabMorph,
+    utils::{
+        modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
+        vibrato_analysis,
+    },
 };
 
-
-static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> = LazyLock::new(|| Cache::new(1000));
+static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> =
+    LazyLock::new(|| Cache::new(1000));
 static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|| Cache::new(1000));
 static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
@@ -159,7 +172,8 @@ impl Haqumei {
                 || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
                     self.open_jtalk.ensure_dictionary_is_latest()?;
                     let morphs = self.open_jtalk.run_mecab_detailed(text.as_ref())?;
-                    let valid_features_str: Vec<String> = morphs.iter()
+                    let valid_features_str: Vec<String> = morphs
+                        .iter()
                         .filter(|m| !m.is_ignored)
                         .map(|m| m.feature.clone())
                         .collect();
@@ -170,7 +184,7 @@ impl Haqumei {
                 || {
                     let mut worker = self.tokenizer.new_worker();
                     vibrato_analysis(&mut worker, text);
-                }
+                },
             );
 
             let (njd_features, morphs) = res?;
@@ -213,7 +227,11 @@ impl Haqumei {
         let kana_string: String = features
             .iter()
             .map(|f| {
-                let p = if f.pos == "記号" { &f.string } else { &f.pron };
+                let p = if f.pos == "記号" {
+                    &f.string
+                } else {
+                    &f.pron
+                };
                 p.replace('’', "")
             })
             .collect();
@@ -228,10 +246,7 @@ impl Haqumei {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
-    pub fn g2p_per_word(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<Vec<String>>, HaqumeiError> {
+    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
         let features = self.run_frontend(text)?;
 
         if features.is_empty() {
@@ -280,10 +295,7 @@ impl Haqumei {
     /// //     phonemes: ["d", "a"]
     /// // }]
     /// // ```
-    pub fn g2p_mapping(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
+    pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
         let features = self.run_frontend(text)?;
 
         if features.is_empty() {
@@ -366,13 +378,17 @@ impl Haqumei {
     /// //     is_ignored: false,
     /// // }]
     /// // ```
-    pub fn g2p_mapping_detailed(&mut self, text: &str) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+    pub fn g2p_mapping_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
         let (njd_features, morphs) = {
             let (res, _) = rayon::join(
                 || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
                     let morphs = self.open_jtalk.run_mecab_detailed(text)?;
 
-                    let valid_features_str: Vec<String> = morphs.iter()
+                    let valid_features_str: Vec<String> = morphs
+                        .iter()
                         .filter(|m| !m.is_ignored)
                         .map(|m| m.feature.clone())
                         .collect();
@@ -383,18 +399,21 @@ impl Haqumei {
                 || {
                     let mut worker = self.tokenizer.new_worker();
                     vibrato_analysis(&mut worker, text);
-                }
+                },
             );
 
             let (njd_features, morphs, is_valid_features_empty) = res?;
 
             if is_valid_features_empty {
-                return Ok(morphs.into_iter().map(|m| WordPhonemeDetail {
-                    word: m.surface,
-                    phonemes: vec!["sp".to_string()],
-                    is_unknown: m.is_unknown,
-                    is_ignored: true,
-                }).collect());
+                return Ok(morphs
+                    .into_iter()
+                    .map(|m| WordPhonemeDetail {
+                        word: m.surface,
+                        phonemes: vec!["sp".to_string()],
+                        is_unknown: m.is_unknown,
+                        is_ignored: true,
+                    })
+                    .collect());
             }
 
             (self.apply_postprocessing(text, njd_features)?, morphs)
@@ -410,7 +429,9 @@ impl Haqumei {
         let mut morph_idx = 0;
 
         for map in mapping {
-            while let Some(m) = morphs.get(morph_idx) && m.is_ignored {
+            while let Some(m) = morphs.get(morph_idx)
+                && m.is_ignored
+            {
                 result.push(WordPhonemeDetail {
                     word: m.surface.clone(),
                     phonemes: vec!["sp".to_string()],
@@ -443,7 +464,9 @@ impl Haqumei {
 
                     // NJD によって、未知語は結合されることがなく、
                     // また、空白が word の中に含まれることもないことを仮定する。
-                    while let Some(morph) = &morphs.get(morph_idx) && map.word.contains(&morph.surface) {
+                    while let Some(morph) = &morphs.get(morph_idx)
+                        && map.word.contains(&morph.surface)
+                    {
                         let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
                         is_unknown_word |= is_unknown;
 
@@ -471,24 +494,18 @@ impl Haqumei {
         Ok(result)
     }
 
-    pub fn run_frontend(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
+    pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let (njd_features, _) = rayon::join(
             || self.open_jtalk.run_frontend(text),
             || {
                 let mut worker = self.tokenizer.new_worker();
                 vibrato_analysis(&mut worker, text);
-            }
+            },
         );
         self.apply_postprocessing(text, njd_features?)
     }
 
-    pub fn extract_fullcontext(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<String>, HaqumeiError> {
+    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         let njd_features = self.run_frontend(text)?;
         self.open_jtalk.make_label(&njd_features)
     }
@@ -513,7 +530,10 @@ impl Haqumei {
         };
 
         NANI_PREDICTOR_CACHE.get_with(prev_node.clone(), || {
-            NANI_PREDICTOR.lock().unwrap().predict_is_nan(Some(prev_node))
+            NANI_PREDICTOR
+                .lock()
+                .unwrap()
+                .predict_is_nan(Some(prev_node))
         })
     }
 }

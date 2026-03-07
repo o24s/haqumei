@@ -19,7 +19,10 @@ impl Mecab {
             let raw_ptr = Box::into_raw(mecab_init);
 
             match NonNull::new(raw_ptr) {
-                Some(inner) => Ok(Self { inner, owns_model: true }),
+                Some(inner) => Ok(Self {
+                    inner,
+                    owns_model: true,
+                }),
                 None => {
                     let _ = Box::from_raw(raw_ptr);
                     Err(HaqumeiError::AllocationError("_Mecab"))
@@ -53,7 +56,10 @@ impl Mecab {
 
             let mecab_init = Box::into_raw(mecab_uninit.assume_init());
 
-            Ok(Self { inner: NonNull::new(mecab_init).unwrap(), owns_model: false })
+            Ok(Self {
+                inner: NonNull::new(mecab_init).unwrap(),
+                owns_model: false,
+            })
         }
     }
 }

@@ -1,16 +1,19 @@
-use std::{collections::HashSet, fs::Metadata, path::{Path, PathBuf}, sync::LazyLock};
+use std::{
+    collections::HashSet,
+    fs::Metadata,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 use sha2::{Digest, Sha256};
 use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
-    Haqumei,
-    NjdFeature,
-    VIBRATO_CACHE,
+    Haqumei, NjdFeature, VIBRATO_CACHE,
     data::{MULTI_READ_KANJI_LIST, TO_DAKUON, TO_SEION},
     errors::HaqumeiError,
     features::UnidicFeature,
-    open_jtalk::OpenJTalk
+    open_jtalk::OpenJTalk,
 };
 
 pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
@@ -21,9 +24,10 @@ pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Er
         let path = entry.path();
         if path.is_file()
             && let Some(extension) = path.extension()
-            && (extension == "dic" || extension == "bin") {
-                paths.push(path.to_path_buf());
-            }
+            && (extension == "dic" || extension == "bin")
+        {
+            paths.push(path.to_path_buf());
+        }
     }
 
     paths.sort();
@@ -57,10 +61,7 @@ pub(crate) fn compute_metadata_key(meta: &Metadata) -> [u8; 32] {
     {
         use std::time::SystemTime;
 
-        fn update_system_time(
-            time: Result<SystemTime, std::io::Error>,
-            hasher: &mut Sha256,
-        ) {
+        fn update_system_time(time: Result<SystemTime, std::io::Error>, hasher: &mut Sha256) {
             match time.and_then(|t| {
                 t.duration_since(SystemTime::UNIX_EPOCH)
                     .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
@@ -76,13 +77,22 @@ pub(crate) fn compute_metadata_key(meta: &Metadata) -> [u8; 32] {
         }
 
         let file_type = meta.file_type();
-        let type_byte: u8 = if file_type.is_file() { 0x01 }
-        else if file_type.is_dir() { 0x02 }
-        else if file_type.is_symlink() { 0x03 }
-        else { 0x00 };
+        let type_byte: u8 = if file_type.is_file() {
+            0x01
+        } else if file_type.is_dir() {
+            0x02
+        } else if file_type.is_symlink() {
+            0x03
+        } else {
+            0x00
+        };
         hasher.update([type_byte]);
 
-        let readonly_byte: u8 = if meta.permissions().readonly() { 0x01 } else { 0x00 };
+        let readonly_byte: u8 = if meta.permissions().readonly() {
+            0x01
+        } else {
+            0x00
+        };
         hasher.update([readonly_byte]);
 
         hasher.update(meta.len().to_le_bytes());
@@ -114,15 +124,14 @@ pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
 }
 
 impl Haqumei {
-    pub(crate) fn modify_kanji_yomi(
-        &mut self,
-        text: &str,
-        njd_features: &mut [NjdFeature],
-    ) {
-        let tokens: Vec<UnidicFeature> = VIBRATO_CACHE.get(text).unwrap_or( {
-            let mut worker = self.tokenizer.new_worker();
-            vibrato_analysis(&mut worker, text)
-        }).into_iter()
+    pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
+        let tokens: Vec<UnidicFeature> = VIBRATO_CACHE
+            .get(text)
+            .unwrap_or({
+                let mut worker = self.tokenizer.new_worker();
+                vibrato_analysis(&mut worker, text)
+            })
+            .into_iter()
             .filter(|t| MULTI_READ_KANJI_LIST.contains(t.surface.as_str()))
             .collect();
 
@@ -151,20 +160,22 @@ impl Haqumei {
 
             if MULTI_READ_KANJI_LIST.contains(node_orig.as_str())
                 && let Some(candidate) = unidic_iter.peek()
-                && candidate.range_char.start == current_char_pos && candidate.surface == *node_orig {
-                    let correct_yomi_token = unidic_iter.next().unwrap();
+                && candidate.range_char.start == current_char_pos
+                && candidate.surface == *node_orig
+            {
+                let correct_yomi_token = unidic_iter.next().unwrap();
 
-                    if *node_orig == "何" {
-                        let is_read_nan = self.predict_is_nan(next_node_feature);
-                        let yomi = if is_read_nan { "ナン" } else { "ナニ" };
-                        pron_to_set = Some(yomi.to_string());
-                        read_to_set = Some(yomi.to_string());
-                    } else {
-                        let reading = correct_yomi_token.pron();
-                        pron_to_set = Some(reading.to_string());
-                        read_to_set = Some(reading.to_string());
-                    }
+                if *node_orig == "何" {
+                    let is_read_nan = self.predict_is_nan(next_node_feature);
+                    let yomi = if is_read_nan { "ナン" } else { "ナニ" };
+                    pron_to_set = Some(yomi.to_string());
+                    read_to_set = Some(yomi.to_string());
+                } else {
+                    let reading = correct_yomi_token.pron();
+                    pron_to_set = Some(reading.to_string());
+                    read_to_set = Some(reading.to_string());
                 }
+            }
             if let Some(pron) = pron_to_set {
                 njd_features[i].pron = pron;
             }
@@ -249,9 +260,10 @@ pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
                     .chars()
                     .nth((acc - 1) as usize)
                     .or(pron_ref.chars().next())
-                    .is_some_and(|nuc_pron| INAPPROPRIATE_FOR_NUCLEAR_CHARS.contains(&nuc_pron)) {
-                        njd_features[head_index].acc = njd_features[head_index].acc.saturating_sub(1);
-                    }
+                    .is_some_and(|nuc_pron| INAPPROPRIATE_FOR_NUCLEAR_CHARS.contains(&nuc_pron))
+                {
+                    njd_features[head_index].acc = njd_features[head_index].acc.saturating_sub(1);
+                }
 
                 acc = -1;
             } else {
@@ -260,7 +272,6 @@ pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
         }
     }
 }
-
 
 /// 品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
 ///   書きます → か[きま]す, 参ります → ま[いりま]す
@@ -473,7 +484,6 @@ pub fn process_odori_features(
                 }
             });
             i = end;
-
         } else if is_odoriji(&orig) {
             // 一の字点（ゝ、ゞ、ヽ、ヾ）の処理
             if i > 0 {
@@ -578,13 +588,25 @@ fn apply_odoriji_logic(
 
     if ['ゝ', 'ヽ'].contains(&odori_char) {
         // 清音化
-        odori_feature.read = TO_SEION.get(target_read).unwrap_or(&target_read.as_str()).to_string();
-        odori_feature.pron = TO_SEION.get(target_pron).unwrap_or(&target_pron.as_str()).to_string();
+        odori_feature.read = TO_SEION
+            .get(target_read)
+            .unwrap_or(&target_read.as_str())
+            .to_string();
+        odori_feature.pron = TO_SEION
+            .get(target_pron)
+            .unwrap_or(&target_pron.as_str())
+            .to_string();
         odori_feature.mora_size = mora_val;
     } else if ['ゞ', 'ヾ'].contains(&odori_char) {
         // 濁音化
-        odori_feature.read = TO_DAKUON.get(target_read).unwrap_or(&target_read.as_str()).to_string();
-        odori_feature.pron = TO_DAKUON.get(target_pron).unwrap_or(&target_pron.as_str()).to_string();
+        odori_feature.read = TO_DAKUON
+            .get(target_read)
+            .unwrap_or(&target_read.as_str())
+            .to_string();
+        odori_feature.pron = TO_DAKUON
+            .get(target_pron)
+            .unwrap_or(&target_pron.as_str())
+            .to_string();
         odori_feature.mora_size = mora_val;
     }
 
@@ -598,7 +620,8 @@ fn apply_odoriji_logic(
     }
 }
 
-static SMALL_KANA: LazyLock<HashSet<char>> = LazyLock::new(|| ['ャ', 'ュ', 'ョ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ'].into());
+static SMALL_KANA: LazyLock<HashSet<char>> =
+    LazyLock::new(|| ['ャ', 'ュ', 'ョ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ'].into());
 
 /// 文字列をモーラ単位（小書き文字を前の文字に結合）で分割
 #[inline(always)]

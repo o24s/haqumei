@@ -70,61 +70,119 @@ f[28]: lemma_id
 
 impl UnidicFeature {
     #[track_caller]
-    pub fn pos1(&self) -> &str { &self.feature[self.feature_ranges[0].clone()] }
+    pub fn pos1(&self) -> &str {
+        &self.feature[self.feature_ranges[0].clone()]
+    }
     #[track_caller]
-    pub fn pos2(&self) -> &str { &self.feature[self.feature_ranges[1].clone()] }
+    pub fn pos2(&self) -> &str {
+        &self.feature[self.feature_ranges[1].clone()]
+    }
     #[track_caller]
-    pub fn pos3(&self) -> &str { &self.feature[self.feature_ranges[2].clone()] }
+    pub fn pos3(&self) -> &str {
+        &self.feature[self.feature_ranges[2].clone()]
+    }
     #[track_caller]
-    pub fn pos4(&self) -> &str { &self.feature[self.feature_ranges[3].clone()] }
+    pub fn pos4(&self) -> &str {
+        &self.feature[self.feature_ranges[3].clone()]
+    }
     #[track_caller]
-    pub fn ctype(&self) -> &str { &self.feature[self.feature_ranges[4].clone()] }
+    pub fn ctype(&self) -> &str {
+        &self.feature[self.feature_ranges[4].clone()]
+    }
     #[track_caller]
-    pub fn cform(&self) -> &str { &self.feature[self.feature_ranges[5].clone()] }
+    pub fn cform(&self) -> &str {
+        &self.feature[self.feature_ranges[5].clone()]
+    }
     #[track_caller]
-    pub fn lform(&self) -> &str { &self.feature[self.feature_ranges[6].clone()] }
+    pub fn lform(&self) -> &str {
+        &self.feature[self.feature_ranges[6].clone()]
+    }
     #[track_caller]
-    pub fn lemma(&self) -> &str { &self.feature[self.feature_ranges[7].clone()] }
+    pub fn lemma(&self) -> &str {
+        &self.feature[self.feature_ranges[7].clone()]
+    }
     #[track_caller]
-    pub fn orth(&self) -> &str { &self.feature[self.feature_ranges[8].clone()] }
+    pub fn orth(&self) -> &str {
+        &self.feature[self.feature_ranges[8].clone()]
+    }
     #[track_caller]
-    pub fn pron(&self) -> &str { &self.feature[self.feature_ranges[9].clone()] }
+    pub fn pron(&self) -> &str {
+        &self.feature[self.feature_ranges[9].clone()]
+    }
     #[track_caller]
-    pub fn orth_base(&self) -> &str { &self.feature[self.feature_ranges[10].clone()] }
+    pub fn orth_base(&self) -> &str {
+        &self.feature[self.feature_ranges[10].clone()]
+    }
     #[track_caller]
-    pub fn pron_base(&self) -> &str { &self.feature[self.feature_ranges[11].clone()] }
+    pub fn pron_base(&self) -> &str {
+        &self.feature[self.feature_ranges[11].clone()]
+    }
     #[track_caller]
-    pub fn goshu(&self) -> &str { &self.feature[self.feature_ranges[12].clone()] }
+    pub fn goshu(&self) -> &str {
+        &self.feature[self.feature_ranges[12].clone()]
+    }
     #[track_caller]
-    pub fn i_type(&self) -> &str { &self.feature[self.feature_ranges[13].clone()] }
+    pub fn i_type(&self) -> &str {
+        &self.feature[self.feature_ranges[13].clone()]
+    }
     #[track_caller]
-    pub fn i_form(&self) -> &str { &self.feature[self.feature_ranges[14].clone()] }
+    pub fn i_form(&self) -> &str {
+        &self.feature[self.feature_ranges[14].clone()]
+    }
     #[track_caller]
-    pub fn f_type(&self) -> &str { &self.feature[self.feature_ranges[15].clone()] }
+    pub fn f_type(&self) -> &str {
+        &self.feature[self.feature_ranges[15].clone()]
+    }
     #[track_caller]
-    pub fn f_form(&self) -> &str { &self.feature[self.feature_ranges[16].clone()] }
+    pub fn f_form(&self) -> &str {
+        &self.feature[self.feature_ranges[16].clone()]
+    }
     #[track_caller]
-    pub fn i_con_type(&self) -> &str { &self.feature[self.feature_ranges[17].clone()] }
+    pub fn i_con_type(&self) -> &str {
+        &self.feature[self.feature_ranges[17].clone()]
+    }
     #[track_caller]
-    pub fn f_con_type(&self) -> &str { &self.feature[self.feature_ranges[18].clone()] }
+    pub fn f_con_type(&self) -> &str {
+        &self.feature[self.feature_ranges[18].clone()]
+    }
     #[track_caller]
-    pub fn r#type(&self) -> &str { &self.feature[self.feature_ranges[19].clone()] }
+    pub fn r#type(&self) -> &str {
+        &self.feature[self.feature_ranges[19].clone()]
+    }
     #[track_caller]
-    pub fn kana(&self) -> &str { &self.feature[self.feature_ranges[20].clone()] }
+    pub fn kana(&self) -> &str {
+        &self.feature[self.feature_ranges[20].clone()]
+    }
     #[track_caller]
-    pub fn kana_base(&self) -> &str { &self.feature[self.feature_ranges[21].clone()] }
+    pub fn kana_base(&self) -> &str {
+        &self.feature[self.feature_ranges[21].clone()]
+    }
     #[track_caller]
-    pub fn form(&self) -> &str { &self.feature[self.feature_ranges[22].clone()] }
+    pub fn form(&self) -> &str {
+        &self.feature[self.feature_ranges[22].clone()]
+    }
     #[track_caller]
-    pub fn form_base(&self) -> &str { &self.feature[self.feature_ranges[23].clone()] }
+    pub fn form_base(&self) -> &str {
+        &self.feature[self.feature_ranges[23].clone()]
+    }
     #[track_caller]
-    pub fn a_type(&self) -> &str { &self.feature[self.feature_ranges[24].clone()] }
+    pub fn a_type(&self) -> &str {
+        &self.feature[self.feature_ranges[24].clone()]
+    }
     #[track_caller]
-    pub fn a_con_type(&self) -> &str { &self.feature[self.feature_ranges[25].clone()] }
+    pub fn a_con_type(&self) -> &str {
+        &self.feature[self.feature_ranges[25].clone()]
+    }
     #[track_caller]
-    pub fn a_mod_type(&self) -> &str { &self.feature[self.feature_ranges[26].clone()] }
+    pub fn a_mod_type(&self) -> &str {
+        &self.feature[self.feature_ranges[26].clone()]
+    }
     #[track_caller]
-    pub fn lid(&self) -> &str { &self.feature[self.feature_ranges[27].clone()] }
+    pub fn lid(&self) -> &str {
+        &self.feature[self.feature_ranges[27].clone()]
+    }
     #[track_caller]
-    pub fn lemma_id(&self) -> &str { &self.feature[self.feature_ranges[28].clone()] }
+    pub fn lemma_id(&self) -> &str {
+        &self.feature[self.feature_ranges[28].clone()]
+    }
 }

@@ -1,4 +1,9 @@
-use std::{ffi::{CString, NulError}, fs, io, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    ffi::{CString, NulError},
+    fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use libc::{c_char, c_int};
 use thiserror::Error;
@@ -17,11 +22,9 @@ impl Dictionary {
         user_dict: Option<P>,
     ) -> Result<Self, HaqumeiError> {
         let path_to_string = |p: &Path| -> Result<String, HaqumeiError> {
-            p.to_str()
-                .map(|s| s.to_string())
-                .ok_or_else(|| {
-                    HaqumeiError::InvalidDictionaryPath(p.to_string_lossy().into_owned())
-                })
+            p.to_str().map(|s| s.to_string()).ok_or_else(|| {
+                HaqumeiError::InvalidDictionaryPath(p.to_string_lossy().into_owned())
+            })
         };
 
         let dict_dir_str = path_to_string(dict_dir.as_ref())?;
@@ -31,7 +34,7 @@ impl Dictionary {
         let model = MecabModel::new(&dict_dir_str, user_dict_str.as_deref())?;
         Ok(Self {
             model: Arc::new(model),
-            dict_dir: dict_dir.as_ref().to_path_buf()
+            dict_dir: dict_dir.as_ref().to_path_buf(),
         })
     }
 
@@ -43,10 +46,16 @@ impl Dictionary {
         use sha2::{Digest, Sha256};
         use std::{fs::File, io::Read};
 
-        const DICTIONARY_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/dictionary.tar.zst"));
-        const EXPECTED_DICT_HASH: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/compiled_dictionary.sha256"));
+        const DICTIONARY_BYTES: &[u8] =
+            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/dictionary.tar.zst"));
+        const EXPECTED_DICT_HASH: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/compiled_dictionary.sha256"
+        ));
 
-        let cache_dir = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?.join("haqumei");
+        let cache_dir = dirs::cache_dir()
+            .ok_or(HaqumeiError::CacheDirectoryNotFound)?
+            .join("haqumei");
         let dict_path = cache_dir.join("dict");
 
         let hash_files_full = |paths: &Vec<PathBuf>| -> Result<_, HaqumeiError> {
@@ -96,9 +105,10 @@ impl Dictionary {
                 if let Ok(entries) = fs::read_dir(&meta_cache_dir) {
                     for entry in entries.flatten() {
                         if let Ok(file_type) = entry.file_type()
-                            && file_type.is_file() {
-                                let _ = fs::remove_file(entry.path());
-                            }
+                            && file_type.is_file()
+                        {
+                            let _ = fs::remove_file(entry.path());
+                        }
                     }
                 }
 
@@ -134,13 +144,11 @@ impl Dictionary {
                     actual: actual_hash,
                 });
             }
-
         }
 
         Self::from_path(dict_path, None)
     }
 }
-
 
 #[derive(Debug, Error)]
 pub enum DictCompilerError {
@@ -293,34 +301,53 @@ impl MecabDictIndexCompiler {
             .map_err(|e| DictCompilerError::DirectoryCreationFailed(out_dir.to_path_buf(), e))?;
         let out_dir = &self.out_dir.canonicalize()?;
 
-        for entry in fs::read_dir(out_dir).map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))? {
-            let entry = entry.map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))?;
+        for entry in fs::read_dir(out_dir)
+            .map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))?
+        {
+            let entry =
+                entry.map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))?;
             let path = entry.path();
 
             if path.is_file()
                 && let Some(ext) = path.extension().and_then(|s| s.to_str())
-                && (ext == "dic" || ext == "bin") {
-                    fs::remove_file(&path).map_err(|e| DictCompilerError::CleanupFailed(path.clone(), e))?;
-                }
+                && (ext == "dic" || ext == "bin")
+            {
+                fs::remove_file(&path)
+                    .map_err(|e| DictCompilerError::CleanupFailed(path.clone(), e))?;
+            }
         }
 
         c_string_args.push(CString::new("mecab-dict-index").unwrap());
 
-        fn add_path_arg(c_string_args: &mut Vec<CString>, opt: &str, path: &Path) -> Result<(), DictCompilerError> {
+        fn add_path_arg(
+            c_string_args: &mut Vec<CString>,
+            opt: &str,
+            path: &Path,
+        ) -> Result<(), DictCompilerError> {
             c_string_args.push(CString::new(opt)?);
-            let path_str = path.to_str().ok_or_else(|| DictCompilerError::PathNotUtf8(path.to_path_buf()))?;
+            let path_str = path
+                .to_str()
+                .ok_or_else(|| DictCompilerError::PathNotUtf8(path.to_path_buf()))?;
             c_string_args.push(CString::new(path_str)?);
             Ok(())
         }
 
-        fn add_optional_path_arg(c_string_args: &mut Vec<CString>, opt: &str, path: &Option<PathBuf>) -> Result<(), DictCompilerError> {
+        fn add_optional_path_arg(
+            c_string_args: &mut Vec<CString>,
+            opt: &str,
+            path: &Option<PathBuf>,
+        ) -> Result<(), DictCompilerError> {
             if let Some(p) = path {
                 add_path_arg(c_string_args, opt, p)?;
             }
             Ok(())
         }
 
-        fn add_str_arg(c_string_args: &mut Vec<CString>, opt: &str, val: &Option<String>) -> Result<(), DictCompilerError> {
+        fn add_str_arg(
+            c_string_args: &mut Vec<CString>,
+            opt: &str,
+            val: &Option<String>,
+        ) -> Result<(), DictCompilerError> {
             if let Some(s) = val {
                 c_string_args.push(CString::new(opt)?);
                 c_string_args.push(CString::new(s.as_str())?);
@@ -328,7 +355,11 @@ impl MecabDictIndexCompiler {
             Ok(())
         }
 
-        fn add_flag_arg(c_string_args: &mut Vec<CString>, opt: &str, flag: bool) -> Result<(), DictCompilerError> {
+        fn add_flag_arg(
+            c_string_args: &mut Vec<CString>,
+            opt: &str,
+            flag: bool,
+        ) -> Result<(), DictCompilerError> {
             if flag {
                 c_string_args.push(CString::new(opt)?);
             }
@@ -350,17 +381,39 @@ impl MecabDictIndexCompiler {
         add_path_arg(&mut c_string_args, "-o", out_dir)?;
         add_optional_path_arg(&mut c_string_args, "-m", &self.model_in)?;
         add_optional_path_arg(&mut c_string_args, "-u", &self.userdic_out)?;
-        add_flag_arg(&mut c_string_args, "--build-unknown", self.build_unknown || should_build_all)?;
-        add_flag_arg(&mut c_string_args, "--build-model", self.build_model || should_build_all)?;
-        add_flag_arg(&mut c_string_args, "--build-charcategory", self.build_charcategory || should_build_all)?;
-        add_flag_arg(&mut c_string_args, "--build-sysdic", self.build_sysdic || should_build_all)?;
-        add_flag_arg(&mut c_string_args, "--build-matrix", self.build_matrix || should_build_all)?;
+        add_flag_arg(
+            &mut c_string_args,
+            "--build-unknown",
+            self.build_unknown || should_build_all,
+        )?;
+        add_flag_arg(
+            &mut c_string_args,
+            "--build-model",
+            self.build_model || should_build_all,
+        )?;
+        add_flag_arg(
+            &mut c_string_args,
+            "--build-charcategory",
+            self.build_charcategory || should_build_all,
+        )?;
+        add_flag_arg(
+            &mut c_string_args,
+            "--build-sysdic",
+            self.build_sysdic || should_build_all,
+        )?;
+        add_flag_arg(
+            &mut c_string_args,
+            "--build-matrix",
+            self.build_matrix || should_build_all,
+        )?;
         add_str_arg(&mut c_string_args, "-c", &self.charset)?;
         add_str_arg(&mut c_string_args, "-f", &self.dictionary_charset)?;
         add_flag_arg(&mut c_string_args, "-q", self.quiet)?;
 
         for file in &self.input_files {
-            let file_str = file.to_str().ok_or_else(|| DictCompilerError::PathNotUtf8(file.clone()))?;
+            let file_str = file
+                .to_str()
+                .ok_or_else(|| DictCompilerError::PathNotUtf8(file.clone()))?;
             c_string_args.push(CString::new(file_str)?);
         }
 

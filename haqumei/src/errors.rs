@@ -1,4 +1,8 @@
-use std::{ffi::NulError, io, path::{PathBuf, StripPrefixError}};
+use std::{
+    ffi::NulError,
+    io,
+    path::{PathBuf, StripPrefixError},
+};
 
 use thiserror::Error;
 
@@ -13,11 +17,11 @@ pub enum HaqumeiError {
     #[error("Failed to load MeCab dictionary.")]
     MecabLoadError,
 
-    #[error("Input data for FFI contains an interior NUL byte at position {pos}: `{}`", String::from_utf8_lossy(bytes))]
-    InteriorNulError {
-        bytes: Vec<u8>,
-        pos: usize,
-    },
+    #[error(
+        "Input data for FFI contains an interior NUL byte at position {pos}: `{}`",
+        String::from_utf8_lossy(bytes)
+    )]
+    InteriorNulError { bytes: Vec<u8>, pos: usize },
 
     #[error("Cache directory I/O error at path '{path}'")]
     CacheIo {
@@ -32,7 +36,9 @@ pub enum HaqumeiError {
     #[error("text2mecab conversion failed: {0}")]
     Text2MecabError(String),
 
-    #[error("Embedded dictionary verification failed at '{path}': checksum mismatch.\n  Expected: {expected}\n  Actual:   {actual}")]
+    #[error(
+        "Embedded dictionary verification failed at '{path}': checksum mismatch.\n  Expected: {expected}\n  Actual:   {actual}"
+    )]
     DictionaryVerification {
         path: PathBuf,
         expected: String,
@@ -67,6 +73,9 @@ pub enum HaqumeiError {
 impl From<NulError> for HaqumeiError {
     fn from(value: NulError) -> Self {
         let pos = value.nul_position();
-        HaqumeiError::InteriorNulError { bytes: value.into_vec(), pos }
+        HaqumeiError::InteriorNulError {
+            bytes: value.into_vec(),
+            pos,
+        }
     }
 }

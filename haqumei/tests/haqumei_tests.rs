@@ -1,11 +1,17 @@
 #[cfg(test)]
 mod tests {
-    use std::{fs, panic::{self, AssertUnwindSafe}, path::{Path, PathBuf}, sync::LazyLock};
+    use std::{
+        fs,
+        panic::{self, AssertUnwindSafe},
+        path::{Path, PathBuf},
+        sync::LazyLock,
+    };
 
     use haqumei::{Haqumei, ParallelJTalk, errors::HaqumeiError};
 
     static MANIFEST_DIR: LazyLock<&Path> = LazyLock::new(|| Path::new(env!("CARGO_MANIFEST_DIR")));
-    static WAGANEKO_PATH: LazyLock<PathBuf> = LazyLock::new(|| MANIFEST_DIR.join("../resources/waganeko.txt"));
+    static WAGANEKO_PATH: LazyLock<PathBuf> =
+        LazyLock::new(|| MANIFEST_DIR.join("../resources/waganeko.txt"));
 
     #[test]
     fn test_g2p_mapping_detailed_full() {
@@ -64,20 +70,22 @@ mod tests {
 
         match result.unwrap_err() {
             HaqumeiError::InteriorNulError { bytes, pos } => {
-                assert_eq!(bytes, vec![
-                    227, 129, 147,   // こ
-                    227, 130, 147,   // ん
-                    0,               // \0 (NUL)
-                    227, 129, 171,   // に
-                    227, 129, 161,   // ち
-                    227, 129, 175,   // は
-                ]);
+                assert_eq!(
+                    bytes,
+                    vec![
+                        227, 129, 147, // こ
+                        227, 130, 147, // ん
+                        0,   // \0 (NUL)
+                        227, 129, 171, // に
+                        227, 129, 161, // ち
+                        227, 129, 175, // は
+                    ]
+                );
 
                 assert_eq!(pos, 6)
             }
             _ => unreachable!(),
         }
-
     }
 
     #[test]
@@ -134,7 +142,8 @@ mod tests {
 
         let mapping = haqumei.g2p_mapping_detailed(text).unwrap();
 
-        let pauses: Vec<_> = mapping.iter()
+        let pauses: Vec<_> = mapping
+            .iter()
             .filter(|m| m.phonemes.contains(&"pau".to_string()))
             .collect();
 
