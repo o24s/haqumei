@@ -80,8 +80,44 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
 #[allow(unused)]
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
-    tokenizer: vibrato_rkyv::Tokenizer,
+    tokenizer: Option<vibrato_rkyv::Tokenizer>,
     data_dir: PathBuf,
+    options: HaqumeiOptions,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct HaqumeiOptions {
+    /// - フィラーが acc > mora_size のときに、平版型 (acc = 0) にする
+    /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
+    pub modify_filler_accent: bool,
+
+    /// Unidic と Nani Predictor を使って、漢字の読みを修正する
+    pub modify_kanji_yomi: bool,
+
+    /// 長母音、重母音、撥音がアクセント核に来た場合に、
+    /// ひとつ前のモーラにアクセント核がズレるルールを適用する
+    pub retreat_acc_nuc: bool,
+
+    /// 品詞「特殊・マス」の直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる
+    ///
+    ///   書きます → か\[きま\]す, 参ります → ま\[いりま\]す
+    ///   書いております → \[か\]いております
+    pub modify_acc_after_chaining: bool,
+
+    /// 踊り字 (e.g., 々, ヽ, ヾ) の展開を有効にする
+    pub process_odoriji: bool,
+}
+
+impl Default for HaqumeiOptions {
+    fn default() -> Self {
+        Self {
+            modify_filler_accent: true,
+            modify_kanji_yomi: false,
+            retreat_acc_nuc: true,
+            modify_acc_after_chaining: true,
+            process_odoriji: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,26 +141,38 @@ pub struct WordPhonemeDetail {
 
 impl Haqumei {
     pub fn new() -> Result<Self, HaqumeiError> {
-        Self::from_open_jtalk(OpenJTalk::new()?)
+        Self::from_open_jtalk(OpenJTalk::new()?, HaqumeiOptions::default())
+    }
+
+    pub fn with_options(options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
+        Self::from_open_jtalk(OpenJTalk::new()?, options)
     }
 
     #[inline]
-    pub fn from_open_jtalk(open_jtalk: OpenJTalk) -> Result<Self, HaqumeiError> {
+    pub fn from_open_jtalk(
+        open_jtalk: OpenJTalk,
+        options: HaqumeiOptions,
+    ) -> Result<Self, HaqumeiError> {
         let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
             Err(HaqumeiError::DataDirectoryNotFound)?
         };
 
-        let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
-            PresetDictionaryKind::UnidicCsj,
-            &data_dir,
-        )?;
+        let tokenizer = if options.modify_kanji_yomi {
+            let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
+                PresetDictionaryKind::UnidicCsj,
+                &data_dir,
+            )?;
 
-        let tokenizer = vibrato_rkyv::Tokenizer::new(vibrato_dict);
+            Some(vibrato_rkyv::Tokenizer::new(vibrato_dict))
+        } else {
+            None
+        };
 
         Ok(Haqumei {
             open_jtalk,
             data_dir,
             tokenizer,
+            options,
         })
     }
 
@@ -167,25 +215,29 @@ impl Haqumei {
     /// println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺"));
     /// ```
     pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let (njd_features, morphs) = {
-            let (res, _) = rayon::join(
-                || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
-                    self.open_jtalk.ensure_dictionary_is_latest()?;
-                    let morphs = self.open_jtalk.run_mecab_detailed(text.as_ref())?;
-                    let valid_features_str: Vec<String> = morphs
-                        .iter()
-                        .filter(|m| !m.is_ignored)
-                        .map(|m| m.feature.clone())
-                        .collect();
-                    let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
+        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+            self.open_jtalk.ensure_dictionary_is_latest()?;
+            let morphs = self.open_jtalk.run_mecab_detailed(text.as_ref())?;
+            let valid_features_str: Vec<String> = morphs
+                .iter()
+                .filter(|m| !m.is_ignored)
+                .map(|m| m.feature.clone())
+                .collect();
+            let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
 
-                    Ok((njd_features, morphs))
-                },
-                || {
-                    let mut worker = self.tokenizer.new_worker();
+            Ok((njd_features, morphs))
+        };
+
+        let (njd_features, morphs) = {
+            let res = if let Some(tokenizer) = &self.tokenizer {
+                rayon::join(&mut run_mecab, || {
+                    let mut worker = tokenizer.new_worker();
                     vibrato_analysis(&mut worker, text);
-                },
-            );
+                })
+                .0
+            } else {
+                run_mecab()
+            };
 
             let (njd_features, morphs) = res?;
             (self.apply_postprocessing(text, njd_features)?, morphs)
@@ -382,25 +434,29 @@ impl Haqumei {
         &mut self,
         text: &str,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
+            let morphs = self.open_jtalk.run_mecab_detailed(text)?;
+
+            let valid_features_str: Vec<String> = morphs
+                .iter()
+                .filter(|m| !m.is_ignored)
+                .map(|m| m.feature.clone())
+                .collect();
+
+            let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
+            Ok((njd_features, morphs, valid_features_str.is_empty()))
+        };
+
         let (njd_features, morphs) = {
-            let (res, _) = rayon::join(
-                || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
-                    let morphs = self.open_jtalk.run_mecab_detailed(text)?;
-
-                    let valid_features_str: Vec<String> = morphs
-                        .iter()
-                        .filter(|m| !m.is_ignored)
-                        .map(|m| m.feature.clone())
-                        .collect();
-
-                    let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
-                    Ok((njd_features, morphs, valid_features_str.is_empty()))
-                },
-                || {
-                    let mut worker = self.tokenizer.new_worker();
+            let res = if let Some(tokenizer) = &self.tokenizer {
+                rayon::join(&mut run_mecab, || {
+                    let mut worker = tokenizer.new_worker();
                     vibrato_analysis(&mut worker, text);
-                },
-            );
+                })
+                .0
+            } else {
+                run_mecab()
+            };
 
             let (njd_features, morphs, is_valid_features_empty) = res?;
 
@@ -495,13 +551,19 @@ impl Haqumei {
     }
 
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        let (njd_features, _) = rayon::join(
-            || self.open_jtalk.run_frontend(text),
-            || {
-                let mut worker = self.tokenizer.new_worker();
-                vibrato_analysis(&mut worker, text);
-            },
-        );
+        let njd_features = if let Some(tokenizer) = &self.tokenizer {
+            rayon::join(
+                || self.open_jtalk.run_frontend(text),
+                || {
+                    let mut worker = tokenizer.new_worker();
+                    vibrato_analysis(&mut worker, text);
+                },
+            )
+            .0
+        } else {
+            self.open_jtalk.run_frontend(text)
+        };
+
         self.apply_postprocessing(text, njd_features?)
     }
 
@@ -515,11 +577,24 @@ impl Haqumei {
         text: &str,
         mut njd_features: Vec<NjdFeature>,
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        modify_filler_accent(&mut njd_features);
-        self.modify_kanji_yomi(text, &mut njd_features);
-        retreat_acc_nuc(&mut njd_features);
-        modify_acc_after_chaining(&mut njd_features);
-        process_odori_features(&mut njd_features, &mut self.open_jtalk)?;
+        let options = self.options;
+
+        if options.modify_filler_accent {
+            modify_filler_accent(&mut njd_features);
+        }
+        if options.modify_kanji_yomi {
+            self.modify_kanji_yomi(text, &mut njd_features);
+        }
+        if options.retreat_acc_nuc {
+            retreat_acc_nuc(&mut njd_features);
+        }
+        if options.modify_acc_after_chaining {
+            modify_acc_after_chaining(&mut njd_features);
+        }
+        if options.process_odoriji {
+            process_odori_features(&mut njd_features, &mut self.open_jtalk)?;
+        }
+
         Ok(njd_features)
     }
 

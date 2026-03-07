@@ -105,6 +105,9 @@ pub(crate) fn compute_metadata_key(meta: &Metadata) -> [u8; 32] {
     hasher.finalize().into()
 }
 
+/// フィラーが acc > mora_size のときに、平版型 (acc = 0) にし、
+/// その直後の形態素が名詞だったとき、
+/// その前のフィラーに結合しない (chain_flag = 0) ようにする
 pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
     let mut is_after_filler = false;
 
@@ -128,7 +131,7 @@ impl Haqumei {
         let tokens: Vec<UnidicFeature> = VIBRATO_CACHE
             .get(text)
             .unwrap_or({
-                let mut worker = self.tokenizer.new_worker();
+                let mut worker = self.tokenizer.as_ref().unwrap().new_worker();
                 vibrato_analysis(&mut worker, text)
             })
             .into_iter()

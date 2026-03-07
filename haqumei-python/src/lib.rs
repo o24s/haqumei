@@ -1,7 +1,5 @@
 use ::haqumei::{
-    Haqumei, NjdFeature, OpenJTalk, ParallelJTalk,
-    WordPhonemeDetail, WordPhonemeMap,
-    open_jtalk::Dictionary,
+    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, ParallelJTalk, WordPhonemeDetail, WordPhonemeMap, open_jtalk::Dictionary
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -87,14 +85,12 @@ impl PyWordPhonemeMap {
     fn __repr__(&self) -> String {
         format!(
             "PyWordPhonemeMap(word={:?}, phonemes={:?})",
-            self.word,
-            self.phonemes,
+            self.word, self.phonemes,
         )
     }
 
     fn __eq__(&self, other: &Self) -> bool {
-        self.word == other.word
-            && self.phonemes == other.phonemes
+        self.word == other.word && self.phonemes == other.phonemes
     }
 }
 
@@ -127,10 +123,7 @@ impl PyWordPhonemeDetail {
     fn __repr__(&self) -> String {
         format!(
             "WordPhonemeDetail(word={:?}, phonemes={:?}, is_unknown={}, is_ignored={})",
-            self.word,
-            self.phonemes,
-            self.is_unknown,
-            self.is_ignored,
+            self.word, self.phonemes, self.is_unknown, self.is_ignored,
         )
     }
 
@@ -199,7 +192,11 @@ impl PyOpenJTalk {
     }
 
     fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner.lock().unwrap().g2p_detailed(text).map_err(to_py_err)
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p_detailed(text)
+            .map_err(to_py_err)
     }
 
     fn g2p_kana(&self, text: &str) -> PyResult<String> {
@@ -241,8 +238,29 @@ struct PyHaqumei {
 #[pymethods]
 impl PyHaqumei {
     #[new]
-    fn new() -> PyResult<Self> {
-        let inner = Haqumei::new().map_err(to_py_err)?;
+    #[pyo3(signature = (
+        modify_filler_accent = true,
+        modify_kanji_yomi = false,
+        retreat_acc_nuc = true,
+        modify_acc_after_chaining = true,
+        process_odoriji = true
+    ))]
+    fn new(
+        modify_filler_accent: bool,
+        modify_kanji_yomi: bool,
+        retreat_acc_nuc: bool,
+        modify_acc_after_chaining: bool,
+        process_odoriji: bool,
+    ) -> PyResult<Self> {
+        let options = HaqumeiOptions {
+            modify_filler_accent,
+            modify_kanji_yomi,
+            retreat_acc_nuc,
+            modify_acc_after_chaining,
+            process_odoriji,
+        };
+
+        let inner = Haqumei::with_options(options).map_err(to_py_err)?;
         Ok(Self {
             inner: Mutex::new(inner),
         })
@@ -253,7 +271,11 @@ impl PyHaqumei {
     }
 
     fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner.lock().unwrap().g2p_detailed(text).map_err(to_py_err)
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p_detailed(text)
+            .map_err(to_py_err)
     }
 
     fn g2p_kana(&self, text: &str) -> PyResult<String> {
@@ -333,12 +355,7 @@ impl PyParallelJTalk {
 
         Ok(results
             .into_iter()
-            .map(|inner_vec| {
-                inner_vec
-                    .into_iter()
-                    .map(PyWordPhonemeMap::from)
-                    .collect()
-            })
+            .map(|inner_vec| inner_vec.into_iter().map(PyWordPhonemeMap::from).collect())
             .collect())
     }
 
@@ -360,11 +377,7 @@ impl PyParallelJTalk {
             .collect())
     }
 
-    fn run_frontend(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyNjdFeature>>> {
+    fn run_frontend(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<PyNjdFeature>>> {
         let results = py.detach(|| self.inner.run_frontend(&texts).map_err(to_py_err))?;
 
         Ok(results

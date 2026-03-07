@@ -90,9 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let redirect_header_path = Path::new("redirect.h");
     let redirect_flag = format!("{}", redirect_header_path.display());
 
-    cc::Build::new()
-        .file("redirect.c")
-        .compile("redirect_impl");
+    cc::Build::new().file("redirect.c").compile("redirect_impl");
 
     let mut build = cc::Build::new();
     build.cpp(true);

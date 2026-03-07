@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use haqumei::Haqumei;
+    use haqumei::{Haqumei, HaqumeiOptions};
 
     #[test]
     fn test_njd_features() {
@@ -80,7 +80,12 @@ mod tests {
 
     #[test]
     fn test_g2p_nani_model() {
-        let mut haqumei = Haqumei::new().unwrap();
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            modify_kanji_yomi: true,
+            ..Default::default()
+        })
+        .unwrap();
+
         let cases = vec![
             (
                 "何か問題があれば何でも言ってください、どんな些細なことでも何とかします。",
