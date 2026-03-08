@@ -37,6 +37,13 @@ unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: lib
     }
 }
 
+#[cfg(target_os = "windows")]
+#[unsafe(no_mangle)]
+pub extern "C" fn __std_find_first_of_trivial_pos_1() {}
+#[cfg(target_os = "windows")]
+#[unsafe(no_mangle)]
+pub extern "C" fn __std_find_first_of_trivial_pos_2() {}
+
 mod data;
 pub mod errors;
 pub mod features;

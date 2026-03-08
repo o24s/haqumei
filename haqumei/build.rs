@@ -14,9 +14,38 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir = env::var("OUT_DIR")?;
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);
+    let target = std::env::var("TARGET").unwrap();
 
     println!("cargo:rerun-if-changed={}", src_dir.display());
     println!("cargo:rerun-if-changed=wrapper.h");
+
+    if target.contains("msvc") && std::env::var("LIBCLANG_PATH").is_err() {
+        let error_msg = r#"
+==============================================================================
+ERROR: libclang.dll not found / libclang.dll が見つかりません。
+
+[EN] LLVM is required to build haqumei on Windows.
+- Install LLVM
+   > winget install LLVM.LLVM
+- Set `LIBCLANG_PATH` as an environment variable (e.g., C:\Program Files\LLVM\bin\libclang.dll)
+- Restart your terminal
+
+[JP] Windows で haqumei をビルドするには LLVM が必要です。
+
+- LLVMをインストールしてください:
+   > winget install LLVM.LLVM
+- `LIBCLANG_PATH` を環境変数に設定してください。 (e.g., C:\Program Files\LLVM\bin\libclang.dll)
+- インストール後、ターミナルを再起動してください。
+
+Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
+=============================================================================="#
+            .trim();
+
+        for line in error_msg.lines() {
+            println!("cargo:warning={}", line);
+        }
+        panic!("LIBCLANG_PATH is not set.");
+    }
 
     let mut defines = vec![
         // CMake: add_definitions(...), set(...)
@@ -224,9 +253,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let compiled_dict_hash_path = manifest_dir.join("compiled_dictionary.sha256");
 
     if dict_src_dir.is_file()
-        && let Some(parent) = manifest_dir.parent() {
-            dict_src_dir = parent.join("dictionary");
-        }
+        && let Some(parent) = manifest_dir.parent()
+    {
+        dict_src_dir = parent.join("dictionary");
+    }
 
     if !dict_src_dir.exists() {
         println!(
