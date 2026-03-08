@@ -89,6 +89,9 @@ pub struct HaqumeiOptions {
     /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
     pub modify_filler_accent: bool,
 
+    /// Nani Predictor を使って、「何」 の読みを修正する
+    pub predict_nani: bool,
+
     /// Unidic と Nani Predictor を使って、漢字の読みを修正する
     pub modify_kanji_yomi: bool,
 
@@ -110,6 +113,7 @@ impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
             modify_filler_accent: true,
+            predict_nani: false,
             modify_kanji_yomi: false,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
@@ -577,6 +581,9 @@ impl Haqumei {
 
         if options.modify_filler_accent {
             modify_filler_accent(&mut njd_features);
+        }
+        if options.predict_nani {
+            self.predict_nani_reading(&mut njd_features);
         }
         if options.modify_kanji_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);

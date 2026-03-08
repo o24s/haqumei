@@ -127,6 +127,19 @@ pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
 }
 
 impl Haqumei {
+    pub(crate) fn predict_nani_reading(&mut self, njd_features: &mut [NjdFeature]) {
+        for i in 0..njd_features.len() {
+            if njd_features[i].orig == "何" {
+                let next_node_feature = njd_features.get(i + 1);
+                let is_read_nan = self.predict_is_nan(next_node_feature);
+                let yomi = if is_read_nan { "ナン" } else { "ナニ" };
+
+                njd_features[i].pron = yomi.to_string();
+                njd_features[i].read = yomi.to_string();
+            }
+        }
+    }
+
     pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
         let tokens: Vec<UnidicFeature> = VIBRATO_CACHE
             .get(text)
@@ -144,11 +157,10 @@ impl Haqumei {
 
         let mut unidic_iter = tokens.into_iter().peekable();
         let mut current_char_pos = 0;
-        for i in 0..njd_features.len() {
-            let node_string = &njd_features[i].string;
-            let node_orig = &njd_features[i].orig;
+        for njd_feature in njd_features {
+            let node_string = &njd_feature.string;
+            let node_orig = &njd_feature.orig;
             let node_char_len = node_string.chars().count();
-            let next_node_feature = njd_features.get(i + 1);
 
             while let Some(candidate) = unidic_iter.peek() {
                 if candidate.range_char.end <= current_char_pos {
@@ -168,22 +180,15 @@ impl Haqumei {
             {
                 let correct_yomi_token = unidic_iter.next().unwrap();
 
-                if *node_orig == "何" {
-                    let is_read_nan = self.predict_is_nan(next_node_feature);
-                    let yomi = if is_read_nan { "ナン" } else { "ナニ" };
-                    pron_to_set = Some(yomi.to_string());
-                    read_to_set = Some(yomi.to_string());
-                } else {
-                    let reading = correct_yomi_token.pron();
-                    pron_to_set = Some(reading.to_string());
-                    read_to_set = Some(reading.to_string());
-                }
+                let reading = correct_yomi_token.pron();
+                pron_to_set = Some(reading.to_string());
+                read_to_set = Some(reading.to_string());
             }
             if let Some(pron) = pron_to_set {
-                njd_features[i].pron = pron;
+                njd_feature.pron = pron;
             }
             if let Some(read) = read_to_set {
-                njd_features[i].read = read;
+                njd_feature.read = read;
             }
 
             current_char_pos += node_char_len;

@@ -241,6 +241,7 @@ impl PyHaqumei {
     #[new]
     #[pyo3(signature = (
         modify_filler_accent = true,
+        predict_nani = false,
         modify_kanji_yomi = false,
         retreat_acc_nuc = true,
         modify_acc_after_chaining = true,
@@ -248,6 +249,7 @@ impl PyHaqumei {
     ))]
     fn new(
         modify_filler_accent: bool,
+        predict_nani: bool,
         modify_kanji_yomi: bool,
         retreat_acc_nuc: bool,
         modify_acc_after_chaining: bool,
@@ -255,6 +257,7 @@ impl PyHaqumei {
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             modify_filler_accent,
+            predict_nani,
             modify_kanji_yomi,
             retreat_acc_nuc,
             modify_acc_after_chaining,

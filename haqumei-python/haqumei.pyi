@@ -292,6 +292,7 @@ class Haqumei:
     def __init__(
         self,
         modify_filler_accent: bool = True,
+        predict_nani: bool = False,
         modify_kanji_yomi: bool = False,
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,

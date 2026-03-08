@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn test_g2p_nani_model() {
         let mut haqumei = Haqumei::with_options(HaqumeiOptions {
-            modify_kanji_yomi: true,
+            predict_nani: true,
             ..Default::default()
         })
         .unwrap();
