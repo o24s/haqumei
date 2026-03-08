@@ -289,7 +289,14 @@ class Haqumei:
     'ナニヲイッテモナンノモンダイモアリマセン。'
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        modify_filler_accent: bool = True,
+        modify_kanji_yomi: bool = False,
+        retreat_acc_nuc: bool = True,
+        modify_acc_after_chaining: bool = True,
+        process_odoriji: bool = True,
+    ) -> None:
         """新しい Haqumei インスタンスを初期化します。"""
         ...
 
@@ -404,6 +411,108 @@ class Haqumei:
 
         Returns:
             List[str]: フルコンテキストラベルのリスト。
+        """
+        ...
+
+    def g2p_batch(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストに対して `g2p` を実行します。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応する音素リストのリスト。
+        """
+        ...
+
+    def g2p_detailed_batch(self, texts: List[str]) -> List[List[str]]:
+        """すべてのトークンを保持する詳細な G2P 変換のバッチ処理。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応する詳細な音素リストのリスト。
+        """
+        ...
+
+    def g2p_kana_batch(self, texts: List[str]) -> List[str]:
+        """カタカナ変換のバッチ処理。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[str]: 各テキストに対応するカタカナ文字列のリスト。
+        """
+        ...
+
+    def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
+        """単語ごとに分割された音素リストのバッチ処理。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
+        """
+        ...
+
+    def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
+        """形態素ごとの音素マッピングのバッチ処理。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeMap]]: 各テキストに対応するマッピング情報のリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+        """形態素ごとの音素マッピング（詳細版）のバッチ処理。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeDetail]]: 各テキストに対応する詳細なマッピング情報のリスト。
+        """
+        ...
+
+    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
+        """フルコンテキストラベル抽出のバッチ処理。
+
+        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
         ...
 

@@ -1,5 +1,6 @@
 use ::haqumei::{
-    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, ParallelJTalk, WordPhonemeDetail, WordPhonemeMap, open_jtalk::Dictionary
+    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, ParallelJTalk, WordPhonemeDetail,
+    WordPhonemeMap, open_jtalk::Dictionary,
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -270,6 +271,16 @@ impl PyHaqumei {
         self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
     }
 
+    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
         self.inner
             .lock()
@@ -278,8 +289,28 @@ impl PyHaqumei {
             .map_err(to_py_err)
     }
 
+    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_detailed_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_kana(&self, text: &str) -> PyResult<String> {
         self.inner.lock().unwrap().g2p_kana(text).map_err(to_py_err)
+    }
+
+    fn g2p_kana_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<String>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_kana_batch(&texts)
+                .map_err(to_py_err)
+        })
     }
 
     fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<String>>> {
@@ -290,22 +321,90 @@ impl PyHaqumei {
             .map_err(to_py_err)
     }
 
+    fn g2p_per_word_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<Vec<String>>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_per_word_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_mapping(&self, text: &str) -> PyResult<Vec<PyWordPhonemeMap>> {
-        let mut guard = self.inner.lock().unwrap();
-        let result = guard.g2p_mapping(text).map_err(to_py_err)?;
-        Ok(result.into_iter().map(PyWordPhonemeMap::from).collect())
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_mapping(text)
+            .map_err(to_py_err)?
+            .into_iter()
+            .map(PyWordPhonemeMap::from)
+            .collect())
+    }
+
+    fn g2p_mapping_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeMap>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeMap::from).collect())
+                .collect())
+        })
     }
 
     fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
-        let mut guard = self.inner.lock().unwrap();
-        let mapping = guard.g2p_mapping_detailed(text).map_err(to_py_err)?;
-        Ok(mapping.into_iter().map(PyWordPhonemeDetail::from).collect())
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_mapping_detailed(text)
+            .map_err(to_py_err)?
+            .into_iter()
+            .map(PyWordPhonemeDetail::from)
+            .collect())
+    }
+
+    fn g2p_mapping_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
+                .collect())
+        })
     }
 
     fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
-        let mut guard = self.inner.lock().unwrap();
-        let features = guard.run_frontend(text).map_err(to_py_err)?;
-        Ok(features.iter().map(PyNjdFeature::from).collect())
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .run_frontend(text)
+            .map_err(to_py_err)?
+            .iter()
+            .map(PyNjdFeature::from)
+            .collect())
     }
 
     fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
@@ -314,6 +413,20 @@ impl PyHaqumei {
             .unwrap()
             .extract_fullcontext(text)
             .map_err(to_py_err)
+    }
+
+    fn extract_fullcontext_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .extract_fullcontext_batch(&texts)
+                .map_err(to_py_err)
+        })
     }
 }
 
