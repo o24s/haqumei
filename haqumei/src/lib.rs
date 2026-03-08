@@ -627,7 +627,7 @@ impl Haqumei {
         g2p_kana_batch => g2p_kana -> String
     );
 
-        impl_batch_method!(
+    impl_batch_method!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
     );

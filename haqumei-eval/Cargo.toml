@@ -6,11 +6,11 @@ build = "build.rs"
 publish = false
 
 [dependencies]
-csv = "1.4.0"
+csv.workspace = true
 haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
 pyo3.workspace = true
 rayon.workspace = true
-regex = "1.12.2"
+regex.workspace = true
 
 [build-dependencies]
 pyo3-build-config = "0.28.2"

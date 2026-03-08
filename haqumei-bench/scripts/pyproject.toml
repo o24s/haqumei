@@ -1,0 +1,11 @@
+[project]
+name = "scripts"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "haqumei",
+    "pyopenjtalk>=0.4.1",
+]
+
+[tool.uv.sources]
+haqumei = { git = "https://github.com/stellanomia/haqumei.git", subdirectory = "haqumei-python" }

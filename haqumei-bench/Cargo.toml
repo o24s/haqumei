@@ -1,0 +1,12 @@
+[package]
+name = "haqumei-bench"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+criterion = "0.8.2"
+haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
+
+[[bin]]
+name = "haqumei-bench"
+harness = false
