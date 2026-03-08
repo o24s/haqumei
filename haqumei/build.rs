@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let src_dir_str = "vendor/open_jtalk/src";
     let src_dir = PathBuf::from(src_dir_str);
     let out_dir = env::var("OUT_DIR")?;
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
+    let manifest_dir = Path::new(&manifest_dir);
 
     println!("cargo:rerun-if-changed={}", src_dir.display());
     println!("cargo:rerun-if-changed=wrapper.h");
@@ -87,8 +90,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         defines.push(("WORDS_BIGENDIAN", Some("1")));
     }
 
-    let redirect_header_path = Path::new("redirect.h");
-    let redirect_flag = format!("{}", redirect_header_path.display());
+    let redirect_header_path = manifest_dir.join("redirect.h");
+    let redirect_flag = redirect_header_path.as_os_str();
 
     cc::Build::new().file("redirect.c").compile("redirect_impl");
 
@@ -129,7 +132,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // compiler flags
     if build.get_compiler().is_like_msvc() {
-        build.flag(format!("/FI{}", redirect_flag));
+        let mut flag = OsString::from("/FI");
+        flag.push(redirect_flag);
+        build.flag(flag);
 
         build.define("_CRT_SECURE_NO_WARNINGS", None);
         build.define("_CRT_NONSTDC_NO_WARNINGS", None);
@@ -141,7 +146,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         build.flag("/wd4065");
     } else {
         build.flag("-include");
-        build.flag(&redirect_flag);
+        build.flag(redirect_flag);
 
         build.flag("-fPIC");
         build.flag("-finput-charset=UTF-8");
