@@ -40,14 +40,13 @@ unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: lib
 mod data;
 pub mod errors;
 pub mod features;
+#[macro_use]
+mod macros;
 pub mod nani_predict;
 pub mod open_jtalk;
 mod utils;
 
-use std::{
-    path::PathBuf,
-    sync::{LazyLock, Mutex},
-};
+use std::sync::{LazyLock, Mutex};
 
 use moka::sync::Cache;
 
@@ -57,13 +56,14 @@ pub use open_jtalk::{
     update_global_dictionary,
 };
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    open_jtalk::MecabMorph,
+    open_jtalk::{GLOBAL_MECAB_DICTIONARY, MecabMorph},
     utils::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
@@ -77,11 +77,9 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
 
-#[allow(unused)]
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
     tokenizer: Option<vibrato_rkyv::Tokenizer>,
-    data_dir: PathBuf,
     options: HaqumeiOptions,
 }
 
@@ -153,11 +151,10 @@ impl Haqumei {
         open_jtalk: OpenJTalk,
         options: HaqumeiOptions,
     ) -> Result<Self, HaqumeiError> {
-        let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
-            Err(HaqumeiError::DataDirectoryNotFound)?
-        };
-
         let tokenizer = if options.modify_kanji_yomi {
+            let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
+                Err(HaqumeiError::DataDirectoryNotFound)?
+            };
             let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
                 PresetDictionaryKind::UnidicCsj,
                 &data_dir,
@@ -170,7 +167,6 @@ impl Haqumei {
 
         Ok(Haqumei {
             open_jtalk,
-            data_dir,
             tokenizer,
             options,
         })
@@ -611,4 +607,54 @@ impl Haqumei {
                 .predict_is_nan(Some(prev_node))
         })
     }
+
+    impl_batch_method!(
+        /// 複数のテキストに対して `g2p` を実行します。
+        g2p_batch => g2p -> Vec<String>
+    );
+
+    impl_batch_method!(
+        /// すべてのトークンを保持する詳細な G2P 変換のバッチ処理。
+        ///
+        /// - 既知語: 通常の音素列 (読点などは `pau`)
+        /// - 未知語: `unk`
+        /// - 空白等: `sp` (Space)
+        g2p_detailed_batch => g2p_detailed -> Vec<String>
+    );
+
+    impl_batch_method!(
+        /// カタカナ変換のバッチ処理。
+        g2p_kana_batch => g2p_kana -> String
+    );
+
+        impl_batch_method!(
+        /// 単語ごとに分割された音素リストのバッチ処理。
+        g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
+    );
+
+    impl_batch_method!(
+        /// 形態素ごとの音素マッピングのバッチ処理。
+        ///
+        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+        ///
+        /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
+        ///   音素リストとして `["pau"]` が割り当てられます。
+        g2p_mapping_batch => g2p_mapping -> Vec<WordPhonemeMap>
+    );
+
+    impl_batch_method!(
+        /// 形態素ごとの未知語を含めたより詳細な音素マッピングのバッチ処理。
+        ///
+        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+        ///
+        /// - 既知語: 通常の音素列 (読点などは `pau`)
+        /// - 未知語: `unk`
+        /// - 空白等: `sp` (Space)
+        g2p_mapping_detailed_batch => g2p_mapping_detailed -> Vec<WordPhonemeDetail>
+    );
+
+    impl_batch_method!(
+        /// フルコンテキストラベル抽出のバッチ処理。
+        extract_fullcontext_batch => extract_fullcontext -> Vec<String>
+    );
 }
