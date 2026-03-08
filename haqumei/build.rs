@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("PACKAGE_STRING", Some("\"open_jtalk 1.11\"")),
         (
             "PACKAGE_BUGREPORT",
-            Some("\"https://github.com/tsukumijima/open_jtalk/\""),
+            Some("\"https://github.com/stellanomia/haqumei\""),
         ),
         ("PACKAGE_NAME", Some("\"open_jtalk\"")),
         ("CHARSET_UTF_8", None),
@@ -216,12 +216,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let dict_src_dir = manifest_dir.join("dictionary");
+    let mut dict_src_dir = manifest_dir.join("dictionary");
     let dict_out_dir = out_path.join("dictionary_out");
     let compressed_dict_path = manifest_dir.join("dictionary.tar.zst");
     let compressed_dict_hash_path = manifest_dir.join("dictionary.tar.zst.sha256");
     let dict_hash_path = manifest_dir.join("dictionary.sha256");
     let compiled_dict_hash_path = manifest_dir.join("compiled_dictionary.sha256");
+
+    if dict_src_dir.is_file()
+        && let Some(parent) = manifest_dir.parent() {
+            dict_src_dir = parent.join("dictionary");
+        }
 
     if !dict_src_dir.exists() {
         println!(
@@ -305,7 +310,13 @@ int main(int argc, char **argv) {
     let exe_path = out_path.join(exe_name);
 
     command.arg(&main_wrapper_path);
-    command.arg("-o").arg(&exe_path);
+    if compiler.is_like_msvc() {
+        let mut arg = OsString::from("/Fe");
+        arg.push(exe_path.as_os_str());
+        command.arg(arg);
+    } else {
+        command.arg("-o").arg(&exe_path);
+    }
 
     for dir in include_dirs {
         command.arg(format!("-I{}", src_dir.join(dir).display()));
@@ -321,6 +332,7 @@ int main(int argc, char **argv) {
     }
 
     if compiler.is_like_msvc() {
+        command.arg("/link");
         command.arg(format!("/LIBPATH:{}", out_dir));
         command.arg("openjtalk.lib");
     } else {

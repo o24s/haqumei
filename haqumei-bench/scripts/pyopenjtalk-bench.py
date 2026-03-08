@@ -97,7 +97,7 @@ def main():
     t_py = measure("pyopenjtalk (Baseline)", run_pyopenjtalk_single, lines)
 
     hq = haqumei.Haqumei()
-    hq_heavy = haqumei.Haqumei(modify_kanji_yomi=True)
+    hq_heavy = haqumei.Haqumei(predict_nani=True, modify_kanji_yomi=True)
     pojt = haqumei.ParallelJTalk()
 
     t_hq = measure("haqumei (Single, Default)", lambda d: run_haqumei_single(hq, d), lines)
