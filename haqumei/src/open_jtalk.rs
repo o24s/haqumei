@@ -248,6 +248,11 @@ impl OpenJTalk {
         self.run_njd_from_mecab(&mecab_features)
     }
 
+    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        let njd_features = self.run_frontend(text)?;
+        self.make_label(&njd_features)
+    }
+
     /// 入力テキストを音素列 (フラットなリスト) に変換します。
     ///
     /// pyopenjtalk と同様の出力を得るためには、`.join(" ")` をチェーンしてください。
@@ -1122,152 +1127,56 @@ impl OpenJTalk {
 
         Ok(())
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct ParallelJTalk {
-    dict: Arc<Dictionary>,
-}
+    impl_batch_method_openjtalk!(
+        /// 複数のテキストに対して `g2p` を実行します。
+        g2p_batch => g2p -> Vec<String>
+    );
 
-impl ParallelJTalk {
-    pub fn new() -> Result<Self, HaqumeiError> {
-        let dict = GLOBAL_MECAB_DICTIONARY.load_full();
-        if !dict.model.is_initialized() {
-            return Err(HaqumeiError::GlobalDictionaryNotInitialized);
-        }
-        Ok(Self { dict })
-    }
+    impl_batch_method_openjtalk!(
+        /// すべてのトークンを保持する詳細な G2P 変換のバッチ処理。
+        ///
+        /// - 既知語: 通常の音素列 (読点などは `pau`)
+        /// - 未知語: `unk`
+        /// - 空白等: `sp` (Space)
+        g2p_detailed_batch => g2p_detailed -> Vec<String>
+    );
 
-    pub fn from_dictionary(dict: Dictionary) -> Self {
-        Self {
-            dict: Arc::new(dict),
-        }
-    }
+    impl_batch_method_openjtalk!(
+        /// カタカナ変換のバッチ処理。
+        g2p_kana_batch => g2p_kana -> String
+    );
 
-    pub fn from_arc_dictionary(dict: Arc<Dictionary>) -> Self {
-        Self { dict }
-    }
+    impl_batch_method_openjtalk!(
+        /// 単語ごとに分割された音素リストのバッチ処理。
+        g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
+    );
 
-    /// 複数のテキストに対して並列に `g2p` を実行します。
-    pub fn g2p<S>(&self, texts: &[S]) -> Result<Vec<Vec<String>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p(text.as_ref()),
-            )
-            .collect()
-    }
+    impl_batch_method_openjtalk!(
+        /// 形態素ごとの音素マッピングのバッチ処理。
+        ///
+        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+        ///
+        /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
+        ///   音素リストとして `["pau"]` が割り当てられます。
+        g2p_mapping_batch => g2p_mapping -> Vec<WordPhonemeMap>
+    );
 
-    /// 複数のテキストに対して並列に `g2p_detailed` を実行します。
-    pub fn g2p_detailed<S>(&self, texts: &[S]) -> Result<Vec<Vec<String>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p_detailed(text.as_ref()),
-            )
-            .collect()
-    }
+    impl_batch_method_openjtalk!(
+        /// 形態素ごとの未知語を含めたより詳細な音素マッピングのバッチ処理。
+        ///
+        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+        ///
+        /// - 既知語: 通常の音素列 (読点などは `pau`)
+        /// - 未知語: `unk`
+        /// - 空白等: `sp` (Space)
+        g2p_mapping_detailed_batch => g2p_mapping_detailed -> Vec<WordPhonemeDetail>
+    );
 
-    /// 複数のテキストに対して並列に `g2p_kana` を実行します。
-    pub fn g2p_kana<S>(&self, texts: &[S]) -> Result<Vec<String>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p_kana(text.as_ref()),
-            )
-            .collect()
-    }
-
-    /// 複数のテキストに対して並列に `g2p_per_word` を実行します。
-    pub fn g2p_per_word<S>(&self, texts: &[S]) -> Result<Vec<Vec<Vec<String>>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p_per_word(text.as_ref()),
-            )
-            .collect()
-    }
-
-    /// 複数のテキストに対して並列に `g2p_mapping` を実行します。
-    pub fn g2p_mapping<S>(&self, texts: &[S]) -> Result<Vec<Vec<WordPhonemeMap>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p_mapping(text.as_ref()),
-            )
-            .collect()
-    }
-
-    /// 複数のテキストに対して並列に `g2p_mapping_detailed` を実行します。
-    pub fn g2p_mapping_detailed<S>(
-        &self,
-        texts: &[S],
-    ) -> Result<Vec<Vec<WordPhonemeDetail>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.g2p_mapping_detailed(text.as_ref()),
-            )
-            .collect()
-    }
-
-    pub fn run_frontend<S>(&self, texts: &[S]) -> Result<Vec<Vec<NjdFeature>>, HaqumeiError>
-    where
-        S: AsRef<str> + Sync,
-    {
-        texts
-            .par_iter()
-            .map_init(
-                || {
-                    OpenJTalk::from_shared_dictionary(self.dict.clone())
-                        .expect("Failed to initialize OpenJTalk worker")
-                },
-                |ojt, text| ojt.run_frontend(text.as_ref()),
-            )
-            .collect()
-    }
+    impl_batch_method_openjtalk!(
+        /// フルコンテキストラベル抽出のバッチ処理。
+        extract_fullcontext_batch => extract_fullcontext -> Vec<String>
+    );
 }
 
 pub fn build_mecab_dictionary<P: AsRef<Path>>(

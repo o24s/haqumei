@@ -1,6 +1,6 @@
 use ::haqumei::{
-    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, ParallelJTalk, WordPhonemeDetail,
-    WordPhonemeMap, open_jtalk::Dictionary,
+    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeDetail, WordPhonemeMap,
+    open_jtalk::Dictionary,
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -192,6 +192,16 @@ impl PyOpenJTalk {
         self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
     }
 
+    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
         self.inner
             .lock()
@@ -200,8 +210,28 @@ impl PyOpenJTalk {
             .map_err(to_py_err)
     }
 
+    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_detailed_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_kana(&self, text: &str) -> PyResult<String> {
         self.inner.lock().unwrap().g2p_kana(text).map_err(to_py_err)
+    }
+
+    fn g2p_kana_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<String>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_kana_batch(&texts)
+                .map_err(to_py_err)
+        })
     }
 
     fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<String>>> {
@@ -212,10 +242,42 @@ impl PyOpenJTalk {
             .map_err(to_py_err)
     }
 
+    fn g2p_per_word_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<Vec<String>>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_per_word_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_mapping(&self, text: &str) -> PyResult<Vec<PyWordPhonemeMap>> {
         let mut guard = self.inner.lock().unwrap();
         let mapping = guard.g2p_mapping(text).map_err(to_py_err)?;
         Ok(mapping.into_iter().map(PyWordPhonemeMap::from).collect())
+    }
+
+    fn g2p_mapping_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeMap>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeMap::from).collect())
+                .collect())
+        })
     }
 
     fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
@@ -224,10 +286,50 @@ impl PyOpenJTalk {
         Ok(mapping.into_iter().map(PyWordPhonemeDetail::from).collect())
     }
 
+    fn g2p_mapping_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
+                .collect())
+        })
+    }
+
     fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
         let mut guard = self.inner.lock().unwrap();
         let features = guard.run_frontend(text).map_err(to_py_err)?;
         Ok(features.iter().map(PyNjdFeature::from).collect())
+    }
+
+    fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .extract_fullcontext(text)
+            .map_err(to_py_err)
+    }
+
+    fn extract_fullcontext_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .extract_fullcontext_batch(&texts)
+                .map_err(to_py_err)
+        })
     }
 }
 
@@ -433,76 +535,6 @@ impl PyHaqumei {
     }
 }
 
-#[pyclass(name = "ParallelJTalk", module = "haqumei")]
-struct PyParallelJTalk {
-    inner: ParallelJTalk,
-}
-
-#[pymethods]
-impl PyParallelJTalk {
-    #[new]
-    fn new() -> PyResult<Self> {
-        let inner = ParallelJTalk::new().map_err(to_py_err)?;
-        Ok(Self { inner })
-    }
-
-    fn g2p(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
-        py.detach(|| self.inner.g2p(&texts).map_err(to_py_err))
-    }
-
-    fn g2p_detailed(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
-        py.detach(|| self.inner.g2p_detailed(&texts).map_err(to_py_err))
-    }
-
-    fn g2p_kana(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<String>> {
-        py.detach(|| self.inner.g2p_kana(&texts).map_err(to_py_err))
-    }
-
-    fn g2p_per_word(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<Vec<String>>>> {
-        py.detach(|| self.inner.g2p_per_word(&texts).map_err(to_py_err))
-    }
-
-    fn g2p_mapping(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemeMap>>> {
-        let results = py.detach(|| self.inner.g2p_mapping(&texts).map_err(to_py_err))?;
-
-        Ok(results
-            .into_iter()
-            .map(|inner_vec| inner_vec.into_iter().map(PyWordPhonemeMap::from).collect())
-            .collect())
-    }
-
-    fn g2p_mapping_detailed(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
-        let results = py.detach(|| self.inner.g2p_mapping_detailed(&texts).map_err(to_py_err))?;
-
-        Ok(results
-            .into_iter()
-            .map(|inner_vec| {
-                inner_vec
-                    .into_iter()
-                    .map(PyWordPhonemeDetail::from)
-                    .collect()
-            })
-            .collect())
-    }
-
-    fn run_frontend(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<PyNjdFeature>>> {
-        let results = py.detach(|| self.inner.run_frontend(&texts).map_err(to_py_err))?;
-
-        Ok(results
-            .into_iter()
-            .map(|inner_vec| inner_vec.iter().map(PyNjdFeature::from).collect())
-            .collect())
-    }
-}
-
 #[pyfunction]
 fn update_global_dictionary(dict: &PyDictionary) {
     ::haqumei::open_jtalk::update_global_dictionary(dict.inner.clone());
@@ -517,7 +549,6 @@ fn unset_user_dictionary() -> PyResult<()> {
 fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHaqumei>()?;
     m.add_class::<PyOpenJTalk>()?;
-    m.add_class::<PyParallelJTalk>()?;
     m.add_class::<PyNjdFeature>()?;
     m.add_class::<PyWordPhonemeMap>()?;
     m.add_class::<PyWordPhonemeDetail>()?;

@@ -30,7 +30,7 @@ ERROR: libclang.dll not found / libclang.dll が見つかりません。
 - Set `LIBCLANG_PATH` as an environment variable (e.g., C:\Program Files\LLVM\bin\libclang.dll)
 - Restart your terminal
 
-[JP] Windows で haqumei をビルドするには LLVM が必要です。
+[JA] Windows で haqumei をビルドするには LLVM が必要です。
 
 - LLVMをインストールしてください:
    > winget install LLVM.LLVM

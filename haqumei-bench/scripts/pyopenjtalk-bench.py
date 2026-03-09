@@ -77,6 +77,13 @@ def run_pyopenjtalk_single(lines):
     for line in lines:
         pyopenjtalk.g2p(line)
 
+def run_openjtalk_single(ojt_instance, lines):
+    for line in lines:
+        ojt_instance.g2p(line)
+
+def run_openjtalk_batch(ojt_instance, lines):
+    ojt_instance.g2p_batch(lines)
+
 def run_haqumei_single(haqumei_instance, lines):
     for line in lines:
         haqumei_instance.g2p(line)
@@ -84,8 +91,6 @@ def run_haqumei_single(haqumei_instance, lines):
 def run_haqumei_batch(haqumei_instance, lines):
     haqumei_instance.g2p_batch(lines)
 
-def run_haqumei_parallel_batch(parallel_instance, lines):
-    parallel_instance.g2p(lines)
 
 def main():
     lines = load_data()
@@ -96,26 +101,28 @@ def main():
 
     t_py = measure("pyopenjtalk (Baseline)", run_pyopenjtalk_single, lines)
 
+    ojt = haqumei.OpenJTalk()
     hq = haqumei.Haqumei()
     hq_heavy = haqumei.Haqumei(predict_nani=True, modify_kanji_yomi=True)
-    pojt = haqumei.ParallelJTalk()
+
+    t_ojt = measure("OpenJTalk (Single)", lambda d: run_openjtalk_single(ojt, d), lines)
+    t_ojt_batch = measure("OpenJTalk.g2p_batch", lambda d: run_openjtalk_batch(ojt, d), lines)
 
     t_hq = measure("haqumei (Single, Default)", lambda d: run_haqumei_single(hq, d), lines)
     t_hq_heavy = measure("haqumei (Single, Heavy)", lambda d: run_haqumei_single(hq_heavy, d), lines)
 
     t_hq_batch = measure("haqumei.g2p_batch (Default)", lambda d: run_haqumei_batch(hq, d), lines)
-
     t_hq_heavy_batch = measure("haqumei.g2p_batch (Heavy)", lambda d: run_haqumei_batch(hq_heavy, d), lines)
 
-    t_parallel = measure("ParallelJTalk", lambda d: run_haqumei_parallel_batch(pojt, d), lines)
-
     print("-" * 80)
-    print("\n[Haqumei vs pyopenjtalk Speedup]")
+    print("\n[Speedup vs pyopenjtalk]")
+    print(f"OpenJTalk (Single):          x{t_py / t_ojt:.2f}")
+    print(f"OpenJTalk.g2p_batch:         x{t_py / t_ojt_batch:.2f}")
     print(f"haqumei (Single, Default):   x{t_py / t_hq:.2f}")
     print(f"haqumei (Single, Heavy):     x{t_py / t_hq_heavy:.2f}")
     print(f"haqumei.g2p_batch (Default): x{t_py / t_hq_batch:.2f}")
     print(f"haqumei.g2p_batch (Heavy):   x{t_py / t_hq_heavy_batch:.2f}")
-    print(f"ParallelJTalk:               x{t_py / t_parallel:.2f}")
+
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

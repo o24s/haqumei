@@ -16,7 +16,7 @@
 ### Rust
 
 ```bash
-cargo add haqumei --git "https://github.com/stellanomia/haqumei.git#subdirectory=haqumei"
+cargo add haqumei --git "https://github.com/stellanomia/haqumei.git"
 ```
 
 ### Python
@@ -27,10 +27,9 @@ pip install "git+https://github.com/stellanomia/haqumei.git#subdirectory=haqumei
 
 ## 特徴 (Features)
 
-- パフォーマンス: Rustによるネイティブ実装と、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装されたいくつかの改善を取り入れ、高速かつ高精度なG2Pを実現します。
+- パフォーマンス: Rustによるネイティブ実装と、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装されたいくつかの改善を取り入れ、高速なG2Pを実現します。
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
 - 多様な解析情報: 形態素解析の結果と音素をマッピングした詳細情報 (`g2p_mapping`, `g2p_mapping_detailed`) や、`pyopenjtalk` と同様にフルコンテキストラベル (`extract_fullcontext`) も取得可能です。
-- 並列処理対応: `ParallelJTalk` クラスにより、複数のテキストを効率的に一括処理できます。
 
 ## 使い方 (Usage)
 
@@ -65,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```python
 from haqumei import Haqumei
 
-# Haqumeiを初期化 (辞書は自動でダウンロード・セットアップされます)
+# Haqumeiを初期化 (辞書は自動でセットアップされます)
 haqumei = Haqumei()
 
 text = "日本語のテキストを音素に変換します。"

@@ -83,7 +83,8 @@ class Dictionary:
 
     一度ロードした辞書データをメモリ上で保持します。
     このインスタンスを `OpenJTalk` に渡すことで、
-    辞書データのメモリ共有が可能になり、Mecab による Minor Page Fault の時間を削減できます。
+    辞書データのメモリ共有が可能になり、
+    Mecab による mmap syscall の時間を削減できます。
     """
 
     @staticmethod
@@ -125,7 +126,7 @@ class OpenJTalk:
 
     スレッドセーフに設計されていますが、内部で排他ロック (Mutex) を使用するため、
     Python の `threading` を用いても並列処理による高速化は期待できません。
-    CPUバウンドな処理を並列化したい場合は `ParallelJTalk` を使用してください。
+    並行に処理をしたい場合は、各種 `*_batch` メソッドを使用してください。
 
     Examples:
 
@@ -261,6 +262,122 @@ class OpenJTalk:
 
         Returns:
             List[NjdFeature]: 特徴量のリスト。
+        """
+        ...
+
+    def extract_fullcontext(self, text: str) -> List[str]:
+        """フルコンテキストラベルを抽出します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: フルコンテキストラベルのリスト。
+        """
+        ...
+
+    def g2p_batch(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストに対して `g2p` を実行します。
+
+        Python の GIL を解放してバッチ処理を行います。大量のテキストデータセットの前処理などに最適です。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応する音素リストのリスト。
+        """
+        ...
+
+    def g2p_detailed_batch(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストに対して詳細な G2P 変換を実行します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応する詳細な音素リストのリスト。
+        """
+        ...
+
+    def g2p_kana_batch(self, texts: List[str]) -> List[str]:
+        """複数のテキストをカタカナ読みに変換します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[str]: 各テキストに対応するカタカナ文字列のリスト。
+        """
+        ...
+
+    def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
+        """複数のテキストを単語ごとに区切られた音素リストに変換します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
+        """
+        ...
+
+    def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
+        """複数のテキストを解析し、単語と音素のマッピング情報を返します。
+
+        注意:
+            Rust 側での解析計算は並列・バッチ化されますが、最終的な Python オブジェクトへの変換は
+            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeMap]]: 各テキストに対応するマッピング情報のリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+        """入力テキストの形態素ごとの音素マッピング（詳細版）をバッチ処理で返します。
+
+        MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+
+        注意:
+            Rust 側での解析計算は並列・バッチ化されますが、最終的な Python オブジェクトへの変換は
+            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeDetail]]: 各テキストに対応する詳細なマッピング情報のリスト。
+        """
+        ...
+
+    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストからフルコンテキストラベルを抽出します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
         ...
 
@@ -418,7 +535,7 @@ class Haqumei:
     def g2p_batch(self, texts: List[str]) -> List[List[str]]:
         """複数のテキストに対して `g2p` を実行します。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -436,7 +553,7 @@ class Haqumei:
         - 未知語: `unk`
         - 空白等: `sp` (Space)
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -450,7 +567,7 @@ class Haqumei:
     def g2p_kana_batch(self, texts: List[str]) -> List[str]:
         """カタカナ変換のバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -464,7 +581,7 @@ class Haqumei:
     def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
         """単語ごとに分割された音素リストのバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -478,7 +595,7 @@ class Haqumei:
     def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
         """形態素ごとの音素マッピングのバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -492,7 +609,7 @@ class Haqumei:
     def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
         """形態素ごとの音素マッピング（詳細版）のバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -506,7 +623,7 @@ class Haqumei:
     def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
         """フルコンテキストラベル抽出のバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッド処理 (`ParallelJTalk` 相当) で処理を行います。
+        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
         有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
@@ -514,113 +631,6 @@ class Haqumei:
 
         Returns:
             List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
-        """
-        ...
-
-class ParallelJTalk:
-    """OpenJTalk の並列処理用ラッパー。
-
-    Python の GIL を解放して Rust 側で並列実行します。
-
-    大量のテキストデータセットの前処理などに最適です。
-
-    Examples:
-        >>> pjtalk = ParallelJTalk()
-        >>> texts = ["こんにちは", "世界"] * 5000
-        >>> # RustのRayonにより並列処理されます
-        >>> results = pjtalk.g2p(texts)
-    """
-
-    def __init__(self) -> None:
-        """新しい ParallelJTalk インスタンスを初期化します。"""
-        ...
-
-    def g2p(self, texts: List[str]) -> List[List[str]]:
-        """複数のテキストを並列処理で音素変換します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[str]]: 各テキストに対応する音素リストのリスト。
-        """
-        ...
-
-    def g2p_detailed(self, texts: List[str]) -> List[List[str]]:
-        """複数のテキストを並列処理で音素変換します。
-
-        - 既知語: 通常の音素列 (読点などは `pau`)
-        - 未知語: `unk`
-        - 空白等: `sp` (Space)
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[str]]: 各テキストに対応する音素リストのリスト。
-        """
-        ...
-
-    def g2p_kana(self, texts: List[str]) -> List[str]:
-        """複数のテキストを並列処理でカタカナ変換します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[str]: 各テキストに対応するカタカナ文字列のリスト。
-        """
-        ...
-
-    def g2p_per_word(self, texts: List[str]) -> List[List[List[str]]]:
-        """複数のテキストを並列処理で単語ごとの音素リストに変換します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
-        """
-        ...
-
-    def g2p_mapping(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
-        """複数のテキストを並列処理で単語マッピング情報に変換します。
-
-        注意:
-            Rust 側での解析計算は並列化されますが、最終的な Python オブジェクトへの変換は
-            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[WordPhonemeMap]]: 各テキストに対応するマッピング情報のリスト。
-        """
-        ...
-
-    def g2p_mapping_detailed(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
-        """複数のテキストを並列処理でより詳細な単語マッピング情報に変換します。
-
-        注意:
-            Rust 側での解析計算は並列化されますが、最終的な Python オブジェクトへの変換は
-            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[WordPhonemeDetail]]: 各テキストに対応するマッピング情報のリスト。
-        """
-        ...
-
-    def run_frontend(self, texts: List[str]) -> List[List[NjdFeature]]:
-        """複数のテキストを並列処理で特徴量抽出します。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[NjdFeature]]: 各テキストに対応する特徴量リストのリスト。
         """
         ...
 

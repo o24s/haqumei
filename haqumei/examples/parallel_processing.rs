@@ -6,10 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let waganeko = fs::read_to_string(waganeko_path)?;
     let waganeko: Vec<&str> = waganeko.split('\n').collect();
 
-    let pojt = haqumei::ParallelJTalk::new()?;
+    let mut haqumei = haqumei::Haqumei::new()?;
 
     let start = Instant::now();
-    let result = pojt.g2p(&waganeko).unwrap();
+    let result = haqumei.g2p_batch(&waganeko).unwrap();
     let elapsed = start.elapsed();
 
     let sentences_per_sec = waganeko.len() as f64 / elapsed.as_secs_f64();

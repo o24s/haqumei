@@ -27,10 +27,9 @@ pip install "git+https://github.com/stellanomia/haqumei.git#subdirectory=haqumei
 
 ## Features
 
-- **Performance:** Achieves fast and accurate G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus).
+- **Performance:** Achieves fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus).
 - **Output Formats:** Provides results in various formats, including a simple phoneme list (`g2p`), a detailed list with unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
 - **Diverse Analysis Information:** Capable of retrieving detailed mapping information linking morphological analysis results with phonemes (`g2p_mapping`, `g2p_mapping_detailed`) and full-context labels (`extract_fullcontext`), similar to `pyopenjtalk`.
-- **Parallel Processing:** Efficiently process multiple texts at once using the `ParallelJTalk` class.
 
 ## Usage
 
@@ -65,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```python
 from haqumei import Haqumei
 
-# Initialize Haqumei (the dictionary will be automatically downloaded and set up)
+# Initialize Haqumei (the dictionary will be automatically set up)
 haqumei = Haqumei()
 
 text = "日本語のテキストを音素に変換します。"

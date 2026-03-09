@@ -37,13 +37,6 @@ unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: lib
     }
 }
 
-#[cfg(target_os = "windows")]
-#[unsafe(no_mangle)]
-pub extern "C" fn __std_find_first_of_trivial_pos_1() {}
-#[cfg(target_os = "windows")]
-#[unsafe(no_mangle)]
-pub extern "C" fn __std_find_first_of_trivial_pos_2() {}
-
 mod data;
 pub mod errors;
 pub mod features;
@@ -59,8 +52,7 @@ use moka::sync::Cache;
 
 pub use features::NjdFeature;
 pub use open_jtalk::{
-    MecabDictIndexCompiler, OpenJTalk, ParallelJTalk, unset_user_dictionary,
-    update_global_dictionary,
+    MecabDictIndexCompiler, OpenJTalk, unset_user_dictionary, update_global_dictionary,
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -622,12 +614,12 @@ impl Haqumei {
         })
     }
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// 複数のテキストに対して `g2p` を実行します。
         g2p_batch => g2p -> Vec<String>
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// すべてのトークンを保持する詳細な G2P 変換のバッチ処理。
         ///
         /// - 既知語: 通常の音素列 (読点などは `pau`)
@@ -636,17 +628,17 @@ impl Haqumei {
         g2p_detailed_batch => g2p_detailed -> Vec<String>
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// カタカナ変換のバッチ処理。
         g2p_kana_batch => g2p_kana -> String
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// 形態素ごとの音素マッピングのバッチ処理。
         ///
         /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
@@ -656,7 +648,7 @@ impl Haqumei {
         g2p_mapping_batch => g2p_mapping -> Vec<WordPhonemeMap>
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// 形態素ごとの未知語を含めたより詳細な音素マッピングのバッチ処理。
         ///
         /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
@@ -667,7 +659,7 @@ impl Haqumei {
         g2p_mapping_detailed_batch => g2p_mapping_detailed -> Vec<WordPhonemeDetail>
     );
 
-    impl_batch_method!(
+    impl_batch_method_haqumei!(
         /// フルコンテキストラベル抽出のバッチ処理。
         extract_fullcontext_batch => extract_fullcontext -> Vec<String>
     );

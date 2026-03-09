@@ -1,5 +1,5 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use haqumei::{Haqumei, HaqumeiOptions, ParallelJTalk};
+use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -40,10 +40,10 @@ fn bench_g2p(c: &mut Criterion) {
         b.iter(|| black_box(hq_heavy.g2p_batch(black_box(&lines))))
     });
 
-    let pojt = ParallelJTalk::new().unwrap();
-    group.bench_function("ParallelJTalk (Batch)", |b| {
+    let mut ojt = OpenJTalk::new().unwrap();
+    group.bench_function("OpenJTalk (Batch)", |b| {
         b.iter(|| {
-            black_box(pojt.g2p(black_box(&lines)).unwrap());
+            black_box(ojt.g2p_batch(black_box(&lines)).unwrap());
         })
     });
 
