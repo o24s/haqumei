@@ -408,6 +408,7 @@ class Haqumei:
 
     def __init__(
         self,
+        normalize_unicode: bool = True,
         modify_filler_accent: bool = True,
         predict_nani: bool = False,
         modify_kanji_yomi: bool = False,

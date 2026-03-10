@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "haqumei"
 version = "0.1.0"
 description = "A Japanese Grapheme-to-Phoneme (G2P) library."
-readme = "README.md"
+readme = "../README.md"
 requires-python = ">=3.10"
 dependencies = []
 

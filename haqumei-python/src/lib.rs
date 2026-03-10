@@ -342,6 +342,7 @@ struct PyHaqumei {
 impl PyHaqumei {
     #[new]
     #[pyo3(signature = (
+        normalize_unicode = false,
         modify_filler_accent = true,
         predict_nani = false,
         modify_kanji_yomi = false,
@@ -350,6 +351,7 @@ impl PyHaqumei {
         process_odoriji = true
     ))]
     fn new(
+        normalize_unicode: bool,
         modify_filler_accent: bool,
         predict_nani: bool,
         modify_kanji_yomi: bool,
@@ -358,6 +360,7 @@ impl PyHaqumei {
         process_odoriji: bool,
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
+            normalize_unicode,
             modify_filler_accent,
             predict_nani,
             modify_kanji_yomi,

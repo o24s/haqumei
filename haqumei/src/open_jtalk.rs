@@ -1044,9 +1044,40 @@ impl OpenJTalk {
         }
 
         let result = unsafe {
-            self.prepare_jpcommon_label_internal(features)?;
+            Self::features_to_njd(features, &mut self.njd)?;
 
             let jp = self.jp_common.inner.as_mut();
+            let njd = self.njd.inner.as_mut();
+
+            ffi::njd2jpcommon(jp, njd);
+
+            // JPCommon_make_label(JPCommon * jpcommon) の部分的な移植
+            if !jp.label.is_null() {
+                ffi::JPCommonLabel_clear(jp.label);
+            } else {
+                let ptr = libc::calloc(1, std::mem::size_of::<ffi::JPCommonLabel>());
+                if ptr.is_null() {
+                    return Err(HaqumeiError::AllocationError("ffi::JPCommonLabel"));
+                }
+                jp.label = ptr as *mut ffi::JPCommonLabel;
+            }
+
+            ffi::JPCommonLabel_initialize(jp.label);
+
+            let mut node = jp.head;
+            while !node.is_null() {
+                ffi::JPCommonLabel_push_word(
+                    jp.label,
+                    ffi::JPCommonNode_get_pron(node),
+                    ffi::JPCommonNode_get_pos(node),
+                    ffi::JPCommonNode_get_ctype(node),
+                    ffi::JPCommonNode_get_cform(node),
+                    ffi::JPCommonNode_get_acc(node),
+                    ffi::JPCommonNode_get_chain_flag(node),
+                );
+
+                node = (*node).next;
+            }
 
             let mut result_vec = Vec::with_capacity(features.len() * 3);
 

@@ -24,6 +24,7 @@ regex = "1.12.2"
 sha2 = "0.10.9"
 tar = "0.4.44"
 thiserror = "2.0.18"
+unicode-normalization = "0.1.25"
 vibrato-rkyv = { version = "0.7.5" }
 walkdir = "2.5.0"
 zstd = "0.13.3"

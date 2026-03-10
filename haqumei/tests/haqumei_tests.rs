@@ -6,7 +6,8 @@ mod tests {
         sync::LazyLock,
     };
 
-    use haqumei::{Haqumei, OpenJTalk, errors::HaqumeiError};
+    use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk, errors::HaqumeiError};
+    use unicode_normalization::UnicodeNormalization;
 
     static MANIFEST_DIR: LazyLock<&Path> = LazyLock::new(|| Path::new(env!("CARGO_MANIFEST_DIR")));
     static WAGANEKO_PATH: LazyLock<PathBuf> =
@@ -143,6 +144,35 @@ mod tests {
         let reconstructed: String = result.iter().map(|d| d.word.as_str()).collect();
 
         assert_eq!(text, reconstructed);
+    }
+
+    #[test]
+    fn test_unicode_normalization() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            normalize_unicode: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let text = &[
+            "\u{304B}\u{3099}",         // が
+            "\u{306F}\u{309A}",         // ぱ
+            "\u{30B3}\u{3099}",         // ゴ
+            "\u{0065}\u{0301}",         // é
+            "\u{1112}\u{1161}\u{11AB}", // 한
+        ];
+
+        let results = haqumei.g2p_mapping_detailed_batch(text).unwrap();
+
+        let results: Vec<String> = results
+            .iter()
+            .map(|v| v.iter().map(|d| d.word.as_str()).collect::<String>())
+            .collect();
+
+        for (result, text) in results.iter().zip(text) {
+            let expected: String = text.nfc().collect();
+            assert_eq!(&expected, result);
+            assert_eq!(result.nfc().collect::<String>(), *result);
+        }
     }
 
     #[test]

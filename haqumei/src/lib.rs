@@ -46,7 +46,10 @@ pub mod nani_predict;
 pub mod open_jtalk;
 mod utils;
 
-use std::sync::{LazyLock, Mutex};
+use std::{
+    borrow::Cow,
+    sync::{LazyLock, Mutex},
+};
 
 use moka::sync::Cache;
 
@@ -56,6 +59,7 @@ pub use open_jtalk::{
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use unicode_normalization::UnicodeNormalization;
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
@@ -84,33 +88,52 @@ pub struct Haqumei {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HaqumeiOptions {
+    /// 入力テキストを Unicode NFC (Normalization Form C) に正規化する。
+    /// 「か + 濁点」などの結合文字を 1文字の「が」に統合します。
+    ///
+    /// デフォルトで無効になっています。
+    pub normalize_unicode: bool,
+
     /// - フィラーが acc > mora_size のときに、平版型 (acc = 0) にする
     /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
+    ///
+    /// デフォルトで有効になっています。
     pub modify_filler_accent: bool,
 
-    /// Nani Predictor を使って、「何」 の読みを修正する
+    /// Nani Predictor を使って、「何」 の読みを修正する。
+    ///
+    /// デフォルトで無効になっています。
     pub predict_nani: bool,
 
-    /// Unidic と Nani Predictor を使って、漢字の読みを修正する
+    /// Unidic を使って、漢字の読みを修正する。
+    ///
+    /// デフォルトで無効になっています。
     pub modify_kanji_yomi: bool,
 
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
-    /// ひとつ前のモーラにアクセント核がズレるルールを適用する
+    /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
+    ///
+    /// デフォルトで有効になっています。
     pub retreat_acc_nuc: bool,
 
-    /// 品詞「特殊・マス」の直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる
+    /// 品詞「特殊・マス」の直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる。
     ///
     ///   書きます → か\[きま\]す, 参ります → ま\[いりま\]す
     ///   書いております → \[か\]いております
+    ///
+    /// デフォルトで有効になっています。
     pub modify_acc_after_chaining: bool,
 
-    /// 踊り字 (e.g., 々, ヽ, ヾ) の展開を有効にする
+    /// 踊り字 (e.g., 々, ヽ, ヾ) の展開を有効にする。
+    ///
+    /// デフォルトで有効になっています。
     pub process_odoriji: bool,
 }
 
 impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
+            normalize_unicode: false,
             modify_filler_accent: true,
             predict_nani: false,
             modify_kanji_yomi: false,
@@ -228,7 +251,7 @@ impl Haqumei {
     ///
     /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
     pub fn g2p_kana(&mut self, text: &str) -> Result<String, HaqumeiError> {
-        let features = self.run_frontend(text)?;
+        let features = self.run_frontend(text.as_ref())?;
 
         let kana_string: String = features
             .iter()
@@ -253,7 +276,7 @@ impl Haqumei {
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
-        let mapping = self.g2p_mapping(text)?;
+        let mapping = self.g2p_mapping(text.as_ref())?;
 
         let result = mapping.into_iter().map(|m| m.phonemes).collect();
 
@@ -386,6 +409,12 @@ impl Haqumei {
         &mut self,
         text: &str,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        let mut text = Cow::Borrowed(text);
+        if self.options.normalize_unicode {
+            text = Cow::Owned(text.nfc().collect::<String>());
+        }
+        let text = text.as_ref();
+
         let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
             let morphs = self.open_jtalk.run_mecab_detailed(text)?;
 
@@ -545,6 +574,12 @@ impl Haqumei {
     }
 
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
+        let mut text = Cow::Borrowed(text);
+        if self.options.normalize_unicode {
+            text = Cow::Owned(text.nfc().collect::<String>());
+        }
+        let text = text.as_ref();
+
         let njd_features = if let Some(tokenizer) = &self.tokenizer {
             rayon::join(
                 || self.open_jtalk.run_frontend(text),
@@ -562,7 +597,7 @@ impl Haqumei {
     }
 
     pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let njd_features = self.run_frontend(text)?;
+        let njd_features = self.run_frontend(text.as_ref())?;
         self.open_jtalk.make_label(&njd_features)
     }
 
