@@ -136,7 +136,7 @@ pub struct WordPhonemeDetail {
     pub is_unknown: bool,
 
     /// `OpenJTalk` のパイプラインで無視される対象かどうか。
-    /// (e.g, "記号,空白")
+    /// (e.g, "記号,空白", 先頭の `ー`)
     pub is_ignored: bool,
 }
 
@@ -214,56 +214,11 @@ impl Haqumei {
     /// println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺"));
     /// ```
     pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
-            let morphs = self.open_jtalk.run_mecab_detailed(text.as_ref())?;
-            let valid_features_str: Vec<String> = morphs
-                .iter()
-                .filter(|m| !m.is_ignored)
-                .map(|m| m.feature.clone())
-                .collect();
-            let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
-
-            Ok((njd_features, morphs))
-        };
-
-        let (njd_features, morphs) = {
-            let res = if let Some(tokenizer) = &self.tokenizer {
-                rayon::join(&mut run_mecab, || {
-                    let mut worker = tokenizer.new_worker();
-                    vibrato_analysis(&mut worker, text);
-                })
-                .0
-            } else {
-                run_mecab()
-            };
-
-            let (njd_features, morphs) = res?;
-            (self.apply_postprocessing(text, njd_features)?, morphs)
-        };
-
-        if njd_features.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
+        let detailed_mapping = self.g2p_mapping_detailed(text)?;
 
         let mut result_phonemes = Vec::new();
-        let mut map_idx = 0;
-
-        for morph in morphs {
-            if morph.is_ignored {
-                result_phonemes.push("sp".to_string());
-            } else {
-                let map = &mapping[map_idx];
-                map_idx += 1;
-
-                if morph.is_unknown {
-                    result_phonemes.push("unk".to_string());
-                } else {
-                    result_phonemes.extend(map.phonemes.iter().cloned());
-                }
-            }
+        for map in detailed_mapping {
+            result_phonemes.extend(map.phonemes);
         }
 
         Ok(result_phonemes)
@@ -298,13 +253,11 @@ impl Haqumei {
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
-        let features = self.run_frontend(text)?;
+        let mapping = self.g2p_mapping(text)?;
 
-        if features.is_empty() {
-            return Ok(Vec::new());
-        }
+        let result = mapping.into_iter().map(|m| m.phonemes).collect();
 
-        self.open_jtalk.extract_phonemes_per_word(&features)
+        Ok(result)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを返します。
@@ -484,66 +437,108 @@ impl Haqumei {
         let mut morph_idx = 0;
 
         for map in mapping {
-            while let Some(m) = morphs.get(morph_idx)
-                && m.is_ignored
-            {
+            // is_ignored な Morph を先に進めておく
+            while let Some(m) = morphs.get(morph_idx) {
+                if m.is_ignored {
+                    result.push(WordPhonemeDetail {
+                        word: m.surface.clone(),
+                        phonemes: vec!["sp".to_string()],
+                        is_unknown: m.is_unknown,
+                        is_ignored: true,
+                    });
+                    morph_idx += 1;
+                } else {
+                    break;
+                }
+            }
+
+            let current_map_word = &map.word;
+
+            if let Some(morph) = morphs.get(morph_idx) {
+                if current_map_word == &morph.surface {
+                    let mut phonemes = map.phonemes.clone();
+
+                    if morph.is_unknown {
+                        // 先頭の長音のような Open JTalk が破棄するもの、
+                        // または pau に置き換えられた未知語は unk にしておく
+                        if phonemes.is_empty() || phonemes == ["pau"] {
+                            phonemes = vec!["unk".to_string()];
+                        }
+                    }
+
+                    result.push(WordPhonemeDetail {
+                        word: map.word.clone(),
+                        phonemes,
+                        is_unknown: morph.is_unknown,
+                        is_ignored: map.phonemes.is_empty(),
+                    });
+                    morph_idx += 1;
+                } else if current_map_word.starts_with(&morph.surface) {
+                    let mut is_unknown_word = false;
+                    let mut matched_len = 0;
+
+                    while let Some(inner_morph) = morphs.get(morph_idx) {
+                        if inner_morph.is_ignored {
+                            result.push(WordPhonemeDetail {
+                                word: inner_morph.surface.clone(),
+                                phonemes: vec!["sp".to_string()],
+                                is_unknown: inner_morph.is_unknown,
+                                is_ignored: true,
+                            });
+                            morph_idx += 1;
+                            continue;
+                        }
+
+                        let remaining = &current_map_word[matched_len..];
+
+                        if remaining.starts_with(&inner_morph.surface) {
+                            is_unknown_word |= inner_morph.is_unknown;
+                            matched_len += inner_morph.surface.len();
+                            morph_idx += 1;
+
+                            if matched_len == current_map_word.len() {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let mut phonemes = map.phonemes.clone();
+
+                    if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
+                        phonemes = vec!["unk".to_string()];
+                    }
+
+                    result.push(WordPhonemeDetail {
+                        word: map.word.clone(),
+                        phonemes,
+                        is_unknown: is_unknown_word,
+                        is_ignored: map.phonemes.is_empty(),
+                    });
+                } else {
+                    // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
+                    result.push(WordPhonemeDetail {
+                        word: map.word.clone(),
+                        phonemes: map.phonemes.clone(),
+                        is_unknown: false,
+                        is_ignored: map.phonemes.is_empty(),
+                    });
+                }
+            }
+        }
+
+        // mapping 終了後、morphs の末尾に無視トークン(空白等)が残っていれば回収する
+        while let Some(m) = morphs.get(morph_idx) {
+            if m.is_ignored {
                 result.push(WordPhonemeDetail {
                     word: m.surface.clone(),
                     phonemes: vec!["sp".to_string()],
                     is_unknown: m.is_unknown,
                     is_ignored: true,
                 });
-                morph_idx += 1;
             }
-            if let Some(morph) = morphs.get(morph_idx) {
-                if map.word == morph.surface {
-                    if morphs[morph_idx].is_unknown {
-                        result.push(WordPhonemeDetail {
-                            word: map.word,
-                            phonemes: vec!["unk".to_string()],
-                            is_unknown: true,
-                            is_ignored: false,
-                        });
-                    } else {
-                        result.push(WordPhonemeDetail {
-                            word: map.word,
-                            phonemes: map.phonemes,
-                            is_unknown: false,
-                            is_ignored: false,
-                        });
-                    }
-
-                    morph_idx += 1;
-                } else if map.word.starts_with(&morph.surface) {
-                    let mut is_unknown_word = false;
-
-                    // NJD によって、未知語は結合されることがなく、
-                    // また、空白が word の中に含まれることもないことを仮定する。
-                    while let Some(morph) = &morphs.get(morph_idx)
-                        && map.word.contains(&morph.surface)
-                    {
-                        let MecabMorph { is_unknown, .. } = &morphs[morph_idx];
-                        is_unknown_word |= is_unknown;
-
-                        morph_idx += 1;
-                    }
-
-                    result.push(WordPhonemeDetail {
-                        word: map.word,
-                        phonemes: map.phonemes,
-                        is_unknown: is_unknown_word,
-                        is_ignored: false,
-                    });
-                } else {
-                    // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
-                    result.push(WordPhonemeDetail {
-                        word: map.word,
-                        phonemes: map.phonemes,
-                        is_unknown: false,
-                        is_ignored: false,
-                    });
-                }
-            }
+            morph_idx += 1;
         }
 
         Ok(result)

@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         elapsed, sentences_per_sec
     );
 
-    (0..3).for_each(|i| println!("{:?}", result[i]));
+    result.iter().take(3).for_each(|v| println!("{v:?}"));
 
     Ok(())
 }
