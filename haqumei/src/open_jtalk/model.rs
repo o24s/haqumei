@@ -13,7 +13,7 @@ impl MecabModel {
 
         let arg0 = CString::new("mecab").unwrap();
         let arg1 = CString::new("-d").unwrap();
-        let arg2 = CString::new(dict_dir)?;
+        let arg2 = CString::new(dict_dir).map_err(|_| HaqumeiError::MecabLoadError)?;
         let arg3 = CString::new("-u").unwrap();
 
         let user_dic_c: Option<CString> = user_dict.map(CString::new).transpose()?;

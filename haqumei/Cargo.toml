@@ -33,6 +33,7 @@ embed-dictionary = []
 [dependencies]
 arc-swap.workspace = true
 dirs.workspace = true
+fs4.workspace = true
 hex.workspace = true
 libc.workspace = true
 log.workspace = true

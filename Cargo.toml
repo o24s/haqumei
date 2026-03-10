@@ -11,6 +11,7 @@ members = [
 arc-swap = "1.8.2"
 csv = "1.4.0"
 dirs = "6.0.0"
+fs4 = { version = "0.13.1", features = ["sync"] }
 hex = "0.4.3"
 libc = "0.2.183"
 log = "0.4.29"

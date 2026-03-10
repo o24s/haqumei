@@ -2,13 +2,15 @@ use std::{
     ffi::{CString, NulError},
     fs, io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use libc::{c_char, c_int};
 use thiserror::Error;
 
 use crate::{errors::HaqumeiError, ffi, open_jtalk::model::MecabModel};
+
+static DICT_EXTRACT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone)]
 pub struct Dictionary {
@@ -42,6 +44,7 @@ impl Dictionary {
     pub fn from_embedded() -> Result<Self, HaqumeiError> {
         use crate::utils::collect_dict_files;
         use crate::utils::compute_metadata_key;
+        use fs4::fs_std::FileExt;
 
         use sha2::{Digest, Sha256};
         use std::{fs::File, io::Read};
@@ -58,13 +61,30 @@ impl Dictionary {
             .join("haqumei");
         let dict_path = cache_dir.join("dict");
 
+        let _thread_guard = DICT_EXTRACT_LOCK.lock().expect("Poisoned");
+
+        if !cache_dir.exists() {
+            fs::create_dir_all(&cache_dir)?;
+        }
+
+        let lock_file_path = cache_dir.join(".lock");
+
+        let lock_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&lock_file_path)?;
+
+        lock_file.lock_exclusive().map_err(|e| HaqumeiError::CacheIo {
+            path: lock_file_path.clone(),
+            source: e,
+        })?;
+
         let hash_files_full = |paths: &Vec<PathBuf>| -> Result<_, HaqumeiError> {
             let mut file_hasher = Sha256::new();
 
             for path in paths {
-                let relative_path = path.strip_prefix(&dict_path)?;
-                file_hasher.update(relative_path.to_string_lossy().as_bytes());
-
                 let mut file = File::open(path)?;
                 let mut buffer = Vec::new();
                 file.read_to_end(&mut buffer)?;

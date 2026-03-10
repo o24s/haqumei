@@ -457,8 +457,6 @@ fn calculate_hash_for_extensions(
     paths.sort();
 
     for path in paths {
-        let relative_path = path.strip_prefix(dir)?;
-        hasher.update(relative_path.to_string_lossy().as_bytes());
         let mut file = File::open(&path)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
