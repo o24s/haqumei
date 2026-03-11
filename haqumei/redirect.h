@@ -16,6 +16,6 @@ extern "C" {
 }
 #endif
 
-#define fprintf haqumei_redirect_fprintf
+#define fprintf(...) haqumei_redirect_fprintf(__VA_ARGS__)
 
 #endif // FPRINTF_REDIRECT_H

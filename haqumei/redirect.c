@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdarg.h>
-#include <string.h>
+
+#ifdef _WIN32
+  #include <io.h>
+  #define GET_FILENO _fileno
+#else
+  #define GET_FILENO fileno
+#endif
 
 extern void haqumei_rust_print(const char *msg, int is_stderr);
 
@@ -24,8 +30,9 @@ static int redirect_to_rust(const char* format, va_list args, int is_stderr) {
 }
 
 int haqumei_redirect_fprintf(FILE *stream, const char *format, ...) {
-    int is_stderr = (stream == stderr);
-    int is_stdout = (stream == stdout);
+    int fd = GET_FILENO(stream);
+    int is_stderr = (fd == 2);
+    int is_stdout = (fd == 1);
 
     if (!is_stderr && !is_stdout) {
         va_list args;

@@ -18,7 +18,7 @@ wheels = [
 [[package]]
 name = "haqumei"
 version = "0.1.0"
-source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#63230a6b1a8f0cb325fce9bc2d563f2e256a773f" }
+source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#923f3a97effd89428e285a63c81798ca823d38de" }
 
 [[package]]
 name = "numpy"

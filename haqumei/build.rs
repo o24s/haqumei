@@ -16,8 +16,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let manifest_dir = Path::new(&manifest_dir);
     let target = std::env::var("TARGET").unwrap();
 
-    println!("cargo:rerun-if-changed={}", src_dir.display());
-    println!("cargo:rerun-if-changed=wrapper.h");
+    let watch_files = ["redirect.c", "redirect.h", "wrapper.h", src_dir_str];
+
+    for path in &watch_files {
+        println!("cargo:rerun-if-changed={}", path);
+    }
 
     if target.contains("msvc") && std::env::var("LIBCLANG_PATH").is_err() {
         let error_msg = r#"
@@ -161,16 +164,14 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     // compiler flags
     if build.get_compiler().is_like_msvc() {
-        let mut flag = OsString::from("/FI");
-        flag.push(redirect_flag);
-        build.flag(flag);
+        build.flag("/FI");
+        build.flag(redirect_flag);
 
         build.define("_CRT_SECURE_NO_WARNINGS", None);
         build.define("_CRT_NONSTDC_NO_WARNINGS", None);
         build.flag("/source-charset:utf-8");
         build.flag("/execution-charset:utf-8");
 
-        build.flag("/W3");
         build.flag("/wd4100");
         build.flag("/wd4065");
     } else {
@@ -214,6 +215,20 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .blocklist_item("FP_ZERO")
         .blocklist_item("FP_SUBNORMAL")
         .blocklist_item("FP_NORMAL")
+        .allowlist_function("mecab_.*")
+        .allowlist_function("Mecab_.*")
+        .allowlist_function("JPCommon.*")
+        .allowlist_function("NJD.*")
+        .allowlist_function("njd2jpcommon")
+        .allowlist_function("njd_set_.*")
+        .allowlist_function("mecab2njd")
+        .allowlist_function("text2mecab")
+        .allowlist_type("mecab_.*")
+        .allowlist_type("Mecab.*")
+        .allowlist_type("JPCommon.*")
+        .allowlist_type("NJD.*")
+        .allowlist_var("text2mecab_.*")
+        .allowlist_var("MECAB_.*")
         .clang_arg(format!("-I{}", src_dir_str));
 
     for dir in &include_dirs {
