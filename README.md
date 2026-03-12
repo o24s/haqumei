@@ -241,11 +241,6 @@ In fact, even in the benchmark using "I Am a Cat" (which contains nearly 800 ins
 It is known that `pyopenjtalk-plus`, which incorporates reading corrections via Sudachi and the Nani Predictor, is tens to hundreds of times slower than the original [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) (see [voicevox_engine#1486](https://github.com/VOICEVOX/voicevox_engine/issues/1486)). Thus, we believe the current execution speed is quite reasonable.  
 Haqumei runs about 50 times faster than `pyopenjtalk-plus` under a similar Heavy configuration. However, since `pyopenjtalk-plus` achieves slightly higher accuracy using models like [ROHAN4600](https://github.com/mmorise/rohan4600), it is not treated merely as a target for speed comparison. If significant accuracy improvements from Unidic corrections are confirmed in the future, we might pursue more aggressive optimizations or adopt Sudachi similarly to `pyopenjtalk-plus`.
 
-## Miscellaneous (Why not on crates.io?)
-
-Although the `haqumei` crate supports packaging, it is not published on crates.io due to file size limits.  
-This is because, rather than relying on distribution via crates.io, we prioritize the benefit of embedding dictionary data directly into the binary.
-
 ## Dictionary
 
 Haqumei uses the dictionary included in [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus).
