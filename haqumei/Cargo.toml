@@ -11,27 +11,32 @@ repository = "https://github.com/stellanomia/haqumei"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
 include = [
-    "src",
+    "src/*",
     "build.rs",
     "redirect.c",
     "redirect.h",
     "wrapper.h",
-    "yomi_model",
-    "dictionary",
-    "vendor/open_jtalk/src",
-    "dictionary.tar.zst",
-    "dictionary.sha256",
-    "dictionary.tar.zst.sha256",
-    "compiled_dictionary.sha256",
-    "tests/"
-]
-exclude = [
-    "vendor/open_jtalk/src/mecab-naist-jdic/**/*",
+    "yomi_model/**",
+    "vendor/open_jtalk/src/bin/**",
+    "vendor/open_jtalk/src/jpcommon/**",
+    "vendor/open_jtalk/src/mecab/**",
+    "vendor/open_jtalk/src/mecab2njd/**",
+    "vendor/open_jtalk/src/njd/**",
+    "vendor/open_jtalk/src/njd2jpcommon/**",
+    "vendor/open_jtalk/src/njd_set_accent_phrase/**",
+    "vendor/open_jtalk/src/njd_set_accent_type/**",
+    "vendor/open_jtalk/src/njd_set_digit/**",
+    "vendor/open_jtalk/src/njd_set_long_vowel/**",
+    "vendor/open_jtalk/src/njd_set_pronunciation/**",
+    "vendor/open_jtalk/src/njd_set_unvoiced_vowel/**",
+    "vendor/open_jtalk/src/text2mecab/**",
 ]
 
 [features]
-default = ["embed-dictionary"]
+default = ["embed-dictionary", "download-dictionary"]
 embed-dictionary = []
+build-dictionary = []
+download-dictionary = ["dep:reqwest", "dep:tempfile"]
 
 [dependencies]
 arc-swap.workspace = true
@@ -53,13 +58,16 @@ vibrato-rkyv.workspace = true
 walkdir.workspace = true
 zstd.workspace = true
 
-
 [build-dependencies]
 bindgen = "0.72.1"
 cc = "1.2.56"
-glob = "0.3.3"
+dirs.workspace = true
+glob.workspace = true
 hex.workspace = true
 walkdir.workspace = true
 sha2.workspace = true
 tar.workspace = true
 zstd.workspace = true
+
+reqwest = { workspace = true, features = ["blocking"], optional = true }
+tempfile = { workspace = true, optional = true }

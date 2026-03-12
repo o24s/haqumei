@@ -50,16 +50,13 @@ impl Dictionary {
         use std::{fs::File, io::Read};
 
         const DICTIONARY_BYTES: &[u8] =
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/dictionary.tar.zst"));
-        const EXPECTED_DICT_HASH: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/compiled_dictionary.sha256"
-        ));
+            include_bytes!(env!("HAQUMEI_EMBED_DICT_PATH"));
+        const EXPECTED_DICT_HASH: &str = env!("HAQUMEI_DICT_HASH");
 
         let cache_dir = dirs::cache_dir()
             .ok_or(HaqumeiError::CacheDirectoryNotFound)?
             .join("haqumei");
-        let dict_path = cache_dir.join("dict");
+        let dict_path = cache_dir.join("decompressed");
 
         let _thread_guard = DICT_EXTRACT_LOCK.lock().expect("Poisoned");
 

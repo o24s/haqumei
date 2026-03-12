@@ -1,17 +1,55 @@
 use std::error::Error;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 use std::{env, fs};
 
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "download-dictionary")]
+use std::io::{self, Seek, SeekFrom};
+
+#[cfg(feature = "download-dictionary")]
+const DICTIONARY_URL: &str = "https://github.com/stellanomia/haqumei/releases/download/v0.1.0/dictionary.tar.zst";
+#[cfg(feature = "download-dictionary")]
+const COMPRESSED_DICTIONARY_HASH: &str = "2250152f64158f90b6234d1945f8a4099cd6e7218def079f5c610315a859b8d0";
+#[cfg(feature = "download-dictionary")]
+const DICTIONARY_HASH: &str = "5dbb19b8302188ba5c1a0a2af04e0ee6be480563401dfb0c9391ba9f2d625604";
+const DICTIONARY_NAME: &str = "dictionary.tar.zst";
+
+static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    let cache_dir = dirs::cache_dir()
+        .unwrap()
+        .join("haqumei");
+    fs::create_dir_all(&cache_dir).unwrap();
+    cache_dir
+});
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let src_dir_str = "vendor/open_jtalk/src";
-    let src_dir = PathBuf::from(src_dir_str);
+    let is_ci = env::var_os("CI").is_some();
+    let is_docs_rs = env::var_os("DOCS_RS").is_some();
     let out_dir = env::var("OUT_DIR")?;
+    let out_dir = Path::new(&out_dir);
+
+    let has_download = env::var_os("CARGO_FEATURE_DOWNLOAD_DICTIONARY").is_some();
+    let has_build = env::var_os("CARGO_FEATURE_BUILD_DICTIONARY").is_some();
+
+    if (has_download && has_build) && !(is_ci || is_docs_rs) {
+        panic!(
+            "The features \"download-dictionary\" and \"build-dictionary\" cannot be enabled simultaneously."
+        );
+    }
+
+    if !(has_download || has_build || is_ci || is_docs_rs) {
+        panic!(
+            "You must enable either \"download-dictionary\" or \"build-dictionary\" to prepare the dictionary."
+        );
+    }
+
+    let src_dir_str = "vendor/open_jtalk/src";
+    let src_dir = Path::new(src_dir_str);
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);
     let target = std::env::var("TARGET").unwrap();
@@ -48,6 +86,48 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             println!("cargo:warning={}", line);
         }
         panic!("LIBCLANG_PATH is not set.");
+    }
+
+    let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
+
+    #[cfg(feature = "download-dictionary")]
+    if has_download {
+        let mut need_download = true;
+
+        if compressed_dict_path.exists() {
+            let mut hasher = Sha256::new();
+            let mut file = File::open(&compressed_dict_path)?;
+            io::copy(&mut file, &mut hasher)?;
+            if hex::encode(hasher.finalize()) == COMPRESSED_DICTIONARY_HASH {
+                need_download = false;
+            }
+        }
+
+        if need_download {
+            let mut response = reqwest::blocking::get(DICTIONARY_URL)?;
+            if !response.status().is_success() {
+                panic!("Failed to download the dictionary from {}", DICTIONARY_URL);
+            }
+
+            let mut temp_file = tempfile::NamedTempFile::new_in(&*CACHE_DIR)?;
+            response.copy_to(&mut temp_file)?;
+
+            temp_file.seek(SeekFrom::Start(0))?;
+            let calculated_hash = {
+                let mut hasher = Sha256::new();
+                io::copy(&mut temp_file, &mut hasher)?;
+                hex::encode(hasher.finalize())
+            };
+
+            if calculated_hash != COMPRESSED_DICTIONARY_HASH {
+                panic!("Downloaded file checksum mismatch. It may be corrupted.")
+            }
+
+            temp_file.persist(&compressed_dict_path)?;
+        }
+
+        println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", &compressed_dict_path.display());
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
     }
 
     let mut defines = vec![
@@ -203,7 +283,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     build.compile("openjtalk");
 
-    let dict_indexer_path = build_dict_indexer(&src_dir, &out_dir, &defines, &include_dirs)?;
+    let dict_indexer_path = build_dict_indexer(src_dir, out_dir, &defines, &include_dirs)?;
 
     // println!("cargo:warning=Generating bindings for openjtalk...");
 
@@ -248,24 +328,30 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from(out_dir);
-
     bindings
-        .write_to_file(out_path.join("bindings.rs"))
+        .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings to file");
+
+    if is_ci | is_docs_rs {
+        println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", manifest_dir.join("build.rs").display());
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
+        return Ok(());
+    }
 
     if env::var("CARGO_FEATURE_EMBED_DICTIONARY").is_err() {
         println!("'embed-dictionary' feature is not enabled. Skipping dictionary compilation.");
         return Ok(());
     }
 
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    if !has_build {
+        return Ok(());
+    }
+
     let mut dict_src_dir = manifest_dir.join("dictionary");
-    let dict_out_dir = out_path.join("dictionary_out");
-    let compressed_dict_path = manifest_dir.join("dictionary.tar.zst");
-    let compressed_dict_hash_path = manifest_dir.join("dictionary.tar.zst.sha256");
-    let dict_hash_path = manifest_dir.join("dictionary.sha256");
-    let compiled_dict_hash_path = manifest_dir.join("compiled_dictionary.sha256");
+    let dict_out_dir = out_dir.join("dictionary_out");
+    let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
+    let dict_hash_path = CACHE_DIR.join("dictionary.sha256");
+    let compiled_dict_hash_path = CACHE_DIR.join("compiled_dictionary.sha256");
 
     if dict_src_dir.is_file()
         && let Some(parent) = manifest_dir.parent()
@@ -315,23 +401,25 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     let compressed_dict_hash = calculate_compressed_dict_hash(&compressed_dict_path)?;
     let compiled_dict_hash = calculate_hash_for_extensions(&dict_out_dir, &["dic", "bin"])?;
     fs::write(&dict_hash_path, dict_hash)?;
-    fs::write(&compiled_dict_hash_path, compiled_dict_hash)?;
-    fs::write(&compressed_dict_hash_path, compressed_dict_hash)?;
+    fs::write(&compiled_dict_hash_path, &compiled_dict_hash)?;
+    fs::write(&compressed_dict_hash_path, &compressed_dict_hash)?;
     if dict_out_dir.exists() {
         fs::remove_dir_all(dict_out_dir)?;
     }
+
+    println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", &compressed_dict_path.display());
+    println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", &compiled_dict_hash);
+
     // println!("cargo:warning=Dictionary compressed to {}", compressed_dict_path.display());
     Ok(())
 }
 
 fn build_dict_indexer(
     src_dir: &Path,
-    out_dir: &str,
+    out_dir: &Path,
     defines: &[(&str, Option<&str>)],
     include_dirs: &[&str],
 ) -> Result<PathBuf, Box<dyn Error>> {
-    let out_path = PathBuf::from(out_dir);
-
     let main_wrapper_src = r#"
 #include "mecab.h"
 
@@ -339,7 +427,7 @@ int main(int argc, char **argv) {
   return mecab_dict_index(argc, argv);
 }
 "#;
-    let main_wrapper_path = out_path.join("main_wrapper.cpp");
+    let main_wrapper_path = out_dir.join("main_wrapper.cpp");
     fs::write(&main_wrapper_path, main_wrapper_src)?;
 
     let mut build = cc::Build::new();
@@ -352,7 +440,7 @@ int main(int argc, char **argv) {
     } else {
         "mecab-dict-index"
     };
-    let exe_path = out_path.join(exe_name);
+    let exe_path = out_dir.join(exe_name);
 
     command.arg(&main_wrapper_path);
     if compiler.is_like_msvc() {
@@ -378,10 +466,17 @@ int main(int argc, char **argv) {
 
     if compiler.is_like_msvc() {
         command.arg("/link");
-        command.arg(format!("/LIBPATH:{}", out_dir));
+
+        let mut arg = OsString::from("/LIBPATH:");
+        arg.push(out_dir);
+        command.arg(arg);
+
         command.arg("openjtalk.lib");
     } else {
-        command.arg(format!("-L{}", out_dir));
+        let mut arg = OsString::from("-L");
+        arg.push(out_dir);
+        command.arg(arg);
+
         command.arg("-lopenjtalk");
         if cfg!(unix) {
             command.arg("-lm");
@@ -443,9 +538,7 @@ fn calculate_compressed_dict_hash(path: &Path) -> Result<String, Box<dyn Error>>
     let mut hasher = Sha256::new();
 
     let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    hasher.update(&buffer);
+    std::io::copy(&mut file, &mut hasher)?;
 
     Ok(hex::encode(hasher.finalize()))
 }
@@ -473,9 +566,7 @@ fn calculate_hash_for_extensions(
 
     for path in paths {
         let mut file = File::open(&path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        hasher.update(&buffer);
+        std::io::copy(&mut file, &mut hasher)?;
     }
 
     Ok(hex::encode(hasher.finalize()))
