@@ -180,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Modifying Output with G2P Options
 
 You can customize the behavior of `Haqumei` by using `Haqumei::with_options`.
-For details on the default behavior and available options, please refer to [HaqumeiOptions](https://stellanomia.github.io/haqumei/haqumei/struct.HaqumeiOptions.html).
+For details on the default behavior and available options, please refer to [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
 
 In the following example, `normalize_unicode` (which is disabled by default) is enabled to apply Unicode NFC normalization to the input text.
 
@@ -228,7 +228,7 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
   Compared to `pyopenjtalk`, throughput (chars/s) improves as the average number of characters per line increases. This is due to reduced FFI call overhead and the efficient direct extraction of labels from Open JTalk's internal structures.  
   When processing large amounts of text, it's most efficient to pass the content in batches at reasonable lengths rather than breaking it into excessively fine-grained lines.
 - **Difference Between Default and Heavy**:  
-  In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `modify_kanji_yomi` are enabled in [HaqumeiOptions](https://stellanomia.github.io/haqumei/haqumei/struct.HaqumeiOptions.html).
+  In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `modify_kanji_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
 
 ### Considerations on Heavy Configuration Performance
 

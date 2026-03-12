@@ -172,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### G2P オプションで出力を変更する
 
 `Haqumei::with_options` を使用することで、`Haqumei` の出力をカスタマイズできます。
-デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://stellanomia.github.io/haqumei/haqumei/struct.HaqumeiOptions.html) を参照してください。
+デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) を参照してください。
 
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。
 
@@ -225,7 +225,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - Default, Heavy の違い:  
   表中のDefault は `Haqumei::new` をそのまま使用しており、  
-  Heavyは [HaqumeiOptions](https://stellanomia.github.io/haqumei/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `modify_kanji_yomi` を有効にした場合の計測です。
+  Heavyは [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `modify_kanji_yomi` を有効にした場合の計測です。
 
 ### Heavy 遅くない?
 
