@@ -108,8 +108,8 @@ def main():
     t_ojt = measure("OpenJTalk (Single)", lambda d: run_openjtalk_single(ojt, d), lines)
     t_ojt_batch = measure("OpenJTalk.g2p_batch", lambda d: run_openjtalk_batch(ojt, d), lines)
 
-    t_hq = measure("haqumei (Single, Default)", lambda d: run_haqumei_single(hq, d), lines)
-    t_hq_heavy = measure("haqumei (Single, Heavy)", lambda d: run_haqumei_single(hq_heavy, d), lines)
+    t_hq = measure("haqumei (Default)", lambda d: run_haqumei_single(hq, d), lines)
+    t_hq_heavy = measure("haqumei (Heavy)", lambda d: run_haqumei_single(hq_heavy, d), lines)
 
     t_hq_batch = measure("haqumei.g2p_batch (Default)", lambda d: run_haqumei_batch(hq, d), lines)
     t_hq_heavy_batch = measure("haqumei.g2p_batch (Heavy)", lambda d: run_haqumei_batch(hq_heavy, d), lines)
@@ -118,8 +118,8 @@ def main():
     print("\n[Speedup vs pyopenjtalk]")
     print(f"OpenJTalk (Single):          x{t_py / t_ojt:.2f}")
     print(f"OpenJTalk.g2p_batch:         x{t_py / t_ojt_batch:.2f}")
-    print(f"haqumei (Single, Default):   x{t_py / t_hq:.2f}")
-    print(f"haqumei (Single, Heavy):     x{t_py / t_hq_heavy:.2f}")
+    print(f"haqumei (Default):           x{t_py / t_hq:.2f}")
+    print(f"haqumei (Heavy):             x{t_py / t_hq_heavy:.2f}")
     print(f"haqumei.g2p_batch (Default): x{t_py / t_hq_batch:.2f}")
     print(f"haqumei.g2p_batch (Heavy):   x{t_py / t_hq_heavy_batch:.2f}")
 
