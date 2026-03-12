@@ -27,9 +27,6 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
-#[cfg(not(feature = "embed-dictionary"))]
-use model::MecabModel;
-
 pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 
 pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::new(|| {
@@ -44,6 +41,7 @@ pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::ne
         let dummy_model = MecabModel::new_uninitialized();
         let dummy_dict = Dictionary {
             model: Arc::new(dummy_model),
+            dict_dir: std::path::PathBuf::new(),
         };
         ArcSwap::from(Arc::new(dummy_dict))
     }
@@ -715,16 +713,21 @@ impl OpenJTalk {
         }
     }
 
+    const BUFFER_SIZE: usize = 16384;
+
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
-        const BUFFER_SIZE: usize = 16384;
 
         let c_text = CString::new(text)?;
 
-        let mut buffer = vec![0u8; BUFFER_SIZE];
+        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
 
         let result = unsafe {
-            ffi::text2mecab(buffer.as_mut_ptr() as *mut i8, BUFFER_SIZE, c_text.as_ptr())
+            ffi::text2mecab(
+                buffer.as_mut_ptr() as *mut i8,
+                Self::BUFFER_SIZE,
+                c_text.as_ptr(),
+            )
         };
 
         match result {
@@ -786,13 +789,16 @@ impl OpenJTalk {
     /// 全ての解析結果を返します。
     pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
-        const BUFFER_SIZE: usize = 16384;
 
         let c_text = CString::new(text)?;
-        let mut buffer = vec![0u8; BUFFER_SIZE];
+        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
 
         let result = unsafe {
-            ffi::text2mecab(buffer.as_mut_ptr() as *mut i8, BUFFER_SIZE, c_text.as_ptr())
+            ffi::text2mecab(
+                buffer.as_mut_ptr() as *mut i8,
+                Self::BUFFER_SIZE,
+                c_text.as_ptr(),
+            )
         };
 
         match result {

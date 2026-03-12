@@ -25,6 +25,9 @@ include = [
     "compiled_dictionary.sha256",
     "tests/"
 ]
+exclude = [
+    "vendor/open_jtalk/src/mecab-naist-jdic/**/*",
+]
 
 [features]
 default = ["embed-dictionary"]

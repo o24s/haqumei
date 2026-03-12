@@ -76,10 +76,12 @@ impl Dictionary {
             .truncate(true)
             .open(&lock_file_path)?;
 
-        lock_file.lock_exclusive().map_err(|e| HaqumeiError::CacheIo {
-            path: lock_file_path.clone(),
-            source: e,
-        })?;
+        lock_file
+            .lock_exclusive()
+            .map_err(|e| HaqumeiError::CacheIo {
+                path: lock_file_path.clone(),
+                source: e,
+            })?;
 
         let hash_files_full = |paths: &Vec<PathBuf>| -> Result<_, HaqumeiError> {
             let mut file_hasher = Sha256::new();
