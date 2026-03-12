@@ -7,8 +7,15 @@
     English | <a href="https://github.com/stellanomia/haqumei/blob/main/README.ja.md">日本語</a>
   </p>
   <p>
-    <a href="https://stellanomia.github.io/haqumei/"><img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Docs"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+    <a href="https://crates.io/crates/haqumei">
+      <img src="https://img.shields.io/crates/v/haqumei.svg" alt="Crates.io">
+    </a>
+    <a href="https://docs.rs/haqumei">
+      <img src="https://docs.rs/haqumei/badge.svg" alt="docs.rs">
+    </a>
+    <a href="LICENSE">
+      <img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0">
+    </a>
   </p>
 </div>
 

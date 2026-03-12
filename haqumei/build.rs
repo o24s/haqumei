@@ -88,10 +88,9 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         panic!("LIBCLANG_PATH is not set.");
     }
 
-    let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
-
     #[cfg(feature = "download-dictionary")]
     if has_download {
+        let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
         let mut need_download = true;
 
         if compressed_dict_path.exists() {
@@ -332,7 +331,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings to file");
 
-    if is_ci | is_docs_rs {
+    if is_ci || is_docs_rs {
         println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", manifest_dir.join("build.rs").display());
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
         return Ok(());
@@ -347,6 +346,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         return Ok(());
     }
 
+    let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
     let mut dict_src_dir = manifest_dir.join("dictionary");
     let dict_out_dir = out_dir.join("dictionary_out");
     let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
