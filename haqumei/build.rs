@@ -89,7 +89,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     }
 
     #[cfg(feature = "download-dictionary")]
-    if has_download {
+    if has_download && !(is_ci || is_docs_rs) {
         let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
         let mut need_download = true;
 
