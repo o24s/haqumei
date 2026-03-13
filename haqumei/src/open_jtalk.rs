@@ -71,15 +71,15 @@ unsafe impl Send for JpCommon {}
 unsafe impl Send for MecabModel {}
 unsafe impl Sync for MecabModel {}
 
-/// `OpenJTalk::new()` で使用されるグローバル辞書を更新します (設定します)。
+/// `Haqumei::new()`, `OpenJTalk::new()` で使用されるグローバル辞書を更新します (設定します)。
 ///
-/// この関数を呼び出した後、新たに `OpenJTalk::new()` を呼び出す際には、この辞書が使用されるようになります。
+/// この関数を呼び出した後、新たに `Haqumei::new()`, `OpenJTalk::new()` を呼び出す際には、この辞書が使用されるようになります。
 /// 既存のインスタンスについては、次のメソッド呼び出し時に新しい辞書に更新されます。
 pub fn update_global_dictionary(new_dict: Dictionary) {
     GLOBAL_MECAB_DICTIONARY.store(Arc::new(new_dict));
 }
 
-/// `OpenJTalk::new()` で使用されるグローバル辞書のユーザー辞書を外します。
+/// `Haqumei::new()`, `OpenJTalk::new()` で使用されるグローバル辞書のユーザー辞書を外します。
 pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
     GLOBAL_MECAB_DICTIONARY.store(Arc::new(Dictionary::from_path(
         &GLOBAL_MECAB_DICTIONARY.load_full().dict_dir,
@@ -92,11 +92,8 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 ///
 /// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
 ///
-/// `g2p_**`の実装において、フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
-/// g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
-/// また、他のバインディングにない以下の関数が実装されています。
-/// - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
-/// - `g2p_mapping`: テキストを解析し、単語と音素のマッピング情報を返します。
+/// フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
+/// g2p を行えるものはそのように実装されているため、他の Open JTalk バインディング実装より若干高速です。
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
@@ -163,7 +160,7 @@ impl OpenJTalk {
         Ok(())
     }
 
-    pub fn from_dictonary(dict: Dictionary) -> Result<Self, HaqumeiError> {
+    pub fn from_dictionary(dict: Dictionary) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::from_model(&dict.model)?;
         let njd = Njd::new()?;
         let jp_common = JpCommon::new()?;
@@ -173,6 +170,21 @@ impl OpenJTalk {
             njd,
             jp_common,
             dict: Some(Arc::new(dict)),
+            _marker: PhantomData,
+        })
+    }
+
+    /// `Arc` でラップされた [Dictionary] からインスタンスを作成します。
+    pub fn from_shared_dictionary(dict: Arc<Dictionary>) -> Result<Self, HaqumeiError> {
+        let mecab = Mecab::from_model(&dict.model)?;
+        let njd = Njd::new()?;
+        let jp_common = JpCommon::new()?;
+
+        Ok(Self {
+            mecab,
+            njd,
+            jp_common,
+            dict: Some(dict),
             _marker: PhantomData,
         })
     }
@@ -221,21 +233,6 @@ impl OpenJTalk {
             njd,
             jp_common,
             dict: None,
-            _marker: PhantomData,
-        })
-    }
-
-    /// `Arc` でラップされた `Dictionary` からインスタンスを作成します。
-    pub fn from_shared_dictionary(dict: Arc<Dictionary>) -> Result<Self, HaqumeiError> {
-        let mecab = Mecab::from_model(&dict.model)?;
-        let njd = Njd::new()?;
-        let jp_common = JpCommon::new()?;
-
-        Ok(Self {
-            mecab,
-            njd,
-            jp_common,
-            dict: Some(dict),
             _marker: PhantomData,
         })
     }

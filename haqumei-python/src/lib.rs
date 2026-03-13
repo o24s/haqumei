@@ -174,7 +174,7 @@ impl PyOpenJTalk {
 
     #[staticmethod]
     fn from_dictionary(dict: &PyDictionary) -> PyResult<Self> {
-        let inner = OpenJTalk::from_dictonary(dict.inner.clone()).map_err(to_py_err)?;
+        let inner = OpenJTalk::from_dictionary(dict.inner.clone()).map_err(to_py_err)?;
         Ok(Self {
             inner: Mutex::new(inner),
         })

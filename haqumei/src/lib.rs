@@ -47,8 +47,7 @@ pub mod open_jtalk;
 mod utils;
 
 use std::{
-    borrow::Cow,
-    sync::{LazyLock, Mutex},
+    borrow::Cow, path::Path, sync::{Arc, LazyLock, Mutex}
 };
 
 use moka::sync::Cache;
@@ -66,7 +65,7 @@ use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    open_jtalk::{GLOBAL_MECAB_DICTIONARY, MecabMorph},
+    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY, MecabMorph},
     utils::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
@@ -80,6 +79,11 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
 
+/// Open JTalk をバインディングしたG2Pエンジン。
+///
+/// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
+///
+/// [Haqumei::with_options], [HaqumeiOptions] を使うことで、出力をカスタマイズできます。
 pub struct Haqumei {
     open_jtalk: OpenJTalk,
     tokenizer: Option<vibrato_rkyv::Tokenizer>,
@@ -168,6 +172,7 @@ impl Haqumei {
         Self::from_open_jtalk(OpenJTalk::new()?, HaqumeiOptions::default())
     }
 
+    /// [HaqumeiOptions] を使って、出力をカスタマイズします。
     pub fn with_options(options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
         Self::from_open_jtalk(OpenJTalk::new()?, options)
     }
@@ -196,6 +201,24 @@ impl Haqumei {
             tokenizer,
             options,
         })
+    }
+
+    /// [open_jtalk::Dictionary] から [Haqumei] を作ります。
+    pub fn from_dictionary(dict: Dictionary, options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
+        Self::from_open_jtalk(OpenJTalk::from_dictionary(dict)?, options)
+    }
+
+    /// `Arc` でラップされた [Dictionary] から [Haqumei] を作ります
+    pub fn from_shared_dictionary(dict: Arc<Dictionary>, options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
+        Self::from_open_jtalk(OpenJTalk::from_shared_dictionary(dict)?, options)
+    }
+
+    pub fn from_path<P: AsRef<Path>>(
+        dict_dir: P,
+        user_dict: Option<P>,
+        options: HaqumeiOptions,
+    ) -> Result<Self, HaqumeiError> {
+        Self::from_open_jtalk(OpenJTalk::from_path(dict_dir, user_dict)?, options)
     }
 
     /// 入力テキストを音素列 (フラットなリスト) に変換します。

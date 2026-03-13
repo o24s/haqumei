@@ -752,28 +752,28 @@ extern "C" {
 
   /* model interface */
   /**
-   * C wapper of MeCab::Model::create(argc, argv)
+   * C wrapper of MeCab::Model::create(argc, argv)
    */
   MECAB_DLL_EXTERN mecab_model_t   *mecab_model_new(int argc, char **argv);
 
   /**
-   * C wapper of MeCab::Model::create(arg)
+   * C wrapper of MeCab::Model::create(arg)
    */
   MECAB_DLL_EXTERN mecab_model_t   *mecab_model_new2(const char *arg);
 
   /**
-   * C wapper of MeCab::deleteModel(model)
+   * C wrapper of MeCab::deleteModel(model)
    */
 
   MECAB_DLL_EXTERN void             mecab_model_destroy(mecab_model_t *model);
 
   /**
-   * C wapper of MeCab::Model::createTagger()
+   * C wrapper of MeCab::Model::createTagger()
    */
   MECAB_DLL_EXTERN mecab_t         *mecab_model_new_tagger(mecab_model_t *model);
 
   /**
-   * C wapper of MeCab::Model::createLattice()
+   * C wrapper of MeCab::Model::createLattice()
    */
   MECAB_DLL_EXTERN mecab_lattice_t *mecab_model_new_lattice(mecab_model_t *model);
 
@@ -783,7 +783,7 @@ extern "C" {
   MECAB_DLL_EXTERN int mecab_model_swap(mecab_model_t *model, mecab_model_t *new_model);
 
   /**
-   * C wapper of MeCab::Model::dictionary_info()
+   * C wrapper of MeCab::Model::dictionary_info()
    */
   MECAB_DLL_EXTERN const mecab_dictionary_info_t* mecab_model_dictionary_info(mecab_model_t *model);
 
