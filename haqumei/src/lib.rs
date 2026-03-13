@@ -183,13 +183,17 @@ impl Haqumei {
         options: HaqumeiOptions,
     ) -> Result<Self, HaqumeiError> {
         let tokenizer = if options.modify_kanji_yomi {
-            let Some(data_dir) = dirs::data_local_dir().map(|dir| dir.join("haqumei")) else {
-                Err(HaqumeiError::DataDirectoryNotFound)?
+            let Some(cache_dir) = dirs::cache_dir().map(|dir| dir.join("haqumei")) else {
+                Err(HaqumeiError::CacheDirectoryNotFound)?
             };
+
+            let kind = PresetDictionaryKind::UnidicCwj;
+            log::info!("Downloading {} dictionary...", kind.name());
             let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
-                PresetDictionaryKind::UnidicCsj,
-                &data_dir,
+                kind,
+                cache_dir.join(kind.name()),
             )?;
+            log::info!("Downloaded {} dictionary.", kind.name());
 
             Some(vibrato_rkyv::Tokenizer::new(vibrato_dict))
         } else {

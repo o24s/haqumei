@@ -7,10 +7,13 @@ publish = false
 
 [dependencies]
 csv.workspace = true
-haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
-pyo3.workspace = true
+haqumei = { path = "../haqumei" }
 rayon.workspace = true
 regex.workspace = true
+similar = "2.7.0"
 
 [build-dependencies]
-pyo3-build-config = "0.28.2"
+hex.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+tempfile.workspace = true

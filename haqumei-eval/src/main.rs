@@ -1,206 +1,287 @@
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use regex::Regex;
-use std::env;
+use haqumei::{Haqumei, HaqumeiOptions};
+use similar::{ChangeTag, TextDiff};
+use std::borrow::Cow;
 use std::error::Error;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::time::Instant;
 
-#[derive(Debug, Clone)]
-struct RohanEntry {
-    text: String,
-    label: String,
+#[allow(unused)]
+mod basic5000;
+use basic5000::*;
+
+const IGNORE_PAU: bool = true;
+
+#[allow(unused)]
+#[derive(Debug, Clone, Copy)]
+enum EditOp {
+    Equal(usize, usize),      // expected_idx, actual_idx
+    Substitute(usize, usize),// expected_idx, actual_idx
+    Delete(usize, usize),    // expected_idx, actual_idx (actual_idx is the column index at that time)
+    Insert(usize, usize),    // expected_idx, actual_idx
 }
 
-fn load_rohan_data(path: &Path) -> Result<Vec<RohanEntry>, Box<dyn Error>> {
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_reader(file);
-    let re = Regex::new(r"\(.*?\)").unwrap();
-    let mut entries = Vec::new();
+fn compute_edit_ops(expected: &[&str], actual: &[&str]) -> (usize, usize, usize, Vec<EditOp>) {
+    let m = expected.len();
+    let n = actual.len();
 
-    for result in rdr.records() {
-        let record = result?;
-        let text_with_id = record.get(0).ok_or("Missing text column")?;
-        let label = record.get(1).ok_or("Missing label column")?;
+    // dp distances
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for (i, row) in dp.iter_mut().enumerate().take(m + 1) {
+        row[0] = i;
+    }
 
-        if let Some(text_part) = text_with_id.split(':').nth(1) {
-            let cleaned_text = re.replace_all(text_part.trim(), "").to_string();
-            if !cleaned_text.is_empty() {
-                entries.push(RohanEntry {
-                    text: cleaned_text,
-                    label: label.to_string(),
-                });
-            }
+    for (j, cell) in dp[0].iter_mut().enumerate().take(n + 1) {
+        *cell = j;
+    }
+
+    for i in 1..=m {
+        for j in 1..=n {
+            let cost = if expected[i - 1] == actual[j - 1] { 0 } else { 1 };
+            dp[i][j] = std::cmp::min(
+                std::cmp::min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                dp[i - 1][j - 1] + cost,
+            );
         }
     }
-    Ok(entries)
-}
 
-fn calculate_bleu_with_pyo3(references: Vec<String>, hypotheses: Vec<String>) -> PyResult<()> {
-    Python::attach(|py| {
-        setup_local_venv(py)?;
-        let nltk_bleu = py.import("nltk.translate.bleu_score")?;
-        let smoothing_function_class = nltk_bleu.getattr("SmoothingFunction")?;
+    // backtrace to get ops (reverse)
+    let mut ops_rev: Vec<EditOp> = Vec::new();
+    let mut i = m;
+    let mut j = n;
+    while i > 0 || j > 0 {
+        if i > 0 && j > 0 && dp[i][j] == dp[i - 1][j - 1] && expected[i - 1] == actual[j - 1] {
+            ops_rev.push(EditOp::Equal(i - 1, j - 1));
+            i -= 1;
+            j -= 1;
+        } else if i > 0 && j > 0 && dp[i][j] == dp[i - 1][j - 1] + 1 {
+            ops_rev.push(EditOp::Substitute(i - 1, j - 1));
+            i -= 1;
+            j -= 1;
+        } else if i > 0 && dp[i][j] == dp[i - 1][j] + 1 {
+            // delete from expected (expected char removed)
+            // note: j is current column index after this op
+            ops_rev.push(EditOp::Delete(i - 1, j));
+            i -= 1;
+        } else {
+            ops_rev.push(EditOp::Insert(i, j - 1));
+            j -= 1;
+        }
+    }
 
-        let smoothing_function_instance = smoothing_function_class.call0()?;
+    ops_rev.reverse();
 
-        let method1 = smoothing_function_instance.getattr("method1")?;
+    let mut s = 0usize;
+    let mut d = 0usize;
+    let mut ins = 0usize;
+    for op in &ops_rev {
+        match op {
+            EditOp::Equal(_, _) => {}
+            EditOp::Substitute(_, _) => s += 1,
+            EditOp::Delete(_, _) => d += 1,
+            EditOp::Insert(_, _) => ins += 1,
+        }
+    }
 
-        let corpus_bleu = nltk_bleu.getattr("corpus_bleu")?;
-
-        let py_references: Vec<Vec<Vec<char>>> = references
-            .into_iter()
-            .map(|r| vec![r.chars().collect()])
-            .collect();
-        let py_hypotheses: Vec<Vec<char>> = hypotheses
-            .into_iter()
-            .map(|h| h.chars().collect())
-            .collect();
-
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("smoothing_function", method1)?;
-
-        println!("\n-- BLEU Scores (calculated via PyO3) --");
-
-        kwargs.set_item("weights", (1.0, 0.0, 0.0, 0.0))?;
-        let score1: f64 = corpus_bleu
-            .call((&py_references, &py_hypotheses), Some(&kwargs))?
-            .extract()?;
-        println!("Corpus BLEU-1: {:.6}", score1);
-
-        kwargs.set_item("weights", (0.5, 0.5, 0.0, 0.0))?;
-        let score2: f64 = corpus_bleu
-            .call((&py_references, &py_hypotheses), Some(&kwargs))?
-            .extract()?;
-        println!("Corpus BLEU-2: {:.6}", score2);
-
-        kwargs.set_item("weights", (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 0.0))?;
-        let score3: f64 = corpus_bleu
-            .call((&py_references, &py_hypotheses), Some(&kwargs))?
-            .extract()?;
-        println!("Corpus BLEU-3: {:.6}", score3);
-
-        kwargs.set_item("weights", (0.25, 0.25, 0.25, 0.25))?;
-        let score4: f64 = corpus_bleu
-            .call((&py_references, &py_hypotheses), Some(&kwargs))?
-            .extract()?;
-        println!("Corpus BLEU-4: {:.6}", score4);
-
-        Ok(())
-    })
+    (s, d, ins, ops_rev)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("Loading ROHAN4600 data...");
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rohan_data_path = manifest_dir
-        .join("../resources")
-        .join("Rohan4600_transcript_utf8.txt");
-    let rohan_data = load_rohan_data(&rohan_data_path)?;
-    println!("> Loaded {} entries.", rohan_data.len());
+    let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+        predict_nani: true,
+        modify_kanji_yomi: true,
+        ..Default::default()
+    })?;
 
-    println!("\nInitializing Haqumei...");
-    let mut haqumei = haqumei::Haqumei::new()?;
-    println!("> Initialization complete.");
+    let results = haqumei.g2p_mapping_detailed_batch(TEXTS)?;
+    let mut sentence_errors = 0usize;
 
-    println!(
-        "\nGenerating g2p results for {} sentences...",
-        rohan_data.len()
-    );
-    let start_time = Instant::now();
+    // global counters for PER
+    let mut total_s = 0usize;
+    let mut total_d = 0usize;
+    let mut total_i = 0usize;
+    let mut total_phonemes = 0usize;
 
-    let hypotheses: Vec<String> = rohan_data
-        .iter()
-        .map(|entry| haqumei.g2p_kana(&entry.text).unwrap())
-        .collect();
+    for (i, sentence_details) in results.iter().enumerate() {
+        let expected_raw: &[&str] = PHONEMES[i];
 
-    let elapsed = start_time.elapsed();
+        // Build actual phoneme list (Cow to avoid unnecessary allocations)
+        let mut actual_phonemes: Vec<Cow<str>> = Vec::new();
+        let mut actual_to_word_idx: Vec<usize> = Vec::new();
 
-    let sentences_per_sec = rohan_data.len() as f64 / elapsed.as_secs_f64();
-    println!(
-        "> Generation finished in {:.2?}. ({:.2} sentences/sec)",
-        elapsed, sentences_per_sec
-    );
-
-    let references: Vec<String> = rohan_data.clone().into_iter().map(|e| e.label).collect();
-
-    println!("\nCalculating BLEU scores...");
-    calculate_bleu_with_pyo3(references, hypotheses)?;
-    println!("> Evaluation complete.");
-
-    let mut failed_cases = Vec::new();
-    let mut correct_count = 0;
-
-    for entry in rohan_data.iter() {
-        let haqumei_result = haqumei.g2p_kana(&entry.text).unwrap_or_default();
-
-        if haqumei_result != entry.label {
-            failed_cases.push((entry.text.clone(), haqumei_result, entry.label.clone()));
-        } else {
-            correct_count += 1;
-        }
-    }
-
-    let total_count = rohan_data.len();
-    let failed_count = failed_cases.len();
-    let accuracy = (correct_count as f64 / total_count as f64) * 100.0;
-
-    println!("\n--- Analysis Complete ---");
-    println!("Total sentences: {}", total_count);
-    println!("Correctly predicted: {}", correct_count);
-    println!("Incorrectly predicted: {}", failed_count);
-    println!("Accuracy: {:.2}%", accuracy);
-
-    let mut writer = csv::Writer::from_path("failed_cases.csv")?;
-    writer.write_record([
-        "Original_Text",
-        "Haqumei_Result(Hypothesis)",
-        "Correct_Label(Reference)",
-    ])?;
-
-    for (text, haqumei_result, label) in failed_cases {
-        writer.write_record([&text, &haqumei_result, &label])?;
-    }
-    writer.flush()?;
-
-    println!("\nDetails of failed cases have been saved to 'failed_cases.csv'.");
-
-    Ok(())
-}
-
-/// カレントディレクトリの .venv を探し、sys.path に追加する
-fn setup_local_venv(py: Python) -> PyResult<()> {
-    let current_dir = env::current_dir()?;
-    let venv_dir = current_dir.join(".venv");
-
-    if venv_dir.exists() {
-        let lib_dir = venv_dir.join("lib");
-
-        if let Ok(entries) = fs::read_dir(lib_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir()
-                    && let Some(name) = path.file_name()
-                    && name.to_string_lossy().starts_with("python")
-                {
-                    let site_packages = path.join("site-packages");
-
-                    if site_packages.exists() {
-                        let sys = py.import("sys")?;
-                        let sys_path = sys.getattr("path")?;
-
-                        if let Some(sp_str) = site_packages.to_str() {
-                            sys_path.call_method1("insert", (0, sp_str))?;
-                            println!("> Auto-detected venv: {}", sp_str);
-                        }
-                        break;
+        for (word_idx, detail) in sentence_details.iter().enumerate() {
+            for p in &detail.phonemes {
+                let p_str: &str = p.as_ref();
+                if IGNORE_PAU && p_str == "pau" {
+                    continue;
+                } else if p_str == "N" {
+                    actual_phonemes.push(Cow::Borrowed("N"));
+                } else {
+                    let needs_lower = p_str.bytes().any(|b: u8| b.is_ascii_uppercase());
+                    if needs_lower {
+                        actual_phonemes.push(Cow::Owned(p_str.to_ascii_lowercase()));
+                    } else {
+                        actual_phonemes.push(Cow::Borrowed(p_str));
                     }
+                }
+                actual_to_word_idx.push(word_idx);
+            }
+        }
+
+        // Build expected filtered (borrowing from PHONEMES)
+        let expected_filtered: Vec<&str> = if IGNORE_PAU {
+            expected_raw.iter().copied().filter(|&p| p != "pau").collect()
+        } else {
+            expected_raw.to_vec()
+        };
+
+        let actual_refs: Vec<&str> = actual_phonemes.iter().map(|c| c.as_ref()).collect();
+
+        let (s_count, d_count, i_count, ops) = compute_edit_ops(&expected_filtered, &actual_refs);
+
+        total_s += s_count;
+        total_d += d_count;
+        total_i += i_count;
+        total_phonemes += expected_filtered.len();
+
+        // If exact match (no edits), skip detailed printing
+        if s_count == 0 && d_count == 0 && i_count == 0 {
+            continue;
+        }
+        sentence_errors += 1;
+
+        let mut error_flags = vec![false; sentence_details.len()];
+
+        // For each edit op, decide which word index(s) to mark.
+        // We don't have gold per-word mapping for expected, so we map edits to nearest actual word indexes.
+        // Rules (best-effort):
+        //  - Insert: maps to actual_to_word_idx[actual_idx]
+        //  - Substitute: map to actual_to_word_idx[actual_idx]
+        //  - Delete: expected present but missing in actual. Use actual_idx (column index at that time).
+        for op in &ops {
+            match *op {
+                EditOp::Equal(_, _) => {}
+                EditOp::Substitute(_exp_idx, actual_idx) | EditOp::Insert(_exp_idx, actual_idx) => {
+                    if actual_idx < actual_to_word_idx.len() {
+                        error_flags[actual_to_word_idx[actual_idx]] = true;
+                    } else if !actual_to_word_idx.is_empty() {
+                        // fallback to last
+                        let last = actual_to_word_idx.len() - 1;
+                        error_flags[actual_to_word_idx[last]] = true;
+                    } else {
+                        // no actual phonemes at all: mark first word (best effort)
+                        if !error_flags.is_empty() {
+                            error_flags[0] = true;
+                        }
+                    }
+                }
+                EditOp::Delete(_expected_idx, actual_col_idx) => {
+                    // actual_col_idx is the column (j) when delete occurred.
+                    // Prefer to map to actual_to_word_idx[actual_col_idx], fallback to previous or 0.
+                    let mapped = if actual_col_idx < actual_to_word_idx.len() {
+                        actual_to_word_idx[actual_col_idx]
+                    } else if actual_col_idx > 0 && !actual_to_word_idx.is_empty() {
+                        actual_to_word_idx[actual_col_idx - 1]
+                    } else if !error_flags.is_empty() {
+                        0
+                    } else {
+                        continue;
+                    };
+                    error_flags[mapped] = true;
                 }
             }
         }
+
+        println!("==================================================");
+        println!("[ID: BASIC5000_{:04}]", i + 1);
+        println!("Text: {}", TEXTS[i]);
+        println!("--------------------------------------------------");
+
+        let diff = TextDiff::from_slices(&expected_filtered, &actual_refs);
+
+        print!("Diff: ");
+        for change in diff.iter_all_changes() {
+            match change.tag() {
+                ChangeTag::Equal => {
+                    print!("{} ", change.value());
+                }
+                ChangeTag::Delete => {
+                    print!("[-{}] ", change.value());
+                }
+                ChangeTag::Insert => {
+                    print!("[+{}] ", change.value());
+                }
+            }
+        }
+        println!("\n");
+
+        println!("Failed Words Analysis:");
+        let mut indices: Vec<usize> = error_flags
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, &flag)| if flag { Some(idx) } else { None })
+            .collect();
+        indices.sort_unstable();
+
+        for word_idx in indices {
+            let Some(detail) = sentence_details.get(word_idx) else {
+                println!("  - Error: word index {} out of range.", word_idx);
+                continue;
+            };
+            let ignored_mark = if detail.is_ignored { " (Ignored/Space)" } else { "" };
+            let unk_mark = if detail.is_unknown { " [UNK]" } else { "" };
+
+            println!(
+                "  - Word: 「{}」{}{}",
+                detail.word.replace("\n", "\\n"),
+                unk_mark,
+                ignored_mark
+            );
+            println!("    Generated: {:?}", detail.phonemes);
+
+            let prev_word = if word_idx > 0 {
+                &sentence_details[word_idx - 1].word
+            } else {
+                "BOS"
+            };
+            let next_word = if word_idx + 1 < sentence_details.len() {
+                &sentence_details[word_idx + 1].word
+            } else {
+                "EOS"
+            };
+            println!("    Context:   {} -> [ {} ] -> {}", prev_word, detail.word, next_word);
+            println!();
+        }
+
+        let n_expected = expected_filtered.len();
+        let per = if n_expected > 0 {
+            100.0 * (s_count + d_count + i_count) as f64 / n_expected as f64
+        } else {
+            0.0
+        };
+        println!(
+            "Sentence stats: S={} D={} I={}  N_expected={}  PER={:.2}%",
+            s_count, d_count, i_count, n_expected, per
+        );
+        println!("--------------------------------------------------\n");
     }
+
+    let total_sentences = TEXTS.len();
+    let exact_match = total_sentences - sentence_errors;
+    let accuracy = 100.0 * (exact_match as f64) / (total_sentences as f64);
+
+    let overall_per = if total_phonemes > 0 {
+        100.0 * (total_s + total_d + total_i) as f64 / (total_phonemes as f64)
+    } else {
+        0.0
+    };
+
+    println!("==================================================");
+    println!("Total Sentences tested: {}", total_sentences);
+    println!("Sentences with errors : {}", sentence_errors);
+    println!("Ignore Pau Mode       : {}", IGNORE_PAU);
+    println!("Accuracy (Exact match): {:.2}%", accuracy);
+    println!(
+        "Overall PER (S+D+I / N_expected): {:.2}%  (S={} D={} I={} N={})",
+        overall_per, total_s, total_d, total_i, total_phonemes
+    );
+
     Ok(())
 }

@@ -45,9 +45,6 @@ pub enum HaqumeiError {
         actual: String,
     },
 
-    #[error("Could not determine a valid data directory for this system")]
-    DataDirectoryNotFound,
-
     #[error("Could not determine a valid cache directory for this system")]
     CacheDirectoryNotFound,
 

@@ -34,7 +34,7 @@ Code examples can be found in [haqumei/examples](https://github.com/stellanomia/
 ### Rust
 
 ```bash
-cargo add haqumei --git "https://github.com/stellanomia/haqumei.git"
+cargo add haqumei
 ```
 
 ### Python

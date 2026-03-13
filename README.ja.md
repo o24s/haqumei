@@ -26,7 +26,7 @@
 ### Rust
 
 ```bash
-cargo add haqumei --git "https://github.com/stellanomia/haqumei.git"
+cargo add haqumei"
 ```
 
 ### Python
