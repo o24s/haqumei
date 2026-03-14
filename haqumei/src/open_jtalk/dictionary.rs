@@ -49,8 +49,7 @@ impl Dictionary {
         use sha2::{Digest, Sha256};
         use std::{fs::File, io::Read};
 
-        const DICTIONARY_BYTES: &[u8] =
-            include_bytes!(env!("HAQUMEI_EMBED_DICT_PATH"));
+        const DICTIONARY_BYTES: &[u8] = include_bytes!(env!("HAQUMEI_EMBED_DICT_PATH"));
         const EXPECTED_DICT_HASH: &str = env!("HAQUMEI_DICT_HASH");
 
         let cache_dir = dirs::cache_dir()

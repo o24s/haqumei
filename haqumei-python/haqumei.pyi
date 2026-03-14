@@ -437,6 +437,9 @@ class Haqumei:
     def __init__(
         self,
         normalize_unicode: bool = True,
+        use_read_as_pron: bool = False,
+        revert_long_vowels: bool = False,
+        revert_yotsugana: bool = False,
         modify_filler_accent: bool = True,
         predict_nani: bool = False,
         modify_kanji_yomi: bool = False,

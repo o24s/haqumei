@@ -47,7 +47,9 @@ pub mod open_jtalk;
 mod utils;
 
 use std::{
-    borrow::Cow, path::Path, sync::{Arc, LazyLock, Mutex}
+    borrow::Cow,
+    path::Path,
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use moka::sync::Cache;
@@ -98,6 +100,40 @@ pub struct HaqumeiOptions {
     /// デフォルトで無効になっています。
     pub normalize_unicode: bool,
 
+    /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
+    ///
+    /// これにより、長音の自動変換機能が無効化されます。 (e.g., "ジンセー" -> "ジンセイ")
+    /// なお、助詞にもこの影響が及び、"は" は「ワ」ではなく「ハ」として、
+    /// "へ" は「エ」ではなく「ヘ」として発音されます。
+    ///
+    /// すなわち、これを有効にした場合、`revert_long_vowels`, `revert_yotsugana` のフラグに関係なく、
+    /// 読み (`read`) に強制的に置き換えられます。
+    ///
+    /// デフォルトで無効になっています。
+    pub use_read_as_pron: bool,
+
+    /// 辞書によって自動的に長音化された発音を、元のテキストに忠実な読みに復元するかどうか。
+    ///
+    /// `true` に設定すると、発音 (`pron`) に「ー」が含まれている単語について、
+    /// 元のテキスト (`orig`) に「ー」が含まれていない場合のみ、発音を読み (`read`) の値で上書きします。
+    /// (e.g., 「効果」 pron: コーカ -> コウカ / 「人生」 pron: ジンセー -> ジンセイ)
+    ///
+    /// 助詞 (は、へ、を) などの発音は「ー」を含まないため影響を受けず、
+    /// そのまま音声合成に適した発音 (ワ、エ、オ) が維持されます。
+    ///
+    /// デフォルトで無効になっています。
+    pub revert_long_vowels: bool,
+
+    /// 現代仮名遣いにおいて発音上統合される四つ仮名（ヅ・ヂ）を、
+    /// 元のテキスト通りの表記に復元するかどうか。
+    ///
+    /// `true` に設定すると、発音 (`pron`) において「ズ」「ジ」に変換されたものを、
+    /// 読み (`read`) に基づいて「ヅ」「ヂ」に復元します。
+    /// (e.g., 「気づかず」 pron: キズカズ -> キヅカズ / 「鼻血」 pron: ハナジ -> ハナヂ)
+    ///
+    /// デフォルトで無効になっています。
+    pub revert_yotsugana: bool,
+
     /// - フィラーが acc > mora_size のときに、平版型 (acc = 0) にする
     /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
     ///
@@ -122,8 +158,8 @@ pub struct HaqumeiOptions {
 
     /// 品詞「特殊・マス」の直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる。
     ///
-    ///   書きます → か\[きま\]す, 参ります → ま\[いりま\]す
-    ///   書いております → \[か\]いております
+    ///   書きます -> か\[きま\]す, 参ります -> ま\[いりま\]す
+    ///   書いております -> \[か\]いております
     ///
     /// デフォルトで有効になっています。
     pub modify_acc_after_chaining: bool,
@@ -138,6 +174,9 @@ impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
             normalize_unicode: false,
+            use_read_as_pron: false,
+            revert_long_vowels: false,
+            revert_yotsugana: false,
             modify_filler_accent: true,
             predict_nani: true,
             modify_kanji_yomi: false,
@@ -208,12 +247,18 @@ impl Haqumei {
     }
 
     /// [open_jtalk::Dictionary] から [Haqumei] を作ります。
-    pub fn from_dictionary(dict: Dictionary, options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
+    pub fn from_dictionary(
+        dict: Dictionary,
+        options: HaqumeiOptions,
+    ) -> Result<Self, HaqumeiError> {
         Self::from_open_jtalk(OpenJTalk::from_dictionary(dict)?, options)
     }
 
     /// `Arc` でラップされた [Dictionary] から [Haqumei] を作ります
-    pub fn from_shared_dictionary(dict: Arc<Dictionary>, options: HaqumeiOptions) -> Result<Self, HaqumeiError> {
+    pub fn from_shared_dictionary(
+        dict: Arc<Dictionary>,
+        options: HaqumeiOptions,
+    ) -> Result<Self, HaqumeiError> {
         Self::from_open_jtalk(OpenJTalk::from_shared_dictionary(dict)?, options)
     }
 
@@ -474,7 +519,7 @@ impl Haqumei {
             Ok((njd_features, morphs, valid_features_str.is_empty()))
         };
 
-        let (njd_features, morphs) = {
+        let (mut njd_features, morphs) = {
             let res = if let Some(tokenizer) = &self.tokenizer {
                 rayon::join(&mut run_mecab, || {
                     let mut worker = tokenizer.new_worker();
@@ -504,6 +549,12 @@ impl Haqumei {
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
+        }
+
+        let options = &self.options;
+
+        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
+            self.revert_pron_to_read(&mut njd_features);
         }
 
         let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
@@ -626,7 +677,7 @@ impl Haqumei {
         }
         let text = text.as_ref();
 
-        let njd_features = if let Some(tokenizer) = &self.tokenizer {
+        let mut njd_features = if let Some(tokenizer) = &self.tokenizer {
             rayon::join(
                 || self.open_jtalk.run_frontend(text),
                 || {
@@ -637,9 +688,15 @@ impl Haqumei {
             .0
         } else {
             self.open_jtalk.run_frontend(text)
-        };
+        }?;
 
-        self.apply_postprocessing(text, njd_features?)
+        let options = &self.options;
+
+        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
+            self.revert_pron_to_read(&mut njd_features);
+        }
+
+        self.apply_postprocessing(text, njd_features)
     }
 
     pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {

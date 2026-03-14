@@ -308,4 +308,86 @@ mod tests {
 
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn test_g2p_kana_revert_long_vowels() {
+        let text = "人生は効果的。";
+
+        let mut haqumei = Haqumei::new().unwrap();
+        let kana_default = haqumei.g2p_kana(text).unwrap();
+        assert!(kana_default.contains("セー"));
+        assert!(kana_default.contains("コーカ"));
+        assert!(kana_default.contains("ワ")); // 助詞は「ワ」
+
+        let mut haqumei_revert = Haqumei::with_options(HaqumeiOptions {
+            revert_long_vowels: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let kana_revert = haqumei_revert.g2p_kana(text).unwrap();
+
+        assert!(kana_revert.contains("セイ"));
+        assert!(kana_revert.contains("コウカ"));
+        assert!(kana_revert.contains("ワ")); // 助詞の「ワ」は維持されていること
+    }
+
+    #[test]
+    fn test_g2p_kana_revert_yotsugana() {
+        let text = "鼻血に気づかず。";
+
+        let mut haqumei = Haqumei::new().unwrap();
+        let kana_default = haqumei.g2p_kana(text).unwrap();
+        assert!(kana_default.contains("ハナジ"));
+        assert!(kana_default.contains("キズカズ"));
+
+        let mut haqumei_revert = Haqumei::with_options(HaqumeiOptions {
+            revert_yotsugana: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let kana_revert = haqumei_revert.g2p_kana(text).unwrap();
+
+        assert!(kana_revert.contains("ハナヂ"));
+        assert!(kana_revert.contains("キヅカズ"));
+    }
+
+    #[test]
+    fn test_g2p_kana_use_read_as_pron() {
+        let text = "こんにちは、人生。";
+
+        let mut haqumei_default = Haqumei::new().unwrap();
+        let kana_default = haqumei_default.g2p_kana(text).unwrap();
+        assert!(kana_default.contains("コンニチワ")); // 助詞は「ワ」
+        assert!(kana_default.contains("ジンセー")); // 長音化
+
+        let mut haqumei_read = Haqumei::with_options(HaqumeiOptions {
+            use_read_as_pron: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let kana_read = haqumei_read.g2p_kana(text).unwrap();
+
+        assert!(kana_read.contains("コンニチハ")); // 助詞が「ハ」のまま
+        assert!(kana_read.contains("ジンセイ")); // 長音が「セイ」のまま
+    }
+
+    #[test]
+    fn test_g2p_kana_combined_selective() {
+        let text = "人生は、鼻血に気づかず。";
+
+        // 全てを組み合わせて、助詞の「は」だけは「ワ」のままで、
+        // 長音化や四つ仮名だけを直したいケース
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            revert_long_vowels: true,
+            revert_yotsugana: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let kana = haqumei.g2p_kana(text).unwrap();
+
+        assert!(kana.contains("ジンセイ")); // 復元
+        assert!(kana.contains("ワ")); // 助詞維持
+        assert!(kana.contains("ハナヂ")); // 復元
+        assert!(kana.contains("キヅカズ")); // 復元
+    }
 }

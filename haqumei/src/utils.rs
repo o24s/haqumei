@@ -127,6 +127,34 @@ pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
 }
 
 impl Haqumei {
+    pub(crate) fn revert_pron_to_read(&mut self, njd_features: &mut [NjdFeature]) {
+        let options = &self.options;
+        debug_assert!(
+            options.use_read_as_pron || options.revert_long_vowels || options.revert_yotsugana
+        );
+
+        for feature in njd_features.iter_mut() {
+            let mut should_revert_to_read = options.use_read_as_pron;
+
+            if options.revert_long_vowels
+                && feature.pron.contains('ー')
+                && !feature.orig.contains('ー')
+            {
+                should_revert_to_read = true;
+            }
+
+            if options.revert_yotsugana
+                && (feature.read.contains('ヅ') || feature.read.contains('ヂ'))
+            {
+                should_revert_to_read = true;
+            }
+
+            if should_revert_to_read {
+                feature.pron = feature.read.clone();
+            }
+        }
+    }
+
     pub(crate) fn predict_nani_reading(&mut self, njd_features: &mut [NjdFeature]) {
         for i in 0..njd_features.len() {
             if njd_features[i].orig == "何" {

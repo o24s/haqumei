@@ -12,9 +12,11 @@ use sha2::{Digest, Sha256};
 use std::io::{self, Seek, SeekFrom};
 
 #[cfg(feature = "download-dictionary")]
-const DICTIONARY_URL: &str = "https://github.com/stellanomia/haqumei/releases/download/v0.1.0/dictionary.tar.zst";
+const DICTIONARY_URL: &str =
+    "https://github.com/stellanomia/haqumei/releases/download/v0.1.0/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
-const COMPRESSED_DICTIONARY_HASH: &str = "2250152f64158f90b6234d1945f8a4099cd6e7218def079f5c610315a859b8d0";
+const COMPRESSED_DICTIONARY_HASH: &str =
+    "2250152f64158f90b6234d1945f8a4099cd6e7218def079f5c610315a859b8d0";
 #[cfg(feature = "download-dictionary")]
 const DICTIONARY_HASH: &str = "5dbb19b8302188ba5c1a0a2af04e0ee6be480563401dfb0c9391ba9f2d625604";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
@@ -22,9 +24,7 @@ const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 const DICTIONARY_SRC_DIR: &str = "../dictionary";
 
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    let cache_dir = dirs::cache_dir()
-        .unwrap()
-        .join("haqumei");
+    let cache_dir = dirs::cache_dir().unwrap().join("haqumei");
     fs::create_dir_all(&cache_dir).unwrap();
     cache_dir
 });
@@ -127,7 +127,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             temp_file.persist(&compressed_dict_path)?;
         }
 
-        println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", &compressed_dict_path.display());
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
+            &compressed_dict_path.display()
+        );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
     }
 
@@ -335,7 +338,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .expect("Couldn't write bindings to file");
 
     if is_ci || is_docs_rs {
-        println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", manifest_dir.join("build.rs").display());
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
+            manifest_dir.join("build.rs").display()
+        );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
         return Ok(());
     }
@@ -404,7 +410,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         fs::remove_dir_all(dict_out_dir)?;
     }
 
-    println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", &compressed_dict_path.display());
+    println!(
+        "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
+        &compressed_dict_path.display()
+    );
     println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", &compiled_dict_hash);
 
     // println!("cargo:warning=Dictionary compressed to {}", compressed_dict_path.display());

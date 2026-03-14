@@ -340,11 +340,15 @@ struct PyHaqumei {
 
 #[pymethods]
 impl PyHaqumei {
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (
         normalize_unicode = false,
+        use_read_as_pron = false,
+        revert_long_vowels = false,
+        revert_yotsugana = false,
         modify_filler_accent = true,
-        predict_nani = false,
+        predict_nani = true,
         modify_kanji_yomi = false,
         retreat_acc_nuc = true,
         modify_acc_after_chaining = true,
@@ -352,6 +356,9 @@ impl PyHaqumei {
     ))]
     fn new(
         normalize_unicode: bool,
+        use_read_as_pron: bool,
+        revert_long_vowels: bool,
+        revert_yotsugana: bool,
         modify_filler_accent: bool,
         predict_nani: bool,
         modify_kanji_yomi: bool,
@@ -361,6 +368,9 @@ impl PyHaqumei {
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             normalize_unicode,
+            use_read_as_pron,
+            revert_long_vowels,
+            revert_yotsugana,
             modify_filler_accent,
             predict_nani,
             modify_kanji_yomi,
