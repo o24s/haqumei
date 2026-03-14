@@ -19,6 +19,8 @@ const COMPRESSED_DICTIONARY_HASH: &str = "2250152f64158f90b6234d1945f8a4099cd6e7
 const DICTIONARY_HASH: &str = "5dbb19b8302188ba5c1a0a2af04e0ee6be480563401dfb0c9391ba9f2d625604";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
+const DICTIONARY_SRC_DIR: &str = "../dictionary";
+
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let cache_dir = dirs::cache_dir()
         .unwrap()
@@ -256,6 +258,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     } else {
         build.flag("-include");
         build.flag(redirect_flag);
+        // build.flag("-fsanitize=address");
 
         build.flag("-fPIC");
         build.flag("-finput-charset=UTF-8");
@@ -347,17 +350,11 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     }
 
     let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
-    let mut dict_src_dir = manifest_dir.join("dictionary");
+    let dict_src_dir = manifest_dir.join(DICTIONARY_SRC_DIR);
     let dict_out_dir = out_dir.join("dictionary_out");
     let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
     let dict_hash_path = CACHE_DIR.join("dictionary.sha256");
     let compiled_dict_hash_path = CACHE_DIR.join("compiled_dictionary.sha256");
-
-    if dict_src_dir.is_file()
-        && let Some(parent) = manifest_dir.parent()
-    {
-        dict_src_dir = parent.join("dictionary");
-    }
 
     if !dict_src_dir.exists() {
         println!(
@@ -432,6 +429,7 @@ int main(int argc, char **argv) {
 
     let mut build = cc::Build::new();
     build.cpp(true);
+    // build.flag("-fsanitize=address");
     let compiler = build.get_compiler();
     let mut command = compiler.to_command();
 

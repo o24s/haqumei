@@ -326,6 +326,25 @@ impl OpenJTalk {
         Ok(kana_string)
     }
 
+    /// 入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+    pub fn g2p_kana_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        let features = self.run_frontend(text.as_ref())?;
+
+        let kana_list: Vec<String> = features
+            .iter()
+            .map(|f| {
+                let p = if f.pos == "記号" {
+                    &f.string
+                } else {
+                    &f.pron
+                };
+                p.replace('’', "")
+            })
+            .collect();
+
+        Ok(kana_list)
+    }
+
     /// 単語（形態素）単位に分割された音素リストを返します。
     ///
     /// # Returns
@@ -1177,6 +1196,11 @@ impl OpenJTalk {
     impl_batch_method_openjtalk!(
         /// カタカナ変換のバッチ処理。
         g2p_kana_batch => g2p_kana -> String
+    );
+
+    impl_batch_method_openjtalk!(
+        /// 単語ごとに分割されたカタカナ変換のバッチ処理。
+        g2p_kana_per_word_batch => g2p_kana_per_word -> Vec<String>
     );
 
     impl_batch_method_openjtalk!(

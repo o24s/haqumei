@@ -216,6 +216,19 @@ class OpenJTalk:
         """
         ...
 
+    def g2p_kana_per_word(self, text: str) -> List[str]:
+        """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+
+        pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            str: カタカナ文字列 (例: `"コンニチワ"`)。
+        """
+        ...
+
     def g2p_per_word(self, text: str) -> List[List[str]]:
         """テキストを単語ごとに区切られた音素リストに変換します。
 
@@ -316,6 +329,21 @@ class OpenJTalk:
 
         Returns:
             List[str]: 各テキストに対応するカタカナ文字列のリスト。
+        """
+        ...
+
+    def g2p_kana_per_word_batch(self, text: List[str]) -> List[List[str]]:
+        """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            str: カタカナ文字列 (例: `"コンニチワ"`)。
         """
         ...
 
@@ -473,6 +501,19 @@ class Haqumei:
         """
         ...
 
+    def g2p_kana_per_word(self, text: str) -> List[str]:
+        """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+
+        pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            str: カタカナ文字列 (例: `"コンニチワ"`)。
+        """
+        ...
+
     def g2p_per_word(self, text: str) -> List[List[str]]:
         """テキストを単語ごとに区切られた音素リストに変換します。
 
@@ -579,6 +620,21 @@ class Haqumei:
         """
         ...
 
+    def g2p_kana_per_word_batch(self, text: List[str]) -> List[List[str]]:
+        """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            str: カタカナ文字列 (例: `"コンニチワ"`)。
+        """
+        ...
+
     def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
         """単語ごとに分割された音素リストのバッチ処理。
 
@@ -634,6 +690,7 @@ class Haqumei:
             List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
         ...
+
 
 def update_global_dictionary(dict: Dictionary) -> None:
     """OpenJTalk で使用されるグローバル辞書を更新 (設定) します。

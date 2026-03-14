@@ -421,6 +421,20 @@ impl PyHaqumei {
         })
     }
 
+    fn g2p_kana_per_word(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner.lock().unwrap().g2p_kana_per_word(text).map_err(to_py_err)
+    }
+
+    fn g2p_kana_per_word_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_kana_per_word_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<String>>> {
         self.inner
             .lock()
