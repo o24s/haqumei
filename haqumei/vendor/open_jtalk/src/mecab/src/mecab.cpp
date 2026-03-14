@@ -227,7 +227,12 @@ BOOL Mecab_analysis(Mecab *m, const char *str)
       }
    }
 
-   lattice->clear();
+   /* lattice->clear() はここでは呼ばない。
+      _run_mecab_unified() が Mecab_analysis() 後に lattice ノードを走査するため、
+      lattice の解放は Mecab_refresh() に委譲する。
+      元のコードでは lattice->clear() をここで呼んでいたが、
+      clear() は end_nodes_ を空にするため、その後の mecab_lattice_get_bos_node() が
+      空ベクタにアクセスする未定義動作を引き起こしていた。 */
 
    return TRUE;
 }
@@ -261,6 +266,14 @@ BOOL Mecab_refresh(Mecab *m)
       free(m->feature);
       m->feature = NULL;
       m->size = 0;
+   }
+
+   /* Mecab_analysis() が lattice->clear() を呼ばなくなったため、
+      ここで lattice の FreeList をリセットする。
+      これにより lattice ノードの走査が完了した後に安全にクリーンアップされる。 */
+   if(m->lattice != NULL) {
+      MeCab::Lattice *lattice = (MeCab::Lattice *) m->lattice;
+      lattice->clear();
    }
 
    return TRUE;
