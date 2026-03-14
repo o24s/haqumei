@@ -11,6 +11,8 @@ use sha2::{Digest, Sha256};
 fn main() -> Result<(), Box<dyn Error>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);
+    let out_dir = env::var("OUT_DIR")?;
+    let out_dir = Path::new(&out_dir);
 
     let jsut_label_path = manifest_dir.join("basic5000.yaml");
     let checksum = "1e5bf401006c434b7027f9bfe19187530d4567d866c66ee5868626f922a1b724";
@@ -51,11 +53,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         None
     };
 
-    let basic5000_rs_path = manifest_dir.join("src/basic5000.rs");
+    let data_path = out_dir.join("data.rs");
 
-    if basic5000_rs_path.exists() {
-        return Ok(());
-    }
+    // if data_path.exists() {
+    //     return Ok(());
+    // }
 
     let mut file = file.unwrap_or(File::open(jsut_label_path)?);
 
@@ -70,45 +72,96 @@ fn main() -> Result<(), Box<dyn Error>> {
         let line = line.trim();
 
         if line.starts_with("text_level2") {
-            texts.push_str(
-                &("    \"".to_string()
-                    + line.strip_prefix("text_level2:").unwrap().trim_start()
-                    + "\",\n"),
-            );
+            let s = line.strip_prefix("text_level2:").unwrap().trim_start();
+
+            texts.push_str("    \"");
+            texts.push_str(s);
+            texts.push_str("\",\n");
         } else if line.starts_with("kana_level2") {
-            kanas.push_str(
-                &("    \"".to_string()
-                    + line.strip_prefix("kana_level2:").unwrap().trim_start()
-                    + "\",\n"),
-            );
+            let s = line.strip_prefix("kana_level2:").unwrap().trim_start();
+
+            kanas.push_str("    \"");
+            kanas.push_str(s);
+            kanas.push_str("\",\n");
         } else if line.starts_with("phone_level3") {
-            phonemes.push_str(
-                &("    &[\"".to_string()
-                    + line
-                        .strip_prefix("phone_level3:")
-                        .unwrap()
-                        .split('-')
-                        .collect::<Vec<&str>>()
-                        .join("\", \"")
-                        .trim_start()
-                    + "\"],\n"),
-            );
+            let s = line.strip_prefix("phone_level3:").unwrap().trim_start();
+
+            phonemes.push_str("    &[");
+
+            for (i, p) in s.split('-').enumerate() {
+                if i > 0 {
+                    phonemes.push_str(", ");
+                }
+                phonemes.push('"');
+                phonemes.push_str(p);
+                phonemes.push('"');
+            }
+
+            phonemes.push_str("],\n");
         }
     }
 
-    let mut basic5000_rs = String::new();
+    let mut data = String::new();
 
-    basic5000_rs.push_str("pub const TEXTS: &[&str] = &[\n");
-    basic5000_rs.push_str(&texts);
-    basic5000_rs.push_str("];\n\n");
-    basic5000_rs.push_str("pub const KANAS: &[&str] = &[\n");
-    basic5000_rs.push_str(&kanas);
-    basic5000_rs.push_str("];\n\n");
-    basic5000_rs.push_str("pub const PHONEMES: &[&[&str]] = &[\n");
-    basic5000_rs.push_str(&phonemes);
-    basic5000_rs.push_str("];\n\n");
+    data.push_str("pub mod basic5000 {\n");
+    data.push_str("pub const TEXTS: &[&str] = &[\n");
+    data.push_str(&texts);
+    data.push_str("];\n\n");
+    data.push_str("pub const KANAS: &[&str] = &[\n");
+    data.push_str(&kanas);
+    data.push_str("];\n\n");
+    data.push_str("pub const PHONEMES: &[&[&str]] = &[\n");
+    data.push_str(&phonemes);
+    data.push_str("];\n");
+    data.push_str("}\n\n");
 
-    fs::write(basic5000_rs_path, basic5000_rs)?;
+    texts.clear();
+    kanas.clear();
+
+    let rohan_data_path = manifest_dir
+        .join("../resources")
+        .join("Rohan4600_transcript_utf8.txt");
+
+    let rohan_data = fs::read_to_string(rohan_data_path)?;
+
+    for line in rohan_data.lines() {
+        let Some((_, pair)) = line.split_once(':') else {
+            continue;
+        };
+        let Some((text, kana)) = pair.split_once(',') else {
+            continue;
+        };
+
+        let mut s = String::new();
+        let mut in_paren = false;
+        for ch in text.chars() {
+            match ch {
+                '(' => in_paren = true,
+                ')' => in_paren = false,
+                _ if !in_paren => s.push(ch),
+                _ => {}
+            }
+        }
+
+        texts.push_str("    \"");
+        texts.push_str(&s);
+        texts.push_str("\",\n");
+
+        kanas.push_str("    \"");
+        kanas.push_str(kana);
+        kanas.push_str("\",\n");
+    }
+
+    data.push_str("pub mod rohan4600 {\n");
+    data.push_str("pub const TEXTS: &[&str] = &[\n");
+    data.push_str(&texts);
+    data.push_str("];\n\n");
+    data.push_str("pub const KANAS: &[&str] = &[\n");
+    data.push_str(&kanas);
+    data.push_str("];\n");
+    data.push_str("}\n");
+
+    fs::write(data_path, data)?;
 
     Ok(())
 }

@@ -1,0 +1,11 @@
+[package]
+name = "haqumei-dict-tool"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+csv.workspace = true
+glob.workspace = true
+haqumei = { path = "../haqumei"}
+thiserror.workspace = true

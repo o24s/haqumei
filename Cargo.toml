@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "haqumei",
     "haqumei-bench",
+    "haqumei-dict-tool",
     "haqumei-eval",
     "haqumei-python",
 ]

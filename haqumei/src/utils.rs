@@ -134,20 +134,9 @@ impl Haqumei {
         );
 
         for feature in njd_features.iter_mut() {
-            let mut should_revert_to_read = options.use_read_as_pron;
-
-            if options.revert_long_vowels
-                && feature.pron.contains('ー')
-                && !feature.orig.contains('ー')
-            {
-                should_revert_to_read = true;
-            }
-
-            if options.revert_yotsugana
-                && (feature.read.contains('ヅ') || feature.read.contains('ヂ'))
-            {
-                should_revert_to_read = true;
-            }
+            let should_revert_to_read = options.use_read_as_pron
+                || (options.revert_long_vowels && feature.pron.contains('ー') && !feature.orig.contains('ー'))
+                || (options.revert_yotsugana && (feature.read.contains('ヅ') || feature.read.contains('ヂ')));
 
             if should_revert_to_read {
                 feature.pron = feature.read.clone();
