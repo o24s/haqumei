@@ -106,7 +106,7 @@ pub struct HaqumeiOptions {
 
     /// Nani Predictor を使って、「何」 の読みを修正する。
     ///
-    /// デフォルトで無効になっています。
+    /// デフォルトで有効になっています。
     pub predict_nani: bool,
 
     /// Unidic を使って、漢字の読みを修正する。
@@ -139,7 +139,7 @@ impl Default for HaqumeiOptions {
         Self {
             normalize_unicode: false,
             modify_filler_accent: true,
-            predict_nani: false,
+            predict_nani: true,
             modify_kanji_yomi: false,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
