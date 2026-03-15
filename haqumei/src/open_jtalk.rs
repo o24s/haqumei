@@ -518,115 +518,7 @@ impl OpenJTalk {
 
         let mapping = self.g2p_mapping_inner(&njd_features)?;
 
-        let mut result = Vec::with_capacity(morphs.len());
-        let mut morph_idx = 0;
-
-        for map in mapping {
-            // is_ignored な Morph を先に進めておく
-            while let Some(m) = morphs.get(morph_idx) {
-                if m.is_ignored {
-                    result.push(WordPhonemeDetail {
-                        word: m.surface.clone(),
-                        phonemes: vec!["sp".to_string()],
-                        is_unknown: m.is_unknown,
-                        is_ignored: true,
-                    });
-                    morph_idx += 1;
-                } else {
-                    break;
-                }
-            }
-
-            let current_map_word = &map.word;
-
-            if let Some(morph) = morphs.get(morph_idx) {
-                if current_map_word == &morph.surface {
-                    let mut phonemes = map.phonemes.clone();
-
-                    if morph.is_unknown {
-                        // 先頭の長音のような Open JTalk が破棄するもの、
-                        // または pau に置き換えられた未知語は unk にしておく
-                        if phonemes.is_empty() || phonemes == ["pau"] {
-                            phonemes = vec!["unk".to_string()];
-                        }
-                    }
-
-                    result.push(WordPhonemeDetail {
-                        word: map.word.clone(),
-                        phonemes,
-                        is_unknown: morph.is_unknown,
-                        is_ignored: map.phonemes.is_empty(),
-                    });
-                    morph_idx += 1;
-                } else if current_map_word.starts_with(&morph.surface) {
-                    let mut is_unknown_word = false;
-                    let mut matched_len = 0;
-
-                    while let Some(inner_morph) = morphs.get(morph_idx) {
-                        if inner_morph.is_ignored {
-                            result.push(WordPhonemeDetail {
-                                word: inner_morph.surface.clone(),
-                                phonemes: vec!["sp".to_string()],
-                                is_unknown: inner_morph.is_unknown,
-                                is_ignored: true,
-                            });
-                            morph_idx += 1;
-                            continue;
-                        }
-
-                        let remaining = &current_map_word[matched_len..];
-
-                        if remaining.starts_with(&inner_morph.surface) {
-                            is_unknown_word |= inner_morph.is_unknown;
-                            matched_len += inner_morph.surface.len();
-                            morph_idx += 1;
-
-                            if matched_len == current_map_word.len() {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-
-                    let mut phonemes = map.phonemes.clone();
-
-                    if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
-                        phonemes = vec!["unk".to_string()];
-                    }
-
-                    result.push(WordPhonemeDetail {
-                        word: map.word.clone(),
-                        phonemes,
-                        is_unknown: is_unknown_word,
-                        is_ignored: map.phonemes.is_empty(),
-                    });
-                } else {
-                    // 四五 という入力に対して 四十五 のようなマッピングになるケースが存在する
-                    result.push(WordPhonemeDetail {
-                        word: map.word.clone(),
-                        phonemes: map.phonemes.clone(),
-                        is_unknown: false,
-                        is_ignored: map.phonemes.is_empty(),
-                    });
-                }
-            }
-        }
-
-        // mapping 終了後、morphs の末尾に無視トークン(空白等)が残っていれば回収する
-        while let Some(m) = morphs.get(morph_idx) {
-            if m.is_ignored {
-                result.push(WordPhonemeDetail {
-                    word: m.surface.clone(),
-                    phonemes: vec!["sp".to_string()],
-                    is_unknown: m.is_unknown,
-                    is_ignored: true,
-                });
-            }
-            morph_idx += 1;
-        }
-
-        Ok(result)
+        self.make_phoneme_mapping(morphs, mapping)
     }
 
     pub(crate) fn g2p_mapping_inner(
@@ -727,6 +619,184 @@ impl OpenJTalk {
 
             Ok(mapping)
         }
+    }
+
+    pub(crate) fn make_phoneme_mapping(
+        &mut self,
+        morphs: Vec<MecabMorph>,
+        mapping: Vec<WordPhonemeMap>,
+    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        let mut result = Vec::with_capacity(morphs.len());
+        let mut morph_idx = 0;
+        let mapping_len = mapping.len();
+
+        for (base_idx, map) in mapping.into_iter().enumerate() {
+            // is_ignored な Morph を先に進めておく
+            while let Some(m) = morphs.get(morph_idx) {
+                if m.is_ignored {
+                    result.push(WordPhonemeDetail {
+                        word: m.surface.clone(),
+                        phonemes: vec!["sp".to_string()],
+                        is_unknown: m.is_unknown,
+                        is_ignored: true,
+                    });
+                    morph_idx += 1;
+                } else {
+                    break;
+                }
+            }
+
+            // morphs が尽きた場合: 後処理で feature 数が変動しうるため出力を継続
+            if morph_idx >= morphs.len() {
+                let is_ignored = map.phonemes.is_empty();
+                result.push(WordPhonemeDetail {
+                    word: map.word,
+                    phonemes: map.phonemes,
+                    is_unknown: false,
+                    is_ignored,
+                });
+                continue;
+            }
+
+            let current_map_word = &map.word;
+            let morph = &morphs[morph_idx];
+
+            if current_map_word == &morph.surface {
+                // 完全一致: morph と NJD feature の surface が一致
+                let mut phonemes = map.phonemes.clone();
+
+                if morph.is_unknown {
+                    // 先頭の長音のような Open JTalk が破棄するもの、
+                    // または pau に置き換えられた未知語は unk にしておく
+                    if phonemes.is_empty() || phonemes == ["pau"] {
+                        phonemes = vec!["unk".to_string()];
+                    }
+                }
+
+                result.push(WordPhonemeDetail {
+                    word: map.word,
+                    phonemes,
+                    is_unknown: morph.is_unknown,
+                    is_ignored: map.phonemes.is_empty(),
+                });
+                morph_idx += 1;
+            } else if current_map_word.starts_with(&morph.surface) {
+                // 先頭一致: NJD が複数の morph を結合したケース
+                let mut is_unknown_word = false;
+                let mut matched_len = 0;
+
+                while let Some(inner_morph) = morphs.get(morph_idx) {
+                    if inner_morph.is_ignored {
+                        result.push(WordPhonemeDetail {
+                            word: inner_morph.surface.clone(),
+                            phonemes: vec!["sp".to_string()],
+                            is_unknown: inner_morph.is_unknown,
+                            is_ignored: true,
+                        });
+                        morph_idx += 1;
+                        continue;
+                    }
+
+                    let remaining = &current_map_word[matched_len..];
+
+                    if remaining.starts_with(&inner_morph.surface) {
+                        is_unknown_word |= inner_morph.is_unknown;
+                        matched_len += inner_morph.surface.len();
+                        morph_idx += 1;
+
+                        if matched_len == current_map_word.len() {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                let mut phonemes = map.phonemes.clone();
+
+                if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
+                    phonemes = vec!["unk".to_string()];
+                }
+
+                result.push(WordPhonemeDetail {
+                    word: map.word,
+                    phonemes,
+                    is_unknown: is_unknown_word,
+                    is_ignored: map.phonemes.is_empty(),
+                });
+            } else {
+                // 不一致: 数字正規化・踊り字展開等で surface が変化したケース
+                result.push(WordPhonemeDetail {
+                    word: map.word.clone(),
+                    phonemes: map.phonemes.clone(),
+                    is_unknown: false,
+                    is_ignored: map.phonemes.is_empty(),
+                });
+
+                let current_morph_surface = &morphs[morph_idx].surface;
+                let has_odori = current_morph_surface
+                    .chars()
+                    .any(|c| matches!(c, '々' | 'ゝ' | 'ゞ' | 'ヽ' | 'ヾ' | '〻'));
+
+                if has_odori {
+                    // 踊り字展開: 踊り字 morph + 結合先 morph を消費
+                    morph_idx += 1;
+                    if let Some(ahead) = morphs.get(morph_idx)
+                        && !ahead.is_ignored && current_map_word.ends_with(&ahead.surface) {
+                            morph_idx += 1;
+                        }
+                } else {
+                    // 残りの有効な morph 数と、残りの base_mapping 数を計算
+                    let non_ignored_remaining =
+                        morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
+                    let bases_after_current = mapping_len - base_idx - 1;
+
+                    if non_ignored_remaining <= bases_after_current {
+                        // NJD 挿入ノード: morph を消費しない (e.g, "10" -> "十" などで桁が挿入された)
+                    } else {
+                        // surface 変化のみ: morph を 1 つ消費
+                        morph_idx += 1;
+
+                        // "10" -> "十" のように、複数の数字 morph が1ノードに縮約された場合の残りの "0" などを消費
+                        while let Some(ahead) = morphs.get(morph_idx) {
+                            if ahead.is_ignored {
+                                break;
+                            }
+                            if !matches!(
+                                ahead.surface.as_str(),
+                                "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９"
+                            ) {
+                                break;
+                            }
+
+                            let non_ign =
+                                morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
+
+                            if non_ign > bases_after_current {
+                                morph_idx += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // mapping 終了後、morphs の末尾に無視トークン(空白等)が残っていれば回収する
+        while let Some(m) = morphs.get(morph_idx) {
+            if m.is_ignored {
+                result.push(WordPhonemeDetail {
+                    word: m.surface.clone(),
+                    phonemes: vec!["sp".to_string()],
+                    is_unknown: m.is_unknown,
+                    is_ignored: true,
+                });
+            }
+            morph_idx += 1;
+        }
+
+        Ok(result)
     }
 
     const BUFFER_SIZE: usize = 16384;
