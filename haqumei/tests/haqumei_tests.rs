@@ -390,4 +390,76 @@ mod tests {
         assert!(kana.contains("ハナヂ")); // 復元
         assert!(kana.contains("キヅカズ")); // 復元
     }
+
+    #[test]
+    fn test_odoriji_basic_expansion() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        assert_eq!(haqumei.g2p_kana("さゝみ").unwrap(), "ササミ");
+
+        assert_eq!(haqumei.g2p_kana("いすゞ").unwrap(), "イスズ");
+
+        assert_eq!(haqumei.g2p_kana("カヽ").unwrap(), "カカ");
+
+        assert_eq!(haqumei.g2p_kana("ガヾ").unwrap(), "ガガ");
+    }
+
+    #[test]
+    fn test_odoriji_voiceless_conversion() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // 濁音の後に清音の踊り字が来た場合、清音化されるべき
+        // 「がゝ」 -> 「ガカ」
+        assert_eq!(haqumei.g2p_kana("がゝ").unwrap(), "ガカ");
+        assert_eq!(haqumei.g2p_kana("バヽ").unwrap(), "バハ");
+    }
+
+    #[test]
+    fn test_odoriji_voiced_conversion() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // 清音の後に濁音の踊り字が来た場合、濁音化されるべき
+        // 「かゞ」 -> 「カガ」
+        assert_eq!(haqumei.g2p_kana("かゞ").unwrap(), "カガ");
+        assert_eq!(haqumei.g2p_kana("ハヾ").unwrap(), "ハバ");
+    }
+
+    #[test]
+    fn test_odoriji_mora_handling_with_small_kana() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // モーラを伴う繰り返し (本来拗音を含むモーラに一の字点がくることは望まれないが)
+        // 「じょゝ」 -> 「ジョジョ」
+        assert_eq!(haqumei.g2p_kana("じょゝ").unwrap(), "ジョジョ");
+
+        // 「ちゅゞ」 -> 「チュヂュ」 (チ+濁点+ュ)
+        let result = haqumei.g2p_kana("ちゅゞ").unwrap();
+        assert_eq!(result, "チュヂュ");
+    }
+
+    #[test]
+    fn test_odoriji_pos_change() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let mut detailed = haqumei.g2p_detailed("いすゞ").unwrap();
+        assert_eq!(detailed.pop().unwrap(), "u");
+        assert_eq!(detailed.pop().unwrap(), "z");
+
+        let mapping = haqumei.g2p_mapping_detailed("いすゞ").unwrap();
+        let odoriji_word = mapping.iter().find(|m| m.word.contains("ゞ")).unwrap();
+
+        assert_eq!(odoriji_word.phonemes, ["i", "s", "u", "z", "u"]);
+    }
+
+    #[test]
+    fn test_odoriji_invalid_cases() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let result = haqumei.g2p_kana("ゝ").unwrap();
+        assert_eq!(result, "ゝ");
+
+        // 半濁点がついた不正な踊り字（ゝ+゜）
+        // 濁音とはみなされず、清音として処理されること
+        assert_eq!(haqumei.g2p_kana("かゝ゜").unwrap(), "カカ゜");
+    }
 }

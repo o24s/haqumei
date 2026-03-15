@@ -21,7 +21,7 @@
 
 ## 特徴 (Features)
 
-- Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk(-plus)`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
+- Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
 - パフォーマンス: Rustによるネイティブ実装と、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装されたいくつかの改善を取り入れ、高速なG2Pを実現しています。([ベンチマーク](#ベンチマーク))
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
@@ -184,11 +184,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。
 
 ```rust
-use haqumei::{Haqumei, HaqumeiOptions};
+use haqumei::{Haqumei, HaqumeiOptions, UnicodeNormalization};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::with_options(HaqumeiOptions {
-    normalize_unicode: true,
+    normalize_unicode: UnicodeNormalization::Nfc,
     ..Default::default()
   })?;
 

@@ -22,7 +22,7 @@
 ## Features
 
 - **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_mapping`, `g2p_mapping_detailed`).  
-  This capability is not available in Open JTalk or pyopenjtalk(-plus). (See [Advanced Features](#advanced-features))
+  This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
 - **Performance:** Achieves fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Benchmark](#benchmark))
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
@@ -185,11 +185,11 @@ For details on the default behavior and available options, please refer to [Haqu
 In the following example, `normalize_unicode` (which is disabled by default) is enabled to apply Unicode NFC normalization to the input text.
 
 ```rust
-use haqumei::{Haqumei, HaqumeiOptions};
+use haqumei::{Haqumei, HaqumeiOptions, UnicodeNormalization};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::with_options(HaqumeiOptions {
-    normalize_unicode: true,
+    normalize_unicode: UnicodeNormalization::Nfc,
     ..Default::default()
   })?;
 

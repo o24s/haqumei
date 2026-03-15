@@ -44,7 +44,7 @@ pub mod features;
 mod macros;
 pub mod nani_predict;
 pub mod open_jtalk;
-mod utils;
+pub mod utils;
 
 use std::{
     path::Path,
