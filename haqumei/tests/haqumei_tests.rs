@@ -228,6 +228,7 @@ mod tests {
 つまみ出されようとしたが、「「八十五歳」」にもなる 長老 に助けられた。\
 わーいです。そこで、𰻞𰻞麺とお冷を飲み食いしたです。\
 ーっ、 𰻞ー𰻞。あ、はい。あーーーーーーーーあ\
+叙々々々々々々苑々々様々々要所々々々々々槇野々々々\
 ";
 
         let result = haqumei.g2p_mapping_detailed(text).unwrap();
@@ -304,6 +305,17 @@ mod tests {
                 vec!["a", "a", "a", "a", "a", "a", "a", "a", "a"],
             ),
             ("あ", vec!["a"]),
+            ("叙", vec!["j", "o"]),
+            ("々々々々々々", vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
+            ("苑", vec!["e", "N"]),
+            ("々々", vec!["e", "N", "e", "N"]),
+            ("様々", vec!["s", "a", "m", "a", "z", "a", "m", "a"]),
+            ("々", vec! ["z", "a", "m", "a"]),
+            ("要所々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            ("々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            ("々", vec!["y", "o", "o", "sh", "o"]),
+            ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
+            ("々々", vec!["n", "o", "n", "o"]),
         ];
 
         assert_eq!(result, expected);
@@ -461,5 +473,47 @@ mod tests {
         // 半濁点がついた不正な踊り字（ゝ+゜）
         // 濁音とはみなされず、清音として処理されること
         assert_eq!(haqumei.g2p_kana("かゝ゜").unwrap(), "カカ゜");
+    }
+
+    #[test]
+    fn test_dounojiten_expansion() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let text = "叙々々々々々々苑々々様々々要所々々々々々槇野々々々";
+
+        let result = haqumei.g2p_mapping_detailed(text).unwrap();
+
+        let mapping: Vec<(&str, Vec<&str>)> = result.iter()
+            .map(|d| {
+                (
+                    d.word.as_str(),
+                    d.phonemes.iter().map(|s| s.as_str()).collect(),
+                )
+            })
+            .collect();
+
+        let expected = vec![
+            ("叙", vec!["j", "o"]),
+            ("々々々々々々", vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
+
+            // 漢字を跨いだ後の展開: 「苑」を「々々」が繰り返す
+            ("苑", vec!["e", "N"]),
+            ("々々", vec!["e", "N", "e", "N"]),
+
+            // 様々からの抽出: 「様々」の後半(ザマ)だけを「々」が繰り返す
+            ("様々", vec!["s", "a", "m", "a", "z", "a", "m", "a"]),
+            ("々", vec!["z", "a", "m", "a"]),
+
+            // 複数文字熟語の連鎖: 「要所々々」の展開結果を、さらに「々々」「々」が引き継ぐ
+            ("要所々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            ("々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            ("々", vec!["y", "o", "o", "sh", "o"]),
+
+            // 固有名詞的な末尾からの抽出: 「槇野々」の末尾(ノノ)を「々々」が引き継ぐ
+            ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
+            ("々々", vec!["n", "o", "n", "o"]),
+        ];
+
+        assert_eq!(mapping, expected);
     }
 }

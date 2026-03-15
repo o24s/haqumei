@@ -10,7 +10,7 @@ use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
     Haqumei, NjdFeature, UnicodeNormalization, VIBRATO_CACHE,
-    data::{MULTI_READ_KANJI_LIST, TO_DAKUON, TO_SEION},
+    data::{MULTI_READ_KANJI_LIST, TO_DAKUON, TO_SEION, TO_SEION_CHAR},
     errors::HaqumeiError,
     features::UnidicFeature,
     open_jtalk::OpenJTalk,
@@ -34,6 +34,21 @@ pub fn hira2kata(s: &str) -> String {
             _ => c,
         })
         .collect()
+}
+
+pub fn is_dakuon(c: char) -> bool {
+    matches!(
+        c,
+        'が' | 'ぎ' | 'ぐ' | 'げ' | 'ご'
+        | 'ざ' | 'じ' | 'ず' | 'ぜ' | 'ぞ'
+        | 'だ' | 'ぢ' | 'づ' | 'で' | 'ど'
+        | 'ば' | 'び' | 'ぶ' | 'べ' | 'ぼ'
+        | 'ガ' | 'ギ' | 'グ' | 'ゲ' | 'ゴ'
+        | 'ザ' | 'ジ' | 'ズ' | 'ゼ' | 'ゾ'
+        | 'ダ' | 'ヂ' | 'ヅ' | 'デ' | 'ド'
+        | 'バ' | 'ビ' | 'ブ' | 'ベ' | 'ボ'
+        | 'ヴ'
+    )
 }
 
 pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
@@ -405,6 +420,32 @@ pub(crate) fn modify_acc_after_chaining(njd_features: &mut [NjdFeature]) {
     }
 }
 
+// 文字列を静音化し、末尾の「々」に対応する繰り返し単位を検出する
+fn detect_odori_unit(read: &str) -> Option<usize> {
+    let seion_read: String = read.chars().map(|ch| {
+        if is_dakuon(ch) {
+            TO_SEION_CHAR.get(&ch).copied().unwrap_or(ch)
+        } else {
+            ch
+        }
+    }).collect();
+    let moras = split_kana_mora(&seion_read);
+    let n = moras.len();
+    if n < 2 {
+        return None;
+    }
+
+    // 後ろ半分が前半分と一致する最小の単位を探す
+    for len in 1..=(n / 2) {
+        let first_half = &moras[n - len * 2..n - len];
+        let second_half = &moras[n - len..n];
+        if first_half == second_half {
+            return Some(len);
+        }
+    }
+    None
+}
+
 /// 踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを処理する後処理関数
 pub(crate) fn process_odori_features(
     njd_features: &mut Vec<NjdFeature>,
@@ -413,7 +454,6 @@ pub(crate) fn process_odori_features(
     let mut i = 0;
     while i < njd_features.len() {
         let orig = &njd_features[i].orig;
-
         if is_dancing(orig) {
             // 踊り字「々」の処理
             let mut reanalysis_result = None;
@@ -450,7 +490,11 @@ pub(crate) fn process_odori_features(
 
             // 再解析実行と適用
             if let Some((text, consumed_next)) = reanalysis_result {
-                let analyzed = open_jtalk.run_frontend(&text)?;
+                let mut analyzed = open_jtalk.run_frontend(&text)?;
+
+                if let Some(first) = analyzed.get_mut(0) {
+                    first.chain_flag = 1;
+                }
 
                 let range_end = if consumed_next { i + 2 } else { i + 1 };
                 let analyzed_len = analyzed.len();
@@ -477,20 +521,62 @@ pub(crate) fn process_odori_features(
                 end += 1;
             }
 
+            if i > 0 && njd_features[i - 1].orig.ends_with('々') {
+                let prev = &njd_features[i - 1];
+                let base_acc = prev.acc;
+
+                // 清音ベースで「繰り返しの長さ」を特定
+                if let Some(period) = detect_odori_unit(&prev.read) {
+                    let raw_read_moras = split_kana_mora(&prev.read);
+                    let raw_pron_moras = split_kana_mora(&prev.pron);
+
+                    if raw_read_moras.len() >= period {
+                        let unit_read = raw_read_moras[raw_read_moras.len() - period..].join("");
+                        let unit_pron = raw_pron_moras[raw_pron_moras.len() - period..].join("");
+                        let unit_mora =
+                            (prev.mora_size / raw_read_moras.len() as i32) * period as i32;
+
+                        let current_feat = &mut njd_features[i];
+                        let count = count_odori(&current_feat.orig);
+
+                        current_feat.read = unit_read.repeat(count);
+                        current_feat.pron = unit_pron.repeat(count);
+                        current_feat.mora_size = unit_mora * count as i32;
+
+                        current_feat.acc = base_acc;
+                        current_feat.chain_flag = 1;
+
+                        if current_feat.pos == "記号" {
+                            set_to_noun(current_feat);
+                        }
+                        i += 1;
+                        continue;
+                    }
+                }
+            }
+
             // 直前の漢字トークンを収集
             let mut normal_indices = Vec::new();
             let mut j = start;
             let mut collected_chars = 0;
-            let needed_chars = if total_odori >= 2 { 2 } else { 1 };
+            let needed_chars = total_odori.min(8);
 
             while j > 0 {
                 j -= 1;
-                if is_kanji_token(&njd_features[j]) {
+                let target = &njd_features[j];
+
+                if matches!(target.pos.as_str(), "記号" | "フィラー" | "感動詞") {
+                    break;
+                }
+
+                if is_kanji_token(target) {
                     normal_indices.push(j);
-                    collected_chars += njd_features[j].orig.chars().count();
+                    collected_chars += target.orig.chars().count();
                     if collected_chars >= needed_chars {
                         break;
                     }
+                } else {
+                    break;
                 }
             }
             normal_indices.reverse();
@@ -499,6 +585,8 @@ pub(crate) fn process_odori_features(
                 i = end;
                 continue;
             }
+
+            let base_acc = njd_features[normal_indices[0]].acc;
 
             // 置換用データの作成
             let is_single_kanji = normal_indices.len() == 1
@@ -532,6 +620,9 @@ pub(crate) fn process_odori_features(
                     feat.pron = base_pron.clone();
                     feat.mora_size = base_mora_size;
                 }
+                    feat.acc = base_acc; // 直前の漢字トークンの acc を使う
+                    feat.chain_flag = 1;
+
                 if feat.pos == "記号" {
                     set_to_noun(feat);
                 }
@@ -674,11 +765,14 @@ fn apply_odoriji_logic(
         }
     }
 
-    // 対象モーラが単一の書記素クラスタか判定する。
-    // 拗音を伴う濁点付きモーラの後に、一の字点(ゝ, ゞ, ヽ, ヾ) がくる
-    // ケースを厳密に定義することはできない。
-    // "一の字点" である通り、そもそも一の字点は拗音を含むモーラに対して
-    // 使われるべきでなく、昔の人も一つの仮名を繰り返すときにしかおそらく使っていない。
+    // 対象モーラが単一の仮名 grapheme か判定する。
+    //
+    // 一の字点 (ゝ, ゞ, ヽ, ヾ) は歴史的に「直前の仮名1文字」を
+    // 繰り返す記号であり、拗音 (きゃ, しゃ 等) のような
+    // 複数仮名からなるモーラに対して使われる例はほぼ存在しない。
+    //
+    // そのため厳密な規則を定義するのは難しく、実際のテキストでも
+    // 拗音に対して踊り字が使われるケースは想定しにくい。
     //
     // 二字以上扱う [くの字点](https://ja.wikipedia.org/wiki/踊り字#〱（くの字点）) についても、
     //
