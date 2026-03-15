@@ -136,6 +136,14 @@ impl PyWordPhonemeDetail {
     }
 }
 
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UnicodeNormalization {
+    None = 0,
+    Nfc = 1,
+    Nfkc = 2,
+}
+
 #[pyclass(name = "Dictionary", module = "haqumei")]
 struct PyDictionary {
     inner: Dictionary,
@@ -343,7 +351,7 @@ impl PyHaqumei {
     #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (
-        normalize_unicode = false,
+        normalize_unicode = UnicodeNormalization::None,
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
@@ -355,7 +363,7 @@ impl PyHaqumei {
         process_odoriji = true
     ))]
     fn new(
-        normalize_unicode: bool,
+        normalize_unicode: UnicodeNormalization,
         use_read_as_pron: bool,
         revert_long_vowels: bool,
         revert_yotsugana: bool,
@@ -367,7 +375,11 @@ impl PyHaqumei {
         process_odoriji: bool,
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
-            normalize_unicode,
+            normalize_unicode: match normalize_unicode {
+                UnicodeNormalization::None => ::haqumei::UnicodeNormalization::None,
+                UnicodeNormalization::Nfc => ::haqumei::UnicodeNormalization::Nfc,
+                UnicodeNormalization::Nfkc => ::haqumei::UnicodeNormalization::Nfkc,
+            },
             use_read_as_pron,
             revert_long_vowels,
             revert_yotsugana,
@@ -575,6 +587,7 @@ fn unset_user_dictionary() -> PyResult<()> {
 #[pymodule]
 fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHaqumei>()?;
+    m.add_class::<UnicodeNormalization>()?;
     m.add_class::<PyOpenJTalk>()?;
     m.add_class::<PyNjdFeature>()?;
     m.add_class::<PyWordPhonemeMap>()?;

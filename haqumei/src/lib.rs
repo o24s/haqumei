@@ -47,7 +47,6 @@ pub mod open_jtalk;
 mod utils;
 
 use std::{
-    borrow::Cow,
     path::Path,
     sync::{Arc, LazyLock, Mutex},
 };
@@ -60,7 +59,6 @@ pub use open_jtalk::{
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use unicode_normalization::UnicodeNormalization;
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
@@ -94,11 +92,11 @@ pub struct Haqumei {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HaqumeiOptions {
-    /// 入力テキストを Unicode NFC (Normalization Form C) に正規化する。
-    /// 「か + 濁点」などの結合文字を 1文字の「が」に統合します。
+    /// 入力テキストを [UnicodeNormalization] の指定された方法で正規化する。
+    /// 「か + 濁点」などの結合文字を1文字の「が」に統合できます。
     ///
     /// デフォルトで無効になっています。
-    pub normalize_unicode: bool,
+    pub normalize_unicode: UnicodeNormalization,
 
     /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
     ///
@@ -173,7 +171,7 @@ pub struct HaqumeiOptions {
 impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
-            normalize_unicode: false,
+            normalize_unicode: UnicodeNormalization::None,
             use_read_as_pron: false,
             revert_long_vowels: false,
             revert_yotsugana: false,
@@ -185,6 +183,17 @@ impl Default for HaqumeiOptions {
             process_odoriji: true,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UnicodeNormalization {
+    /// 正規化を行わない (デフォルト)
+    #[default]
+    None,
+    /// NFC (正準等価性による合成: 結合文字の合体のみ)
+    Nfc,
+    /// NFKC (互換等価性による分解と合成: 半角カナ -> 全角カナ、全角英数 -> 半角英数など)
+    Nfkc,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -500,10 +509,7 @@ impl Haqumei {
         &mut self,
         text: &str,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
-        let mut text = Cow::Borrowed(text);
-        if self.options.normalize_unicode {
-            text = Cow::Owned(text.nfc().collect::<String>());
-        }
+        let text = &self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
         let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
@@ -671,10 +677,7 @@ impl Haqumei {
     }
 
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        let mut text = Cow::Borrowed(text);
-        if self.options.normalize_unicode {
-            text = Cow::Owned(text.nfc().collect::<String>());
-        }
+        let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
         let mut njd_features = if let Some(tokenizer) = &self.tokenizer {

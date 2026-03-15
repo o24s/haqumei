@@ -1,3 +1,4 @@
+from enum import IntEnum
 from typing import List, Optional
 
 class NjdFeature:
@@ -77,6 +78,12 @@ class WordPhonemeDetail:
 
     is_ignored: bool
     """`OpenJTalk` のパイプラインで無視される対象かどうか。"""
+
+class UnicodeNormalization(IntEnum):
+    """Unicode正規化の方式を指定する。"""
+    None_ = 0
+    Nfc = 1
+    Nfkc = 2
 
 class Dictionary:
     """OpenJTalk用の辞書データを管理するクラス。

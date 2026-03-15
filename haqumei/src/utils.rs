@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashSet,
     fs::Metadata,
     path::{Path, PathBuf},
@@ -6,10 +7,11 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
-    Haqumei, NjdFeature, VIBRATO_CACHE,
+    Haqumei, NjdFeature, UnicodeNormalization, VIBRATO_CACHE,
     data::{MULTI_READ_KANJI_LIST, TO_DAKUON, TO_SEION},
     errors::HaqumeiError,
     features::UnidicFeature,
@@ -127,6 +129,27 @@ pub fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
 }
 
 impl Haqumei {
+    #[inline(always)]
+    pub(crate) fn normalize_unicode_if_needed<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        match self.options.normalize_unicode {
+            UnicodeNormalization::None => Cow::Borrowed(text),
+            UnicodeNormalization::Nfc => {
+                if is_nfc_quick(text.chars()) == IsNormalized::Yes {
+                    Cow::Borrowed(text)
+                } else {
+                    Cow::Owned(text.nfc().collect::<String>())
+                }
+            }
+            UnicodeNormalization::Nfkc => {
+                if is_nfkc_quick(text.chars()) == IsNormalized::Yes {
+                    Cow::Borrowed(text)
+                } else {
+                    Cow::Owned(text.nfkc().collect::<String>())
+                }
+            }
+        }
+    }
+
     pub(crate) fn revert_pron_to_read(&mut self, njd_features: &mut [NjdFeature]) {
         let options = &self.options;
         debug_assert!(
@@ -135,8 +158,11 @@ impl Haqumei {
 
         for feature in njd_features.iter_mut() {
             let should_revert_to_read = options.use_read_as_pron
-                || (options.revert_long_vowels && feature.pron.contains('ー') && !feature.orig.contains('ー'))
-                || (options.revert_yotsugana && (feature.read.contains('ヅ') || feature.read.contains('ヂ')));
+                || (options.revert_long_vowels
+                    && feature.pron.contains('ー')
+                    && !feature.orig.contains('ー'))
+                || (options.revert_yotsugana
+                    && (feature.read.contains('ヅ') || feature.read.contains('ヂ')));
 
             if should_revert_to_read {
                 feature.pron = feature.read.clone();

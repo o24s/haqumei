@@ -6,8 +6,8 @@ mod tests {
         sync::LazyLock,
     };
 
-    use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk, errors::HaqumeiError};
-    use unicode_normalization::UnicodeNormalization;
+    use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk, UnicodeNormalization, errors::HaqumeiError};
+    use unicode_normalization::UnicodeNormalization as _;
 
     static MANIFEST_DIR: LazyLock<&Path> = LazyLock::new(|| Path::new(env!("CARGO_MANIFEST_DIR")));
     static WAGANEKO_PATH: LazyLock<PathBuf> =
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_unicode_normalization() {
         let mut haqumei = Haqumei::with_options(HaqumeiOptions {
-            normalize_unicode: true,
+            normalize_unicode: UnicodeNormalization::Nfc,
             ..Default::default()
         })
         .unwrap();
