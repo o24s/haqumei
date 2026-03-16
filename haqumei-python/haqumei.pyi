@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import List, Optional
+from typing import List, Tuple, Final, Optional
 
 class NjdFeature:
     """
@@ -48,6 +48,33 @@ class NjdFeature:
 
     chain_flag: int
     """連結フラグ"""
+
+class MecabMorph:
+    """MeCabによる解析結果の詳細情報。"""
+
+    surface: Final[str]
+    """形態素の表層形。"""
+
+    feature: Final[str]
+    """MeCab が出力した特徴量文字列。"""
+
+    left_id: Final[int]
+    """left-id.def で定義された左文脈 ID。"""
+
+    right_id: Final[int]
+    """right-id.def で定義された右文脈 ID。"""
+
+    pos_id: Final[int]
+    """pos-id.def で定義された品詞 ID。"""
+
+    word_cost: Final[int]
+    """辞書に定義された単語コスト。"""
+
+    is_unknown: Final[bool]
+    """MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。"""
+
+    is_ignored: Final[bool]
+    """`OpenJTalk` のパイプラインで無視される対象かどうか。(e.g, "記号,空白")"""
 
 class WordPhonemeMap:
     """単語とその音素列の対応関係を表すデータクラス。
@@ -178,6 +205,34 @@ class OpenJTalk:
         """
         ...
 
+    def run_frontend(self, text: str) -> List[NjdFeature]:
+        """テキストを解析し、NJD特徴量のリストを返します。"""
+        ...
+
+    def run_frontend_detailed(self, text: str) -> Tuple[List[NjdFeature], List[MecabMorph]]:
+        """
+        テキストを詳細に解析し、NJD特徴量とMeCab形態素情報の両方を返します。
+
+        Args:
+            text (str): 解析対象のテキスト。
+
+        Returns:
+            Tuple[List[PyNjdFeature], List[MecabMorph]]:
+                NJD特徴量のリストと、詳細な形態素情報のリストのタプル。
+        """
+        ...
+
+    def extract_fullcontext(self, text: str) -> List[str]:
+        """フルコンテキストラベルを抽出します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: フルコンテキストラベルのリスト。
+        """
+        ...
+
     def g2p(self, text: str) -> List[str]:
         """テキストを音素リストに変換します。
 
@@ -275,24 +330,30 @@ class OpenJTalk:
         """
         ...
 
-    def run_frontend(self, text: str) -> List[NjdFeature]:
-        """
+
+    def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
+        """複数のテキストに対して `run_frontend` を実行します。
+
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 解析対象のテキストのリスト。
 
         Returns:
-            List[NjdFeature]: 特徴量のリスト。
+            List[List[PyNjdFeature]]: 各テキストに対応するNJD特徴量リストのリスト。
         """
         ...
 
-    def extract_fullcontext(self, text: str) -> List[str]:
-        """フルコンテキストラベルを抽出します。
+    def run_frontend_detailed_batch(
+        self,
+        texts: List[str]
+    ) -> List[Tuple[List[NjdFeature], List[MecabMorph]]]:
+        """複数のテキストに対して `run_frontend_detailed` を実行します。
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 解析対象のテキストのリスト。
 
         Returns:
-            List[str]: フルコンテキストラベルのリスト。
+            List[Tuple[List[PyNjdFeature], List[MecabMorph]]]:
+                各テキストに対応する（NJD特徴量リスト, MeCab形態素情報リスト）のタプルのリスト。
         """
         ...
 
@@ -469,6 +530,34 @@ class Haqumei:
         """
         ...
 
+    def run_frontend(self, text: str) -> List[NjdFeature]:
+        """テキストを解析し、NJD特徴量のリストを返します。"""
+        ...
+
+    def run_frontend_detailed(self, text: str) -> Tuple[List[NjdFeature], List[MecabMorph]]:
+        """
+        テキストを詳細に解析し、NJD特徴量とMeCab形態素情報の両方を返します。
+
+        Args:
+            text (str): 解析対象のテキスト。
+
+        Returns:
+            Tuple[List[PyNjdFeature], List[MecabMorph]]
+                NJD特徴量のリストと、詳細な形態素情報のリストのタプル。
+        """
+        ...
+
+    def extract_fullcontext(self, text: str) -> List[str]:
+        """フルコンテキストラベルを抽出します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: フルコンテキストラベルのリスト。
+        """
+        ...
+
     def g2p(self, text: str) -> List[str]:
         """テキストを音素リストに変換します。
 
@@ -562,25 +651,29 @@ class Haqumei:
         """
         ...
 
-    def run_frontend(self, text: str) -> List[NjdFeature]:
-        """詳細な特徴量 (NJDFeature) を取得します。
+    def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
+        """複数のテキストに対して `run_frontend` を実行します。
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 解析対象のテキストのリスト。
 
         Returns:
-            List[NjdFeature]: 特徴量のリスト。
+            List[List[PyNjdFeature]]: 各テキストに対応するNJD特徴量リストのリスト。
         """
         ...
 
-    def extract_fullcontext(self, text: str) -> List[str]:
-        """フルコンテキストラベルを抽出します。
+    def run_frontend_detailed_batch(
+        self,
+        texts: List[str]
+    ) -> List[Tuple[List[NjdFeature], List[MecabMorph]]]:
+        """複数のテキストに対して `run_frontend_detailed` を実行します。
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 解析対象のテキストのリスト。
 
         Returns:
-            List[str]: フルコンテキストラベルのリスト。
+            List[Tuple[List[PyNjdFeature], List[MecabMorph]]]:
+                各テキストに対応する（NJD特徴量リスト, MeCab形態素情報リスト）のタプルのリスト。
         """
         ...
 

@@ -43,7 +43,11 @@ fn compute_edit_ops(expected: &[&str], actual: &[&str]) -> (usize, usize, usize,
 
     for i in 1..=m {
         for j in 1..=n {
-            let cost = if expected[i - 1] == actual[j - 1] { 0 } else { 1 };
+            let cost = if expected[i - 1] == actual[j - 1] {
+                0
+            } else {
+                1
+            };
             dp[i][j] = std::cmp::min(
                 std::cmp::min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
                 dp[i - 1][j - 1] + cost,
@@ -89,7 +93,11 @@ fn compute_edit_ops(expected: &[&str], actual: &[&str]) -> (usize, usize, usize,
     (s, d, ins, ops_rev)
 }
 
-fn write_token_diff<W: Write>(w: &mut W, expected: &[&str], actual: &[&str]) -> std::io::Result<()> {
+fn write_token_diff<W: Write>(
+    w: &mut W,
+    expected: &[&str],
+    actual: &[&str],
+) -> std::io::Result<()> {
     let diff = TextDiff::from_slices(expected, actual);
     write!(w, "Diff: ")?;
     for change in diff.iter_all_changes() {
@@ -146,7 +154,11 @@ fn evaluate_phoneme_dataset(
         }
 
         let expected_filtered: Vec<&str> = if IGNORE_PAU {
-            expected_raw.iter().copied().filter(|&p| p != "pau").collect()
+            expected_raw
+                .iter()
+                .copied()
+                .filter(|&p| p != "pau")
+                .collect()
         } else {
             expected_raw.to_vec()
         };
@@ -218,7 +230,11 @@ fn evaluate_phoneme_dataset(
                 writeln!(w, "  - Error: word index {} out of range.", word_idx)?;
                 continue;
             };
-            let ignored_mark = if detail.is_ignored { " (Ignored/Space)" } else { "" };
+            let ignored_mark = if detail.is_ignored {
+                " (Ignored/Space)"
+            } else {
+                ""
+            };
             let unk_mark = if detail.is_unknown { " [UNK]" } else { "" };
 
             writeln!(
@@ -239,7 +255,11 @@ fn evaluate_phoneme_dataset(
             } else {
                 "EOS"
             };
-            writeln!(w, "    Context:   {} -> [ {} ] -> {}", prev_word, detail.word, next_word)?;
+            writeln!(
+                w,
+                "    Context:   {} -> [ {} ] -> {}",
+                prev_word, detail.word, next_word
+            )?;
             writeln!(w)?;
         }
 
@@ -288,7 +308,6 @@ fn evaluate_phoneme_dataset(
 
     Ok(())
 }
-
 
 fn evaluate_kana_dataset(
     haqumei: &mut Haqumei,
@@ -396,7 +415,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
     )?;
 
-    evaluate_phoneme_dataset(&mut haqumei, basic5000::TEXTS, basic5000::PHONEMES, BASIC_OUT)?;
+    evaluate_phoneme_dataset(
+        &mut haqumei,
+        basic5000::TEXTS,
+        basic5000::PHONEMES,
+        BASIC_OUT,
+    )?;
 
     let mut haqumei = Haqumei::from_path(
         DICT_DIR,

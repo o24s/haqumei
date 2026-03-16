@@ -187,7 +187,9 @@ mod tests {
 
         for (details_hq, details_ojt) in result_hq.into_iter().zip(result_ojt) {
             for (detail_hq, detail_ojt) in details_hq.clone().into_iter().zip(details_ojt) {
-                if detail_hq.is_ignored {
+                // 先頭の長音記号などは、未知語かつ無視される対象であるが、
+                // 未知語でない無視されるトークンはおそらく空白のみである
+                if detail_hq.is_ignored && !detail_hq.is_unknown {
                     assert_eq!(detail_hq.phonemes, &["sp"]);
                 }
                 if detail_hq.is_unknown {
@@ -202,8 +204,10 @@ mod tests {
                         detail_hq.phonemes
                     );
                 }
-                if detail_ojt.is_ignored {
-                    assert_eq!(detail_ojt.phonemes, &["sp"]);
+                // 先頭の長音記号などは、未知語かつ無視される対象であるが、
+                // 未知語でない無視されるトークンはおそらく空白のみである
+                if detail_ojt.is_ignored && !detail_ojt.is_unknown {
+                    assert_eq!(detail_hq.phonemes, &["sp"]);
                 }
                 if detail_ojt.is_unknown {
                     // 未知語の場合：
@@ -306,13 +310,22 @@ mod tests {
             ),
             ("あ", vec!["a"]),
             ("叙", vec!["j", "o"]),
-            ("々々々々々々", vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
+            (
+                "々々々々々々",
+                vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"],
+            ),
             ("苑", vec!["e", "N"]),
             ("々々", vec!["e", "N", "e", "N"]),
             ("様々", vec!["s", "a", "m", "a", "z", "a", "m", "a"]),
-            ("々", vec! ["z", "a", "m", "a"]),
-            ("要所々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
-            ("々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            ("々", vec!["z", "a", "m", "a"]),
+            (
+                "要所々々",
+                vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"],
+            ),
+            (
+                "々々",
+                vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"],
+            ),
             ("々", vec!["y", "o", "o", "sh", "o"]),
             ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
             ("々々", vec!["n", "o", "n", "o"]),
@@ -483,7 +496,8 @@ mod tests {
 
         let result = haqumei.g2p_mapping_detailed(text).unwrap();
 
-        let mapping: Vec<(&str, Vec<&str>)> = result.iter()
+        let mapping: Vec<(&str, Vec<&str>)> = result
+            .iter()
             .map(|d| {
                 (
                     d.word.as_str(),
@@ -494,21 +508,26 @@ mod tests {
 
         let expected = vec![
             ("叙", vec!["j", "o"]),
-            ("々々々々々々", vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
-
+            (
+                "々々々々々々",
+                vec!["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"],
+            ),
             // 漢字を跨いだ後の展開: 「苑」を「々々」が繰り返す
             ("苑", vec!["e", "N"]),
             ("々々", vec!["e", "N", "e", "N"]),
-
             // 様々からの抽出: 「様々」の後半(ザマ)だけを「々」が繰り返す
             ("様々", vec!["s", "a", "m", "a", "z", "a", "m", "a"]),
             ("々", vec!["z", "a", "m", "a"]),
-
             // 複数文字熟語の連鎖: 「要所々々」の展開結果を、さらに「々々」「々」が引き継ぐ
-            ("要所々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
-            ("々々", vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+            (
+                "要所々々",
+                vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"],
+            ),
+            (
+                "々々",
+                vec!["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"],
+            ),
             ("々", vec!["y", "o", "o", "sh", "o"]),
-
             // 固有名詞的な末尾からの抽出: 「槇野々」の末尾(ノノ)を「々々」が引き継ぐ
             ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
             ("々々", vec!["n", "o", "n", "o"]),

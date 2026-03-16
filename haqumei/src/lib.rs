@@ -55,7 +55,7 @@ use moka::sync::Cache;
 
 pub use features::NjdFeature;
 pub use open_jtalk::{
-    MecabDictIndexCompiler, OpenJTalk, unset_user_dictionary, update_global_dictionary,
+    MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary, update_global_dictionary,
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -65,7 +65,7 @@ use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     nani_predict::NaniPredictor,
-    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY, MecabMorph},
+    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     utils::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
@@ -568,6 +568,7 @@ impl Haqumei {
         self.open_jtalk.make_phoneme_mapping(morphs, mapping)
     }
 
+    /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
@@ -594,6 +595,39 @@ impl Haqumei {
         self.apply_postprocessing(text, njd_features)
     }
 
+    /// OpenJTalk のテキスト処理フロントエンドを実行する。
+    /// [NjdFeature] だけでなく、Mecab の解析結果の [Vec<MecabMorph>]
+    /// を取得することができる。
+    pub fn run_frontend_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        let text = self.normalize_unicode_if_needed(text);
+        let text = text.as_ref();
+
+        let (mut njd_features, mecab_morphs) = if let Some(tokenizer) = &self.tokenizer {
+            rayon::join(
+                || self.open_jtalk.run_frontend_detailed(text),
+                || {
+                    let mut worker = tokenizer.new_worker();
+                    vibrato_analysis(&mut worker, text);
+                },
+            )
+            .0
+        } else {
+            self.open_jtalk.run_frontend_detailed(text)
+        }?;
+
+        let options = &self.options;
+
+        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
+            self.revert_pron_to_read(&mut njd_features);
+        }
+
+        Ok((self.apply_postprocessing(text, njd_features)?, mecab_morphs))
+    }
+
+    /// テキストからフルコンテキストラベルを抽出する。
     pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         let njd_features = self.run_frontend(text.as_ref())?;
         self.open_jtalk.make_label(&njd_features)
@@ -641,6 +675,16 @@ impl Haqumei {
                 .predict_is_nan(Some(prev_node))
         })
     }
+
+    impl_batch_method_haqumei!(
+        /// 複数のテキストに対して `run_frontend` を実行します。
+        run_frontend_batch => run_frontend -> Vec<NjdFeature>
+    );
+
+    impl_batch_method_haqumei!(
+        /// 複数のテキストに対して `run_frontend_detailed` を実行します。
+        run_frontend_detailed_batch => run_frontend_detailed -> (Vec<NjdFeature>, Vec<MecabMorph>)
+    );
 
     impl_batch_method_haqumei!(
         /// 複数のテキストに対して `g2p` を実行します。

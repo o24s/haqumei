@@ -42,23 +42,59 @@ struct PyNjdFeature {
     chain_flag: i32,
 }
 
-impl From<&NjdFeature> for PyNjdFeature {
-    fn from(f: &NjdFeature) -> Self {
+impl From<NjdFeature> for PyNjdFeature {
+    fn from(f: NjdFeature) -> Self {
         Self {
-            string: f.string.clone(),
-            pos: f.pos.clone(),
-            pos_group1: f.pos_group1.clone(),
-            pos_group2: f.pos_group2.clone(),
-            pos_group3: f.pos_group3.clone(),
-            ctype: f.ctype.clone(),
-            cform: f.cform.clone(),
-            orig: f.orig.clone(),
-            read: f.read.clone(),
-            pron: f.pron.clone(),
+            string: f.string,
+            pos: f.pos,
+            pos_group1: f.pos_group1,
+            pos_group2: f.pos_group2,
+            pos_group3: f.pos_group3,
+            ctype: f.ctype,
+            cform: f.cform,
+            orig: f.orig,
+            read: f.read,
+            pron: f.pron,
             acc: f.acc,
             mora_size: f.mora_size,
-            chain_rule: f.chain_rule.clone(),
+            chain_rule: f.chain_rule,
             chain_flag: f.chain_flag,
+        }
+    }
+}
+
+#[pyclass(name = "MecabMorph", module = "haqumei", skip_from_py_object)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct PyMecabMorph {
+    #[pyo3(get)]
+    pub surface: String,
+    #[pyo3(get)]
+    pub feature: String,
+    #[pyo3(get)]
+    pub left_id: u16,
+    #[pyo3(get)]
+    pub right_id: u16,
+    #[pyo3(get)]
+    pub pos_id: u16,
+    #[pyo3(get)]
+    pub word_cost: i16,
+    #[pyo3(get)]
+    pub is_unknown: bool,
+    #[pyo3(get)]
+    pub is_ignored: bool,
+}
+
+impl From<::haqumei::MecabMorph> for PyMecabMorph {
+    fn from(m: ::haqumei::MecabMorph) -> Self {
+        Self {
+            surface: m.surface,
+            feature: m.feature,
+            left_id: m.left_id,
+            right_id: m.right_id,
+            pos_id: m.pos_id,
+            word_cost: m.word_cost,
+            is_unknown: m.is_unknown,
+            is_ignored: m.is_ignored,
         }
     }
 }
@@ -196,6 +232,92 @@ impl PyOpenJTalk {
         })
     }
 
+    fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
+        let mut guard = self.inner.lock().unwrap();
+        let features = guard.run_frontend(text).map_err(to_py_err)?;
+        Ok(features.into_iter().map(PyNjdFeature::from).collect())
+    }
+
+    fn run_frontend_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyNjdFeature>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .run_frontend_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|features| features.into_iter().map(PyNjdFeature::from).collect())
+                .collect())
+        })
+    }
+
+    fn run_frontend_detailed(
+        &self,
+        text: &str,
+    ) -> PyResult<(Vec<PyNjdFeature>, Vec<PyMecabMorph>)> {
+        let (njd_features, mecab_morphs) = self
+            .inner
+            .lock()
+            .unwrap()
+            .run_frontend_detailed(text)
+            .map_err(to_py_err)?;
+
+        let py_njd = njd_features.into_iter().map(PyNjdFeature::from).collect();
+        let py_mecab = mecab_morphs.into_iter().map(PyMecabMorph::from).collect();
+
+        Ok((py_njd, py_mecab))
+    }
+
+    fn run_frontend_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<(Vec<PyNjdFeature>, Vec<PyMecabMorph>)>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .run_frontend_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|(features, morphs)| {
+                    (
+                        features.into_iter().map(PyNjdFeature::from).collect(),
+                        morphs.into_iter().map(PyMecabMorph::from).collect(),
+                    )
+                })
+                .collect())
+        })
+    }
+
+    fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .extract_fullcontext(text)
+            .map_err(to_py_err)
+    }
+
+    fn extract_fullcontext_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .extract_fullcontext_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p(&self, text: &str) -> PyResult<Vec<String>> {
         self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
     }
@@ -311,34 +433,6 @@ impl PyOpenJTalk {
                 .collect())
         })
     }
-
-    fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
-        let mut guard = self.inner.lock().unwrap();
-        let features = guard.run_frontend(text).map_err(to_py_err)?;
-        Ok(features.iter().map(PyNjdFeature::from).collect())
-    }
-
-    fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner
-            .lock()
-            .unwrap()
-            .extract_fullcontext(text)
-            .map_err(to_py_err)
-    }
-
-    fn extract_fullcontext_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<String>>> {
-        py.detach(|| {
-            self.inner
-                .lock()
-                .unwrap()
-                .extract_fullcontext_batch(&texts)
-                .map_err(to_py_err)
-        })
-    }
 }
 
 #[pyclass(name = "Haqumei", module = "haqumei")]
@@ -397,6 +491,98 @@ impl PyHaqumei {
         })
     }
 
+    fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .run_frontend(text)
+            .map_err(to_py_err)?
+            .into_iter()
+            .map(PyNjdFeature::from)
+            .collect())
+    }
+
+    fn run_frontend_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyNjdFeature>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .run_frontend_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|features| features.into_iter().map(PyNjdFeature::from).collect())
+                .collect())
+        })
+    }
+
+    fn run_frontend_detailed(
+        &self,
+        text: &str,
+    ) -> PyResult<(Vec<PyNjdFeature>, Vec<PyMecabMorph>)> {
+        let (njd_features, mecab_morphs) = self
+            .inner
+            .lock()
+            .unwrap()
+            .run_frontend_detailed(text)
+            .map_err(to_py_err)?;
+
+        let py_njd = njd_features.into_iter().map(PyNjdFeature::from).collect();
+        let py_mecab = mecab_morphs.into_iter().map(PyMecabMorph::from).collect();
+
+        Ok((py_njd, py_mecab))
+    }
+
+    fn run_frontend_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<(Vec<PyNjdFeature>, Vec<PyMecabMorph>)>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .run_frontend_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|(features, morphs)| {
+                    (
+                        features.into_iter().map(PyNjdFeature::from).collect(),
+                        morphs.into_iter().map(PyMecabMorph::from).collect(),
+                    )
+                })
+                .collect())
+        })
+    }
+
+    fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .extract_fullcontext(text)
+            .map_err(to_py_err)
+    }
+
+    fn extract_fullcontext_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .extract_fullcontext_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
     fn g2p(&self, text: &str) -> PyResult<Vec<String>> {
         self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
     }
@@ -444,10 +630,18 @@ impl PyHaqumei {
     }
 
     fn g2p_kana_per_word(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner.lock().unwrap().g2p_kana_per_word(text).map_err(to_py_err)
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p_kana_per_word(text)
+            .map_err(to_py_err)
     }
 
-    fn g2p_kana_per_word_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_kana_per_word_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<String>>> {
         py.detach(|| {
             self.inner
                 .lock()
@@ -538,40 +732,6 @@ impl PyHaqumei {
                 .collect())
         })
     }
-
-    fn run_frontend(&self, text: &str) -> PyResult<Vec<PyNjdFeature>> {
-        Ok(self
-            .inner
-            .lock()
-            .unwrap()
-            .run_frontend(text)
-            .map_err(to_py_err)?
-            .iter()
-            .map(PyNjdFeature::from)
-            .collect())
-    }
-
-    fn extract_fullcontext(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner
-            .lock()
-            .unwrap()
-            .extract_fullcontext(text)
-            .map_err(to_py_err)
-    }
-
-    fn extract_fullcontext_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<String>>> {
-        py.detach(|| {
-            self.inner
-                .lock()
-                .unwrap()
-                .extract_fullcontext_batch(&texts)
-                .map_err(to_py_err)
-        })
-    }
 }
 
 #[pyfunction]
@@ -589,6 +749,7 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHaqumei>()?;
     m.add_class::<UnicodeNormalization>()?;
     m.add_class::<PyOpenJTalk>()?;
+    m.add_class::<PyMecabMorph>()?;
     m.add_class::<PyNjdFeature>()?;
     m.add_class::<PyWordPhonemeMap>()?;
     m.add_class::<PyWordPhonemeDetail>()?;

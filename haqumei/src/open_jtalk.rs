@@ -111,6 +111,18 @@ pub struct MecabMorph {
     /// MeCab が出力した特徴量文字列。
     pub feature: String,
 
+    /// left-id.def で定義された左文脈 ID。
+    pub left_id: u16,
+
+    /// right-id.def で定義された右文脈 ID。
+    pub right_id: u16,
+
+    /// pos-id.def で定義された品詞 ID。
+    pub pos_id: u16,
+
+    /// 辞書に定義された単語コスト。
+    pub word_cost: i16,
+
     /// MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
     pub is_unknown: bool,
 
@@ -237,12 +249,29 @@ impl OpenJTalk {
         })
     }
 
+    /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
         let mecab_features = self.run_mecab(text)?;
         self.run_njd_from_mecab(&mecab_features)
     }
 
+    /// OpenJTalk のテキスト処理フロントエンドを実行する。
+    /// [NjdFeature] だけでなく、Mecab の解析結果の [Vec<MecabMorph>]
+    /// を取得することができる。
+    pub fn run_frontend_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        self.ensure_dictionary_is_latest()?;
+        let mecab_morphs = self.run_mecab_detailed(text)?;
+        Ok((
+            self.run_njd_from_mecab(mecab_morphs.iter().map(|morph| &morph.feature))?,
+            mecab_morphs,
+        ))
+    }
+
+    /// テキストからフルコンテキストラベルを抽出する。
     pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         let njd_features = self.run_frontend(text)?;
         self.make_label(&njd_features)
@@ -742,9 +771,11 @@ impl OpenJTalk {
                     // 踊り字展開: 踊り字 morph + 結合先 morph を消費
                     morph_idx += 1;
                     if let Some(ahead) = morphs.get(morph_idx)
-                        && !ahead.is_ignored && current_map_word.ends_with(&ahead.surface) {
-                            morph_idx += 1;
-                        }
+                        && !ahead.is_ignored
+                        && current_map_word.ends_with(&ahead.surface)
+                    {
+                        morph_idx += 1;
+                    }
                 } else {
                     // 残りの有効な morph 数と、残りの base_mapping 数を計算
                     let non_ignored_remaining =
@@ -845,35 +876,52 @@ impl OpenJTalk {
             ));
         }
 
-        let morphs = unsafe {
-            let size = ffi::Mecab_get_size(self.mecab.inner.as_ptr()) as usize;
-            let features_ptr = ffi::Mecab_get_feature(self.mecab.inner.as_ptr());
-
-            let mut result_vec = Vec::with_capacity(size);
-            for i in 0..size {
-                let c_feature_ptr = *features_ptr.add(i);
-                let c_feature = CStr::from_ptr(c_feature_ptr);
-                result_vec.push(c_feature.to_string_lossy().into_owned());
-            }
-            result_vec
-        };
+        let mut result_vec = Vec::new();
         unsafe {
-            ffi::Mecab_refresh(self.mecab.inner.as_ptr());
+            let mecab_ptr = self.mecab.inner.as_ptr();
+            let lattice = (*mecab_ptr).lattice as *mut ffi::mecab_lattice_t;
+            let mut node = ffi::mecab_lattice_get_bos_node(lattice);
+
+            while !node.is_null() {
+                let stat = (*node).stat;
+                if stat != 2 && stat != 3 {
+                    // BOS/EOS 以外
+                    let feat_ptr = (*node).feature;
+                    if !feat_ptr.is_null() {
+                        let c_feature = CStr::from_ptr(feat_ptr);
+                        let feature_str = c_feature.to_string_lossy();
+
+                        if !feature_str.contains("記号,空白") {
+                            let surface_ptr = (*node).surface;
+                            let length = (*node).length as usize;
+                            let surface = if !surface_ptr.is_null() && length > 0 {
+                                let bytes =
+                                    std::slice::from_raw_parts(surface_ptr as *const u8, length);
+                                String::from_utf8_lossy(bytes)
+                            } else {
+                                std::borrow::Cow::Borrowed("")
+                            };
+
+                            result_vec.push(format!("{},{}", surface, feature_str));
+                        }
+                    }
+                }
+                node = (*node).next;
+            }
+            ffi::Mecab_refresh(mecab_ptr);
         }
 
-        let filtered_morphs: Vec<String> = morphs
-            .into_iter()
-            .filter(|m| !m.contains("記号,空白"))
-            .collect();
-
-        Ok(filtered_morphs)
+        Ok(result_vec)
     }
 
     /// MeCab解析を実行し、詳細な形態素情報を返します。
     ///
     /// 空白や記号など、通常 OpenJTalk で無視されるトークンも含め、
     /// 全ての解析結果を返します。
-    pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
+    pub(crate) fn run_mecab_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         let c_text = CString::new(text)?;
@@ -894,10 +942,16 @@ impl OpenJTalk {
                     "Text is too long".to_string(),
                 ));
             }
-            _ => {
+            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_INVALID_ARGUMENT => {
                 return Err(HaqumeiError::Text2MecabError(
-                    "Error in text2mecab".to_string(),
+                    "Invalid argument for text2mecab".to_string(),
                 ));
+            }
+            _ => {
+                return Err(HaqumeiError::Text2MecabError(format!(
+                    "Unknown error from text2mecab: {}",
+                    result
+                )));
             }
         }
 
@@ -924,13 +978,14 @@ impl OpenJTalk {
                 let stat = (*node).stat; // 0=NOR, 1=UNK, 2=BOS, 3=EOS
 
                 if stat != 2 && stat != 3 {
-                    let surf_ptr = (*node).surface;
+                    let surface_ptr = (*node).surface;
                     let length = (*node).length as usize;
-                    let surface = if !surf_ptr.is_null() && length > 0 {
-                        let bytes = std::slice::from_raw_parts(surf_ptr as *const u8, length);
-                        String::from_utf8_lossy(bytes).into_owned()
+
+                    let surface = if !surface_ptr.is_null() && length > 0 {
+                        let bytes = std::slice::from_raw_parts(surface_ptr as *const u8, length);
+                        String::from_utf8_lossy(bytes)
                     } else {
-                        String::new()
+                        std::borrow::Cow::Borrowed("")
                     };
 
                     let feat_ptr = (*node).feature;
@@ -960,8 +1015,12 @@ impl OpenJTalk {
                     let is_ignored = raw_feature.contains("記号,空白");
 
                     results.push(MecabMorph {
-                        surface,
+                        surface: surface.to_string(),
                         feature: compatible_feature,
+                        left_id: (*node).lcAttr,
+                        right_id: (*node).rcAttr,
+                        pos_id: (*node).posid,
+                        word_cost: (*node).wcost,
                         is_unknown,
                         is_ignored,
                     });
@@ -979,18 +1038,22 @@ impl OpenJTalk {
         Ok(morphs)
     }
 
-    pub fn run_njd_from_mecab(
+    pub(crate) fn run_njd_from_mecab<'a, I>(
         &mut self,
-        mecab_features: &[String],
-    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        if mecab_features.is_empty() {
+        mecab_features: I,
+    ) -> Result<Vec<NjdFeature>, HaqumeiError>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str> + 'a,
+    {
+        let c_strings: Vec<CString> = mecab_features
+            .into_iter()
+            .map(|s| CString::new(s.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if c_strings.is_empty() {
             return Ok(Vec::with_capacity(0));
         }
-
-        let c_strings: Vec<CString> = mecab_features
-            .iter()
-            .map(|s| CString::new(s.as_str()))
-            .collect::<Result<Vec<_>, _>>()?;
 
         let mut c_string_pointers: Vec<*const c_char> =
             c_strings.iter().map(|cs| cs.as_ptr()).collect();
@@ -1248,6 +1311,16 @@ impl OpenJTalk {
 
         Ok(())
     }
+
+    impl_batch_method_openjtalk!(
+        /// 複数のテキストに対して `run_frontend` を実行します。
+        run_frontend_batch => run_frontend -> Vec<NjdFeature>
+    );
+
+    impl_batch_method_openjtalk!(
+        /// 複数のテキストに対して `run_frontend_detailed` を実行します。
+        run_frontend_detailed_batch => run_frontend_detailed -> (Vec<NjdFeature>, Vec<MecabMorph>)
+    );
 
     impl_batch_method_openjtalk!(
         /// 複数のテキストに対して `g2p` を実行します。

@@ -422,13 +422,16 @@ pub(crate) fn modify_acc_after_chaining(njd_features: &mut [NjdFeature]) {
 
 // 文字列を静音化し、末尾の「々」に対応する繰り返し単位を検出する
 fn detect_odori_unit(read: &str) -> Option<usize> {
-    let seion_read: String = read.chars().map(|ch| {
-        if is_dakuon(ch) {
-            TO_SEION_CHAR.get(&ch).copied().unwrap_or(ch)
-        } else {
-            ch
-        }
-    }).collect();
+    let seion_read: String = read
+        .chars()
+        .map(|ch| {
+            if is_dakuon(ch) {
+                TO_SEION_CHAR.get(&ch).copied().unwrap_or(ch)
+            } else {
+                ch
+            }
+        })
+        .collect();
     let moras = split_kana_mora(&seion_read);
     let n = moras.len();
     if n < 2 {
@@ -620,8 +623,8 @@ pub(crate) fn process_odori_features(
                     feat.pron = base_pron.clone();
                     feat.mora_size = base_mora_size;
                 }
-                    feat.acc = base_acc; // 直前の漢字トークンの acc を使う
-                    feat.chain_flag = 1;
+                feat.acc = base_acc; // 直前の漢字トークンの acc を使う
+                feat.chain_flag = 1;
 
                 if feat.pos == "記号" {
                     set_to_noun(feat);
