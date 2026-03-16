@@ -4,7 +4,12 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{errors::HaqumeiError, features::NjdFeature, ffi};
+use crate::{
+    data::{Dan, dan},
+    errors::HaqumeiError,
+    features::NjdFeature,
+    ffi,
+};
 
 #[derive(Debug)]
 pub(crate) struct Njd {
@@ -82,7 +87,7 @@ pub(crate) fn njd_to_features(njd: &Njd) -> Vec<NjdFeature> {
     features
 }
 
-/// pyopenjtalk-plus の独自結合ルールを適用する
+/// pyopenjtalk-plus の独自結合ルールなどを適用する
 pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
     if features.len() < 2 {
         return;
@@ -93,6 +98,18 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
 
         let njd = &mut head[i];
         let next_njd = &mut tail[0];
+
+        // njd_set_pronunciation は、動詞または助動詞の後に助動詞「う」が続く場合、
+        // その「う」の発音を長音（ー）に置き換えてしまう。
+        // 前方の単語が ア段, イ段, エ段 で終わるとき、長音の置き換えを取り消す。
+        if next_njd.pron == "ー"
+            && next_njd.read == "ウ"
+            && let Some(last) = njd.pron.chars().last()
+            && let Some(dan) = dan(last)
+            && matches!(dan, Dan::ア段 | Dan::イ段 | Dan::エ段)
+        {
+            next_njd.pron = "ウ".to_string();
+        }
 
         // サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
         let is_sahen_prefix = matches!(njd.pos_group1.as_str(), "サ変接続" | "格助詞" | "接続助詞")

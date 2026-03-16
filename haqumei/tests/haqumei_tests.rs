@@ -535,4 +535,39 @@ mod tests {
 
         assert_eq!(mapping, expected);
     }
+
+    #[test]
+    fn test_u_long_vowel_revert() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let cases = vec![
+            // イ段 + う (シナジー, イミジー化を防ぐ)
+            ("しなじう", vec!["sh", "i", "n", "a", "j", "i", "u"]),
+            ("いみじう", vec!["i", "m", "i", "j", "i", "u"]),
+
+            // オ段 + う (正当な長音化: これは「ー」のままでなければならない)
+            ("行こう", vec!["i", "k", "o", "o"]), // i k o:
+            ("言おう", vec!["i", "o", "o"]),     // i o:
+
+            // ア段 + う (古語的・方言的な「～わう」など: 「ワー」化を防ぐ)
+            ("買わう", vec!["k", "a", "w", "a", "u"]),
+
+            // エ段 + う (古語的な助動詞などの連結: 「エー」化を防ぐ)
+            ("捨てう", vec!["s", "U", "t", "e", "u"]),
+        ];
+
+        for (text, expected_phonemes) in cases {
+            let result = haqumei.g2p_mapping_detailed(text).unwrap();
+
+            let actual_phonemes: Vec<&str> = result.iter()
+                .flat_map(|d| d.phonemes.iter().map(|s| s.as_str()))
+                .collect();
+
+            assert_eq!(
+                actual_phonemes,
+                expected_phonemes,
+                "Failed at text: {}", text
+            );
+        }
+    }
 }

@@ -36,6 +36,7 @@ pub fn hira2kata(s: &str) -> String {
         .collect()
 }
 
+#[rustfmt::skip]
 pub fn is_dakuon(c: char) -> bool {
     matches!(
         c,
