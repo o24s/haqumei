@@ -1,5 +1,7 @@
 pub mod dictionary;
 mod jp_common;
+mod mapping;
+mod mapping_utills;
 mod mecab;
 mod model;
 mod njd;
@@ -14,16 +16,16 @@ use crate::open_jtalk::{
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
-use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap};
+use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use arc_swap::ArcSwap;
 use mecab::Mecab;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char};
 use std::marker::PhantomData;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -126,8 +128,10 @@ pub struct MecabMorph {
     /// MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
     pub is_unknown: bool,
 
-    /// `OpenJTalk` のパイプラインで無視される対象かどうか。
-    /// (e.g, "記号,空白")
+    /// `pyopenjtalk` のパイプラインで無視される対象かどうか。 ("記号,空白")
+    ///
+    /// ここでは、`pyopenjtalk` は Mecab の出力に対して、どのように必要のないトークンを除去していたか、
+    /// ということをフラグによって明確にするものであって、JPCommon の音素割り当てと実際には関係がありません。
     pub is_ignored: bool,
 }
 
@@ -201,23 +205,51 @@ impl OpenJTalk {
         })
     }
 
-    pub fn from_path<P: AsRef<Path>>(
+    pub fn from_path<P: AsRef<Path>>(dict_dir: P) -> Result<Self, HaqumeiError> {
+        Self::from_path_inner(dict_dir, None::<P>)
+    }
+
+    pub fn from_path_with_userdict<P: AsRef<Path>, Q: AsRef<Path>>(
         dict_dir: P,
-        user_dict: Option<P>,
+        user_dict: Q,
+    ) -> Result<Self, HaqumeiError> {
+        Self::from_path_inner(dict_dir, Some(user_dict))
+    }
+
+    fn from_path_inner<P: AsRef<Path>, Q: AsRef<Path>>(
+        dict_dir: P,
+        user_dict: Option<Q>,
     ) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::new()?;
         let njd = Njd::new()?;
         let jp_common = JpCommon::new()?;
 
+        let dict_dir = dict_dir.as_ref();
+        let user_dict = user_dict.as_ref();
+
+        if !dict_dir.exists() {
+            return Err(HaqumeiError::DictionaryNotFound {
+                path: dict_dir.to_path_buf(),
+            });
+        }
+
+        if let Some(user_dict) = user_dict
+            && !user_dict.as_ref().exists()
+        {
+            return Err(HaqumeiError::DictionaryNotFound {
+                path: dict_dir.to_path_buf(),
+            });
+        }
+
         let path_to_cstring = |p: &Path| -> Result<CString, HaqumeiError> {
-            let path_str = p.to_str().ok_or_else(|| {
-                HaqumeiError::InvalidDictionaryPath(p.to_string_lossy().into_owned())
-            })?;
-            CString::new(path_str)
-                .map_err(|_| HaqumeiError::InvalidDictionaryPath(path_str.to_string()))
+            let p = p.canonicalize()?;
+            let path_str = p.as_os_str();
+            CString::new(path_str.as_bytes()).map_err(|_| {
+                HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
+            })
         };
 
-        let c_dict_dir = path_to_cstring(dict_dir.as_ref())?;
+        let c_dict_dir = path_to_cstring(dict_dir)?;
 
         let c_user_dict: Option<CString> = user_dict
             .as_ref()
@@ -252,18 +284,28 @@ impl OpenJTalk {
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mecab_features = self.run_mecab(text)?;
         self.run_njd_from_mecab(&mecab_features)
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
-    /// [NjdFeature] だけでなく、Mecab の解析結果の [Vec<MecabMorph>]
+    /// [NjdFeature] だけでなく、Mecab の解析結果の [MecabMorph] のリスト
     /// を取得することができる。
     pub fn run_frontend_detailed(
         &mut self,
         text: &str,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+
         let mecab_morphs = self.run_mecab_detailed(text)?;
         Ok((
             self.run_njd_from_mecab(mecab_morphs.iter().map(|morph| &morph.feature))?,
@@ -291,6 +333,11 @@ impl OpenJTalk {
     /// ```
     pub fn g2p(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mecab_features = self.run_mecab(text.as_ref())?;
         let njd_features = self.run_njd_from_mecab(&mecab_features)?;
 
@@ -318,7 +365,7 @@ impl OpenJTalk {
     /// println!("{:?}", open_jtalk.g2p_detailed("こんにちは 𰻞𰻞麺"));
     /// ```
     pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let detailed_mapping = self.g2p_mapping_detailed(text)?;
+        let detailed_mapping = self.g2p_mapping(text)?;
 
         let mut result_phonemes = Vec::new();
         for map in detailed_mapping {
@@ -333,6 +380,11 @@ impl OpenJTalk {
     /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
     pub fn g2p_kana(&mut self, text: &str) -> Result<String, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok(String::new());
+        }
+
         let mecab_features = self.run_mecab(text.as_ref())?;
         let njd_features = self.run_njd_from_mecab(&mecab_features)?;
 
@@ -357,6 +409,10 @@ impl OpenJTalk {
 
     /// 入力テキストを単語（形態素）ごとのカタカナリストに変換します。
     pub fn g2p_kana_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let features = self.run_frontend(text.as_ref())?;
 
         let kana_list: Vec<String> = features
@@ -382,11 +438,9 @@ impl OpenJTalk {
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
-        let mapping = self.g2p_mapping(text)?;
+        let mapping = self.g2p_pairs(text)?;
 
-        let result = mapping.into_iter().map(|m| m.phonemes).collect();
-
-        Ok(result)
+        Ok(mapping.into_iter().map(|m| m.phonemes).collect())
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを返します。
@@ -402,34 +456,39 @@ impl OpenJTalk {
     /// use haqumei::OpenJTalk;
     ///
     /// let mut open_jtalk = OpenJTalk::new().unwrap();
-    /// let mapping = open_jtalk.g2p_mapping("𰻞𰻞麺＆お冷を頼んだ").unwrap();
+    /// let pairs = open_jtalk.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ").unwrap();
     ///
-    /// // 出力:
-    /// // [WordPhonemeMap {
+    /// // 結果:
+    /// // [WordPhonemePair {
     /// //     word: "𰻞𰻞",
     /// //     phonemes: ["pau"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "麺",
     /// //     phonemes: ["m", "e", "N"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "＆",
     /// //     phonemes: ["a", "N", "d", "o"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "お冷",
     /// //     phonemes: ["o", "h", "i", "y", "a"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "を",
     /// //     phonemes: ["o"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "頼ん",
     /// //     phonemes: ["t", "a", "n", "o", "N"]
-    /// // }, WordPhonemeMap {
+    /// // }, WordPhonemePair {
     /// //     word: "だ",
     /// //     phonemes: ["d", "a"]
     /// // }]
     /// // ```
-    pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
+    pub fn g2p_pairs(&mut self, text: &str) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mecab_features = self.run_mecab(text.as_ref())?;
         let njd_features = self.run_njd_from_mecab(&mecab_features)?;
 
@@ -437,7 +496,7 @@ impl OpenJTalk {
             return Ok(Vec::new());
         }
 
-        self.g2p_mapping_inner(&njd_features)
+        self.g2p_pairs_inner(&njd_features)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを返します。
@@ -454,70 +513,52 @@ impl OpenJTalk {
     /// use haqumei::OpenJTalk;
     ///
     /// let mut open_jtalk = OpenJTalk::new().unwrap();
-    /// let mapping = open_jtalk.g2p_mapping_detailed("𰻞𰻞麺 お冷を頼んだ").unwrap();
+    /// let mapping = open_jtalk.g2p_mapping("𰻞𰻞麺 お冷を頼んだ").unwrap();
     ///
-    /// // 出力:
-    /// // [WordPhonemeDetail {
+    /// // 結果:
+    /// // [WordPhonemeMap {
     /// //     word: "𰻞𰻞",
-    /// //     phonemes: [
-    /// //         "unk",
-    /// //     ],
+    /// //     phonemes: ["unk"],
     /// //     is_unknown: true,
     /// //     is_ignored: false,
     /// // },
-    /// // WordPhonemeDetail {
+    /// // WordPhonemeMap {
     /// //     word: "麺",
-    /// //     phonemes: [
-    /// //         "m",
-    /// //         "e",
-    /// //         "N",
-    /// //     ],
+    /// //     phonemes: ["m", "e", "N"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
     /// // },
-    /// // WordPhonemeDetail {
+    /// // WordPhonemeMap {
     /// //     word: "\u{3000}",
-    /// //     phonemes: [
-    /// //         "sp",
-    /// //     ],
+    /// //     phonemes: ["sp"],
     /// //     is_unknown: false,
     /// //     is_ignored: true,
     /// // },
-    /// // WordPhonemeDetail {
+    /// // WordPhonemeMap {
     /// //     word: "を",
-    /// //     phonemes: [
-    /// //         "o",
-    /// //     ],
+    /// //     phonemes: ["o"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
     /// // },
-    /// // WordPhonemeDetail {
+    /// // WordPhonemeMap {
     /// //     word: "\u{3000}",
-    /// //     phonemes: [
-    /// //         "sp",
-    /// //     ],
+    /// //     phonemes: ["sp"],
     /// //     is_unknown: false,
     /// //     is_ignored: true,
     /// // },
-    /// // WordPhonemeDetail {
+    /// // WordPhonemeMap {
     /// //     word: "食べる",
-    /// //     phonemes: [
-    /// //         "t",
-    /// //         "a",
-    /// //         "b",
-    /// //         "e",
-    /// //         "r",
-    /// //         "u",
-    /// //     ],
+    /// //     phonemes: ["t", "a", "b", "e", "r", "u"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
     /// // }]
     /// // ```
-    pub fn g2p_mapping_detailed(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+    pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
+
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
 
         let morphs = self.run_mecab_detailed(text)?;
 
@@ -530,7 +571,7 @@ impl OpenJTalk {
         if valid_features_str.is_empty() {
             return Ok(morphs
                 .into_iter()
-                .map(|m| WordPhonemeDetail {
+                .map(|m| WordPhonemeMap {
                     word: m.surface,
                     phonemes: vec!["sp".to_string()],
                     is_unknown: m.is_unknown,
@@ -539,295 +580,135 @@ impl OpenJTalk {
                 .collect());
         }
 
+        // 本来の Open JTalk パイプラインと同じ状態にして渡す
         let njd_features = self.run_njd_from_mecab(&valid_features_str)?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
         }
 
+        let pairs = self.g2p_pairs_inner(&njd_features)?;
+
+        self.make_phoneme_mapping(morphs, pairs)
+    }
+
+    /// 入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
+    ///
+    /// - 既知語: 通常の音素列 (読点などは `pau`)
+    /// - 未知語: `unk`
+    /// - 空白等: `sp` (Space)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use haqumei::OpenJTalk;
+    ///
+    /// let mut open_jtalk = OpenJTalk::new().unwrap();
+    /// let mapping = open_jtalk.g2p_mapping_detailed("薄明").unwrap();
+    ///
+    /// // 結果:
+    /// // [ WordPhonemeDetail {
+    /// //   word: "薄明",
+    /// //   phonemes: [
+    /// //       "h",
+    /// //       "a",
+    /// //       "k",
+    /// //       "u",
+    /// //       "m",
+    /// //       "e",
+    /// //       "e",
+    /// //   ],
+    /// //   features: [
+    /// //       "薄明",
+    /// //       "名詞",
+    /// //       "一般",
+    /// //       "*",
+    /// //       "*",
+    /// //       "*",
+    /// //       "*",
+    /// //       "薄明",
+    /// //       "ハクメイ",
+    /// //       "ハクメー",
+    /// //       "0/4",
+    /// //       "C2",
+    /// //   ],
+    /// //   pos: "名詞",
+    /// //   pos_group1: "一般",
+    /// //   pos_group2: "*",
+    /// //   pos_group3: "*",
+    /// //   ctype: "*",
+    /// //   cform: "*",
+    /// //   orig: "薄明",
+    /// //   read: "ハクメイ",
+    /// //   pron: "ハクメー",
+    /// //   accent_nucleus: 0,
+    /// //   mora_count: 4,
+    /// //   chain_rule: "C2",
+    /// //   chain_flag: -1,
+    /// //   is_unknown: false,
+    /// //   is_ignored: false,
+    /// // }
+    /// // ```
+    pub fn g2p_mapping_detailed(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (njd_features, morphs) = self.run_frontend_detailed(text)?;
+
         let mapping = self.g2p_mapping_inner(&njd_features)?;
 
-        self.make_phoneme_mapping(morphs, mapping)
+        self.make_phoneme_mapping_detailed(morphs, mapping)
+    }
+
+    pub(crate) fn g2p_pairs_inner(
+        &mut self,
+        njd_features: &[NjdFeature],
+    ) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
+        let mut mapping: Vec<WordPhonemePair> = njd_features
+            .iter()
+            .map(|f| WordPhonemePair {
+                word: f.string.clone(),
+                phonemes: Vec::new(),
+            })
+            .collect();
+
+        self.assign_and_merge_phonemes(njd_features, &mut mapping)?;
+        Ok(mapping)
     }
 
     pub(crate) fn g2p_mapping_inner(
         &mut self,
         njd_features: &[NjdFeature],
-    ) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
-        unsafe {
-            let ptr_to_idx = self.prepare_jpcommon_label_internal(njd_features)?;
-            let jp = self.jp_common.inner.as_mut();
-
-            let mut mapping: Vec<WordPhonemeMap> = njd_features
-                .iter()
-                .map(|f| WordPhonemeMap {
-                    word: f.string.clone(),
-                    phonemes: Vec::new(),
-                })
-                .collect();
-
-            let mut pause_count = 0;
-            for (f_idx, f) in njd_features.iter().enumerate() {
-                let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
-                if is_pause_pron {
-                    mapping[f_idx].phonemes.push("pau".to_string());
-                    pause_count += 1;
-                }
-            }
-
-            let needs_merge = njd_features.len() > ptr_to_idx.len() + pause_count;
-
-            let mut p = (*jp.label).phoneme_head;
-            while !p.is_null() {
-                let s_ptr = (*p).phoneme;
-                if !s_ptr.is_null() {
-                    let s = CStr::from_ptr(s_ptr).to_string_lossy().into_owned();
-
-                    if s == "pau" {
-                        p = (*p).next;
-                        continue;
-                    }
-
-                    let mut current_word_ptr = 0usize;
-                    let mora = (*p).up;
-                    if !mora.is_null() {
-                        let word = (*mora).up;
-                        if !word.is_null() {
-                            current_word_ptr = word as usize;
-                        }
-                    }
-
-                    if current_word_ptr != 0
-                        && let Some(&idx) = ptr_to_idx.get(&current_word_ptr)
-                        && let Some(target) = mapping.get_mut(idx)
-                    {
-                        target.phonemes.push(s);
-                    }
-                }
-                p = (*p).next;
-            }
-
-            ffi::JPCommon_refresh(jp);
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-
-            // 長音によって、先行する Word のモーラとして吸収されるケースがあるため、
-            // 前方の Word に結合する。
-            //
-            // 例:
-            // "つまみ出されようとした"
-            // - つまみ出さ: [ts u m a m i d a s a]
-            // - れよ: [r e y o o]
-            // - う: []
-            // - と: [t o]
-            // - し: [sh I]
-            // - た: [t a]
-            //
-            // 音素が空になった "う" を先行する "れよ" に結合する。
-            if needs_merge {
-                let mut write_idx = 0;
-                for read_idx in 0..mapping.len() {
-                    // 音素が空の要素を見つけた場合
-                    if read_idx > 0 && mapping[read_idx].phonemes.is_empty() {
-                        let prev_is_pause = mapping[write_idx - 1].phonemes.len() == 1
-                            && mapping[write_idx - 1].phonemes[0] == "pau";
-
-                        if !prev_is_pause {
-                            let text_to_merge = std::mem::take(&mut mapping[read_idx].word);
-                            mapping[write_idx - 1].word.push_str(&text_to_merge);
-                            continue;
-                        }
-                    }
-
-                    if write_idx != read_idx {
-                        mapping.swap(write_idx, read_idx);
-                    }
-                    write_idx += 1;
-                }
-                mapping.truncate(write_idx);
-            }
-
-            Ok(mapping)
-        }
-    }
-
-    pub(crate) fn make_phoneme_mapping(
-        &mut self,
-        morphs: Vec<MecabMorph>,
-        mapping: Vec<WordPhonemeMap>,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
-        let mut result = Vec::with_capacity(morphs.len());
-        let mut morph_idx = 0;
-        let mapping_len = mapping.len();
+        let mut mapping: Vec<WordPhonemeDetail> = njd_features
+            .iter()
+            .map(|f| WordPhonemeDetail {
+                word: f.string.clone(),
+                phonemes: Vec::new(),
+                features: Vec::new(),
+                pos: f.pos.clone(),
+                pos_group1: f.pos_group1.clone(),
+                pos_group2: f.pos_group2.clone(),
+                pos_group3: f.pos_group3.clone(),
+                ctype: f.ctype.clone(),
+                cform: f.cform.clone(),
+                orig: f.orig.clone(),
+                read: f.read.clone(),
+                pron: f.pron.clone(),
+                accent_nucleus: f.acc,
+                mora_count: f.mora_size,
+                chain_rule: f.chain_rule.clone(),
+                chain_flag: f.chain_flag,
+                is_unknown: false,
+                is_ignored: false,
+            })
+            .collect();
 
-        for (base_idx, map) in mapping.into_iter().enumerate() {
-            // is_ignored な Morph を先に進めておく
-            while let Some(m) = morphs.get(morph_idx) {
-                if m.is_ignored {
-                    result.push(WordPhonemeDetail {
-                        word: m.surface.clone(),
-                        phonemes: vec!["sp".to_string()],
-                        is_unknown: m.is_unknown,
-                        is_ignored: true,
-                    });
-                    morph_idx += 1;
-                } else {
-                    break;
-                }
-            }
-
-            // morphs が尽きた場合: 後処理で feature 数が変動しうるため出力を継続
-            if morph_idx >= morphs.len() {
-                let is_ignored = map.phonemes.is_empty();
-                result.push(WordPhonemeDetail {
-                    word: map.word,
-                    phonemes: map.phonemes,
-                    is_unknown: false,
-                    is_ignored,
-                });
-                continue;
-            }
-
-            let current_map_word = &map.word;
-            let morph = &morphs[morph_idx];
-
-            if current_map_word == &morph.surface {
-                // 完全一致: morph と NJD feature の surface が一致
-                let mut phonemes = map.phonemes.clone();
-
-                if morph.is_unknown {
-                    // 先頭の長音のような Open JTalk が破棄するもの、
-                    // または pau に置き換えられた未知語は unk にしておく
-                    if phonemes.is_empty() || phonemes == ["pau"] {
-                        phonemes = vec!["unk".to_string()];
-                    }
-                }
-
-                result.push(WordPhonemeDetail {
-                    word: map.word,
-                    phonemes,
-                    is_unknown: morph.is_unknown,
-                    is_ignored: map.phonemes.is_empty(),
-                });
-                morph_idx += 1;
-            } else if current_map_word.starts_with(&morph.surface) {
-                // 先頭一致: NJD が複数の morph を結合したケース
-                let mut is_unknown_word = false;
-                let mut matched_len = 0;
-
-                while let Some(inner_morph) = morphs.get(morph_idx) {
-                    if inner_morph.is_ignored {
-                        result.push(WordPhonemeDetail {
-                            word: inner_morph.surface.clone(),
-                            phonemes: vec!["sp".to_string()],
-                            is_unknown: inner_morph.is_unknown,
-                            is_ignored: true,
-                        });
-                        morph_idx += 1;
-                        continue;
-                    }
-
-                    let remaining = &current_map_word[matched_len..];
-
-                    if remaining.starts_with(&inner_morph.surface) {
-                        is_unknown_word |= inner_morph.is_unknown;
-                        matched_len += inner_morph.surface.len();
-                        morph_idx += 1;
-
-                        if matched_len == current_map_word.len() {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                let mut phonemes = map.phonemes.clone();
-
-                if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
-                    phonemes = vec!["unk".to_string()];
-                }
-
-                result.push(WordPhonemeDetail {
-                    word: map.word,
-                    phonemes,
-                    is_unknown: is_unknown_word,
-                    is_ignored: map.phonemes.is_empty(),
-                });
-            } else {
-                // 不一致: 数字正規化・踊り字展開等で surface が変化したケース
-                result.push(WordPhonemeDetail {
-                    word: map.word.clone(),
-                    phonemes: map.phonemes.clone(),
-                    is_unknown: false,
-                    is_ignored: map.phonemes.is_empty(),
-                });
-
-                let current_morph_surface = &morphs[morph_idx].surface;
-                let has_odori = current_morph_surface
-                    .chars()
-                    .any(|c| matches!(c, '々' | 'ゝ' | 'ゞ' | 'ヽ' | 'ヾ' | '〻'));
-
-                if has_odori {
-                    // 踊り字展開: 踊り字 morph + 結合先 morph を消費
-                    morph_idx += 1;
-                    if let Some(ahead) = morphs.get(morph_idx)
-                        && !ahead.is_ignored
-                        && current_map_word.ends_with(&ahead.surface)
-                    {
-                        morph_idx += 1;
-                    }
-                } else {
-                    // 残りの有効な morph 数と、残りの base_mapping 数を計算
-                    let non_ignored_remaining =
-                        morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
-                    let bases_after_current = mapping_len - base_idx - 1;
-
-                    if non_ignored_remaining <= bases_after_current {
-                        // NJD 挿入ノード: morph を消費しない (e.g, "10" -> "十" などで桁が挿入された)
-                    } else {
-                        // surface 変化のみ: morph を 1 つ消費
-                        morph_idx += 1;
-
-                        // "10" -> "十" のように、複数の数字 morph が1ノードに縮約された場合の残りの "0" などを消費
-                        while let Some(ahead) = morphs.get(morph_idx) {
-                            if ahead.is_ignored {
-                                break;
-                            }
-                            if !matches!(
-                                ahead.surface.as_str(),
-                                "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９"
-                            ) {
-                                break;
-                            }
-
-                            let non_ign =
-                                morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
-
-                            if non_ign > bases_after_current {
-                                morph_idx += 1;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // mapping 終了後、morphs の末尾に無視トークン(空白等)が残っていれば回収する
-        while let Some(m) = morphs.get(morph_idx) {
-            if m.is_ignored {
-                result.push(WordPhonemeDetail {
-                    word: m.surface.clone(),
-                    phonemes: vec!["sp".to_string()],
-                    is_unknown: m.is_unknown,
-                    is_ignored: true,
-                });
-            }
-            morph_idx += 1;
-        }
-
-        Ok(result)
+        self.assign_and_merge_phonemes(njd_features, &mut mapping)?;
+        Ok(mapping)
     }
 
     const BUFFER_SIZE: usize = 16384;
@@ -918,10 +799,7 @@ impl OpenJTalk {
     ///
     /// 空白や記号など、通常 OpenJTalk で無視されるトークンも含め、
     /// 全ての解析結果を返します。
-    pub(crate) fn run_mecab_detailed(
-        &mut self,
-        text: &str,
-    ) -> Result<Vec<MecabMorph>, HaqumeiError> {
+    pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         let c_text = CString::new(text)?;
@@ -1052,7 +930,7 @@ impl OpenJTalk {
             .collect::<Result<Vec<_>, _>>()?;
 
         if c_strings.is_empty() {
-            return Ok(Vec::with_capacity(0));
+            return Ok(Vec::new());
         }
 
         let mut c_string_pointers: Vec<*const c_char> =
@@ -1088,10 +966,7 @@ impl OpenJTalk {
         Ok(final_features)
     }
 
-    pub(crate) fn make_label(
-        &mut self,
-        features: &[NjdFeature],
-    ) -> Result<Vec<String>, HaqumeiError> {
+    pub fn make_label(&mut self, features: &[NjdFeature]) -> Result<Vec<String>, HaqumeiError> {
         Self::features_to_njd(features, &mut self.njd)?;
 
         let (label_size, label_feature_ptr) = unsafe {
@@ -1124,69 +999,6 @@ impl OpenJTalk {
         }
 
         Ok(labels)
-    }
-
-    /// 呼び出し後は必ず JPCommon_refresh / NJD_refresh を行わなければならない。
-    /// NJDFeature を元に JPCommon の内部構造体 (Word/Mora/Phoneme階層) を構築する。
-    /// 戻り値として、JPCommonLabelWord のポインタから、対応する NJDFeature のインデックスへのマッピングを返す。
-    unsafe fn prepare_jpcommon_label_internal(
-        &mut self,
-        features: &[NjdFeature],
-    ) -> Result<HashMap<usize, usize>, HaqumeiError> {
-        Self::features_to_njd(features, &mut self.njd)?;
-
-        let mut ptr_to_idx = HashMap::with_capacity(features.len());
-
-        unsafe {
-            let jp = self.jp_common.inner.as_mut();
-            let njd = self.njd.inner.as_mut();
-
-            ffi::njd2jpcommon(jp, njd);
-
-            // JPCommon_make_label(JPCommon * jpcommon) の部分的な移植
-            if !jp.label.is_null() {
-                ffi::JPCommonLabel_clear(jp.label);
-            } else {
-                let ptr = libc::calloc(1, std::mem::size_of::<ffi::JPCommonLabel>());
-                if ptr.is_null() {
-                    return Err(HaqumeiError::AllocationError("ffi::JPCommonLabel"));
-                }
-                jp.label = ptr as *mut ffi::JPCommonLabel;
-            }
-
-            ffi::JPCommonLabel_initialize(jp.label);
-
-            let mut node = jp.head;
-            let mut f_idx = 0;
-
-            while !node.is_null() {
-                let prev_word_tail = (*jp.label).word_tail;
-
-                ffi::JPCommonLabel_push_word(
-                    jp.label,
-                    ffi::JPCommonNode_get_pron(node),
-                    ffi::JPCommonNode_get_pos(node),
-                    ffi::JPCommonNode_get_ctype(node),
-                    ffi::JPCommonNode_get_cform(node),
-                    ffi::JPCommonNode_get_acc(node),
-                    ffi::JPCommonNode_get_chain_flag(node),
-                );
-
-                // 追加後の末尾のWordポインタ
-                let curr_word_tail = (*jp.label).word_tail;
-
-                // JPCommonLabel_push_word によって新しい Word が生成された場合のみマッピングを記録する。
-                // (「ー」などで直前のWordに吸収された場合や、pau で Word が生成されなかった場合はスキップされる)
-                if prev_word_tail != curr_word_tail && !curr_word_tail.is_null() {
-                    ptr_to_idx.insert(curr_word_tail as usize, f_idx);
-                }
-
-                node = (*node).next;
-                f_idx += 1;
-            }
-        }
-
-        Ok(ptr_to_idx)
     }
 
     /// NjdFeature から直接フラットな音素リストを抽出する。
@@ -1358,11 +1170,22 @@ impl OpenJTalk {
         ///
         /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
         ///   音素リストとして `["pau"]` が割り当てられます。
-        g2p_mapping_batch => g2p_mapping -> Vec<WordPhonemeMap>
+        g2p_pairs_batch => g2p_pairs -> Vec<WordPhonemePair>
     );
 
     impl_batch_method_openjtalk!(
         /// 形態素ごとの未知語を含めたより詳細な音素マッピングのバッチ処理。
+        ///
+        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
+        ///
+        /// - 既知語: 通常の音素列 (読点などは `pau`)
+        /// - 未知語: `unk`
+        /// - 空白等: `sp` (Space)
+        g2p_mapping_batch => g2p_mapping -> Vec<WordPhonemeMap>
+    );
+
+    impl_batch_method_openjtalk!(
+        /// 形態素ごとの未知語や NJD の情報を含めたより詳細な音素マッピングのバッチ処理。
         ///
         /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
         ///

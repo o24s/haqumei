@@ -5,10 +5,10 @@ use std::{
 };
 
 use crate::{
-    data::{Dan, dan},
     errors::HaqumeiError,
     features::NjdFeature,
     ffi,
+    utils::{Dan, dan},
 };
 
 #[derive(Debug)]

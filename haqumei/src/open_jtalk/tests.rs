@@ -1,4 +1,6 @@
 use crate::open_jtalk::model::MecabModel;
+use std::{env, io::Write};
+use tempfile::NamedTempFile;
 
 use super::*;
 
@@ -100,4 +102,50 @@ fn test_njd() {
 
     assert!(njd_raw.head.is_null());
     assert!(njd_raw.tail.is_null());
+}
+
+#[test]
+fn test_userdict() {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
+    let manifest_dir = Path::new(&manifest_dir);
+
+    let mut ojt = OpenJTalk::new().unwrap();
+
+    let tests = vec![("nnmn", "n a n a m i N"), ("GNU", "g u n u u")];
+
+    for (text, expected) in &tests {
+        let p = ojt.g2p(text).unwrap().join(" ");
+        assert_ne!(&p, expected);
+    }
+
+    let mut user_csv = NamedTempFile::new().unwrap();
+    writeln!(
+        user_csv.as_file_mut(),
+        "ｎｎｍｎ,,,1,名詞,一般,*,*,*,*,ｎｎｍｎ,ナナミン,ナナミン,1/4,*"
+    )
+    .unwrap();
+    writeln!(
+        user_csv.as_file_mut(),
+        "ＧＮＵ,,,1,名詞,一般,*,*,*,*,ＧＮＵ,グヌー,グヌー,2/3,*"
+    )
+    .unwrap();
+    let user_csv_path = user_csv.into_temp_path();
+
+    let user_out_path = NamedTempFile::new().unwrap();
+
+    let dict_dir = GLOBAL_MECAB_DICTIONARY.load().dict_dir.clone();
+    MecabDictIndexCompiler::new()
+        .dict_dir(manifest_dir.parent().unwrap().join("dictionary"))
+        .add_input_file(&user_csv_path)
+        .userdict_out_path(&user_out_path)
+        .run()
+        .unwrap();
+
+    let mut ojt_with_userdic =
+        OpenJTalk::from_path_with_userdict(&dict_dir, user_out_path).unwrap();
+
+    for (text, expected) in &tests {
+        let p = ojt_with_userdic.g2p(text).unwrap().join(" ");
+        assert_eq!(&p, expected);
+    }
 }

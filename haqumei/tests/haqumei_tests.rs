@@ -30,7 +30,7 @@ mod tests {
         let result = haqumei.g2p(text).unwrap();
         assert!(result.is_empty());
 
-        let mapping = haqumei.g2p_mapping_detailed(text).unwrap();
+        let mapping = haqumei.g2p_mapping(text).unwrap();
         assert!(mapping.is_empty());
     }
 
@@ -96,7 +96,7 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "𰻞𰻞麺";
 
-        let mapping = haqumei.g2p_mapping_detailed(text).unwrap();
+        let mapping = haqumei.g2p_mapping(text).unwrap();
 
         // "𰻞𰻞" -> unk, is_unknown: true
         // "麺"   -> m e N, is_unknown: false
@@ -115,7 +115,7 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "あ、あ。";
 
-        let mapping = haqumei.g2p_mapping_detailed(text).unwrap();
+        let mapping = haqumei.g2p_mapping(text).unwrap();
 
         let pauses: Vec<_> = mapping
             .iter()
@@ -139,7 +139,7 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "吾輩は猫である。名前　はまだ無　い。𰻞𰻞麺を、　食べたい。";
 
-        let result = haqumei.g2p_mapping_detailed(text).unwrap();
+        let result = haqumei.g2p_mapping(text).unwrap();
 
         let reconstructed: String = result.iter().map(|d| d.word.as_str()).collect();
 
@@ -161,7 +161,7 @@ mod tests {
             "\u{1112}\u{1161}\u{11AB}", // 한
         ];
 
-        let results = haqumei.g2p_mapping_detailed_batch(text).unwrap();
+        let results = haqumei.g2p_mapping_batch(text).unwrap();
 
         let results: Vec<String> = results
             .iter()
@@ -182,8 +182,8 @@ mod tests {
 
         let mut haqumei = Haqumei::new().unwrap();
         let mut open_jtalk = OpenJTalk::new().unwrap();
-        let result_hq = haqumei.g2p_mapping_detailed_batch(&waganeko).unwrap();
-        let result_ojt = open_jtalk.g2p_mapping_detailed_batch(&waganeko).unwrap();
+        let result_hq = haqumei.g2p_mapping_batch(&waganeko).unwrap();
+        let result_ojt = open_jtalk.g2p_mapping_batch(&waganeko).unwrap();
 
         for (details_hq, details_ojt) in result_hq.into_iter().zip(result_ojt) {
             for (detail_hq, detail_ojt) in details_hq.clone().into_iter().zip(details_ojt) {
@@ -235,7 +235,7 @@ mod tests {
 叙々々々々々々苑々々様々々要所々々々々々槇野々々々\
 ";
 
-        let result = haqumei.g2p_mapping_detailed(text).unwrap();
+        let result = haqumei.g2p_mapping(text).unwrap();
         let result: Vec<(&str, Vec<&str>)> = result
             .iter()
             .map(|d| {
@@ -470,7 +470,7 @@ mod tests {
         assert_eq!(detailed.pop().unwrap(), "u");
         assert_eq!(detailed.pop().unwrap(), "z");
 
-        let mapping = haqumei.g2p_mapping_detailed("いすゞ").unwrap();
+        let mapping = haqumei.g2p_mapping("いすゞ").unwrap();
         let odoriji_word = mapping.iter().find(|m| m.word.contains("ゞ")).unwrap();
 
         assert_eq!(odoriji_word.phonemes, ["i", "s", "u", "z", "u"]);
@@ -494,7 +494,7 @@ mod tests {
 
         let text = "叙々々々々々々苑々々様々々要所々々々々々槇野々々々";
 
-        let result = haqumei.g2p_mapping_detailed(text).unwrap();
+        let result = haqumei.g2p_mapping(text).unwrap();
 
         let mapping: Vec<(&str, Vec<&str>)> = result
             .iter()
@@ -544,29 +544,27 @@ mod tests {
             // イ段 + う (シナジー, イミジー化を防ぐ)
             ("しなじう", vec!["sh", "i", "n", "a", "j", "i", "u"]),
             ("いみじう", vec!["i", "m", "i", "j", "i", "u"]),
-
             // オ段 + う (正当な長音化: これは「ー」のままでなければならない)
             ("行こう", vec!["i", "k", "o", "o"]), // i k o:
-            ("言おう", vec!["i", "o", "o"]),     // i o:
-
+            ("言おう", vec!["i", "o", "o"]),      // i o:
             // ア段 + う (古語的・方言的な「～わう」など: 「ワー」化を防ぐ)
             ("買わう", vec!["k", "a", "w", "a", "u"]),
-
             // エ段 + う (古語的な助動詞などの連結: 「エー」化を防ぐ)
             ("捨てう", vec!["s", "U", "t", "e", "u"]),
         ];
 
         for (text, expected_phonemes) in cases {
-            let result = haqumei.g2p_mapping_detailed(text).unwrap();
+            let result = haqumei.g2p_mapping(text).unwrap();
 
-            let actual_phonemes: Vec<&str> = result.iter()
+            let actual_phonemes: Vec<&str> = result
+                .iter()
                 .flat_map(|d| d.phonemes.iter().map(|s| s.as_str()))
                 .collect();
 
             assert_eq!(
-                actual_phonemes,
-                expected_phonemes,
-                "Failed at text: {}", text
+                actual_phonemes, expected_phonemes,
+                "Failed at text: {}",
+                text
             );
         }
     }

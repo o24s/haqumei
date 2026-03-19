@@ -36,6 +36,9 @@ pub enum HaqumeiError {
     #[error("text2mecab conversion failed: {0}")]
     Text2MecabError(String),
 
+    #[error("Dictionary path not found: {path}")]
+    DictionaryNotFound { path: PathBuf },
+
     #[error(
         "Embedded dictionary verification failed at '{path}': checksum mismatch.\n  Expected: {expected}\n  Actual:   {actual}"
     )]

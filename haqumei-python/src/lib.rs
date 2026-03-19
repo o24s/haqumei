@@ -1,5 +1,5 @@
 use ::haqumei::{
-    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeDetail, WordPhonemeMap,
+    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeMap, WordPhonemePair,
     open_jtalk::Dictionary,
 };
 use pyo3::prelude::*;
@@ -99,29 +99,29 @@ impl From<::haqumei::MecabMorph> for PyMecabMorph {
     }
 }
 
-#[pyclass(name = "WordPhonemeMap", module = "haqumei", skip_from_py_object)]
+#[pyclass(name = "WordPhonemePair", module = "haqumei", skip_from_py_object)]
 #[derive(Clone)]
-struct PyWordPhonemeMap {
+struct PyWordPhonemePair {
     #[pyo3(get)]
     word: String,
     #[pyo3(get)]
     phonemes: Vec<String>,
 }
 
-impl From<WordPhonemeMap> for PyWordPhonemeMap {
-    fn from(map: WordPhonemeMap) -> Self {
+impl From<WordPhonemePair> for PyWordPhonemePair {
+    fn from(pair: WordPhonemePair) -> Self {
         Self {
-            word: map.word,
-            phonemes: map.phonemes,
+            word: pair.word,
+            phonemes: pair.phonemes,
         }
     }
 }
 
 #[pymethods]
-impl PyWordPhonemeMap {
+impl PyWordPhonemePair {
     fn __repr__(&self) -> String {
         format!(
-            "PyWordPhonemeMap(word={:?}, phonemes={:?})",
+            "PyWordPhonemePair(word={:?}, phonemes={:?})",
             self.word, self.phonemes,
         )
     }
@@ -131,9 +131,9 @@ impl PyWordPhonemeMap {
     }
 }
 
-#[pyclass(name = "WordPhonemeDetail", module = "haqumei", skip_from_py_object)]
+#[pyclass(name = "WordPhonemeMap", module = "haqumei", skip_from_py_object)]
 #[derive(Clone)]
-pub struct PyWordPhonemeDetail {
+pub struct PyWordPhonemeMap {
     #[pyo3(get)]
     pub word: String,
     #[pyo3(get)]
@@ -144,8 +144,8 @@ pub struct PyWordPhonemeDetail {
     pub is_ignored: bool,
 }
 
-impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
-    fn from(map: WordPhonemeDetail) -> Self {
+impl From<WordPhonemeMap> for PyWordPhonemeMap {
+    fn from(map: WordPhonemeMap) -> Self {
         Self {
             word: map.word,
             phonemes: map.phonemes,
@@ -156,10 +156,10 @@ impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
 }
 
 #[pymethods]
-impl PyWordPhonemeDetail {
+impl PyWordPhonemeMap {
     fn __repr__(&self) -> String {
         format!(
-            "WordPhonemeDetail(word={:?}, phonemes={:?}, is_unknown={}, is_ignored={})",
+            "WordPhonemeMap(word={:?}, phonemes={:?}, is_unknown={}, is_ignored={})",
             self.word, self.phonemes, self.is_unknown, self.is_ignored,
         )
     }
@@ -226,7 +226,11 @@ impl PyOpenJTalk {
 
     #[staticmethod]
     fn from_path(dict_dir: &str, user_dict: Option<&str>) -> PyResult<Self> {
-        let inner = OpenJTalk::from_path(dict_dir, user_dict).map_err(to_py_err)?;
+        let inner = if let Some(user_dict) = user_dict {
+            OpenJTalk::from_path_with_userdict(dict_dir, user_dict).map_err(to_py_err)?
+        } else {
+            OpenJTalk::from_path(dict_dir).map_err(to_py_err)?
+        };
         Ok(Self {
             inner: Mutex::new(inner),
         })
@@ -386,6 +390,30 @@ impl PyOpenJTalk {
         })
     }
 
+    fn g2p_pairs(&self, text: &str) -> PyResult<Vec<PyWordPhonemePair>> {
+        let mut guard = self.inner.lock().unwrap();
+        let mapping = guard.g2p_pairs(text).map_err(to_py_err)?;
+        Ok(mapping.into_iter().map(PyWordPhonemePair::from).collect())
+    }
+
+    fn g2p_pairs_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemePair>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_pairs_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemePair::from).collect())
+                .collect())
+        })
+    }
+
     fn g2p_mapping(&self, text: &str) -> PyResult<Vec<PyWordPhonemeMap>> {
         let mut guard = self.inner.lock().unwrap();
         let mapping = guard.g2p_mapping(text).map_err(to_py_err)?;
@@ -406,30 +434,6 @@ impl PyOpenJTalk {
                 .map_err(to_py_err)?
                 .into_iter()
                 .map(|map| map.into_iter().map(PyWordPhonemeMap::from).collect())
-                .collect())
-        })
-    }
-
-    fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
-        let mut guard = self.inner.lock().unwrap();
-        let mapping = guard.g2p_mapping_detailed(text).map_err(to_py_err)?;
-        Ok(mapping.into_iter().map(PyWordPhonemeDetail::from).collect())
-    }
-
-    fn g2p_mapping_detailed_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
-        py.detach(|| {
-            Ok(self
-                .inner
-                .lock()
-                .unwrap()
-                .g2p_mapping_detailed_batch(&texts)
-                .map_err(to_py_err)?
-                .into_iter()
-                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
                 .collect())
         })
     }
@@ -673,6 +677,36 @@ impl PyHaqumei {
         })
     }
 
+    fn g2p_pairs(&self, text: &str) -> PyResult<Vec<PyWordPhonemePair>> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_pairs(text)
+            .map_err(to_py_err)?
+            .into_iter()
+            .map(PyWordPhonemePair::from)
+            .collect())
+    }
+
+    fn g2p_pairs_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemePair>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_pairs_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemePair::from).collect())
+                .collect())
+        })
+    }
+
     fn g2p_mapping(&self, text: &str) -> PyResult<Vec<PyWordPhonemeMap>> {
         Ok(self
             .inner
@@ -702,36 +736,6 @@ impl PyHaqumei {
                 .collect())
         })
     }
-
-    fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
-        Ok(self
-            .inner
-            .lock()
-            .unwrap()
-            .g2p_mapping_detailed(text)
-            .map_err(to_py_err)?
-            .into_iter()
-            .map(PyWordPhonemeDetail::from)
-            .collect())
-    }
-
-    fn g2p_mapping_detailed_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
-        py.detach(|| {
-            Ok(self
-                .inner
-                .lock()
-                .unwrap()
-                .g2p_mapping_detailed_batch(&texts)
-                .map_err(to_py_err)?
-                .into_iter()
-                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
-                .collect())
-        })
-    }
 }
 
 #[pyfunction]
@@ -751,8 +755,8 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOpenJTalk>()?;
     m.add_class::<PyMecabMorph>()?;
     m.add_class::<PyNjdFeature>()?;
+    m.add_class::<PyWordPhonemePair>()?;
     m.add_class::<PyWordPhonemeMap>()?;
-    m.add_class::<PyWordPhonemeDetail>()?;
     m.add_class::<PyDictionary>()?;
 
     m.add_function(wrap_pyfunction!(update_global_dictionary, m)?)?;

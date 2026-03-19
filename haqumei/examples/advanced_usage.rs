@@ -10,13 +10,13 @@ use haqumei::Haqumei;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut haqumei = Haqumei::new()?;
 
-    println!("1. Phoneme Mapping (g2p_mapping)");
+    println!("1. Phoneme Mapping (g2p_pairs)");
     println!("   Maps phonemes back to their original words\n");
 
     let text1 = "𰻞𰻞麺＆お冷を頼んだ";
     println!("Text: {}", text1);
 
-    let mapping = haqumei.g2p_mapping(text1)?;
+    let mapping = haqumei.g2p_pairs(text1)?;
     println!("Mapping result:");
     for word_map in &mapping {
         println!(
@@ -36,14 +36,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Detailed phonemes: {:?}", detailed_phonemes);
     println!("Note: 'sp' = space, 'unk' = unknown word\n");
 
-    println!("3. Detailed Mapping (g2p_mapping_detailed)");
+    println!("3. Mapping (g2p_mapping)");
     println!("   Shows unknown status and ignore flags\n");
 
     let text3 = "𰻞𰻞麺　お冷を頼んだ";
     println!("Text: {}", text3);
 
-    let detailed_mapping = haqumei.g2p_mapping_detailed(text3)?;
-    println!("Detailed mapping:");
+    let detailed_mapping = haqumei.g2p_mapping(text3)?;
+    println!("Mapping:");
     for detail in &detailed_mapping {
         println!("  Word: {:?}", detail.word);
         println!("    Phonemes: {:?}", detail.phonemes);

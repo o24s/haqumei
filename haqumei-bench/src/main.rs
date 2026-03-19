@@ -47,8 +47,8 @@ fn bench_g2p(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("G2P Mapping Detailed", |b| {
-        b.iter(|| black_box(hq_default.g2p_mapping_detailed_batch(black_box(&lines))))
+    group.bench_function("G2P Mapping", |b| {
+        b.iter(|| black_box(hq_default.g2p_mapping_batch(black_box(&lines))))
     });
 
     group.finish();

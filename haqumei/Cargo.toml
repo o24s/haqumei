@@ -1,6 +1,6 @@
 [package]
 name = "haqumei"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2024"
 authors = ["stellanomia <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
@@ -14,6 +14,7 @@ include = [
     "src/*",
     "build.rs",
     "redirect.c",
+    "redirect_cpp.cpp",
     "redirect.h",
     "wrapper.h",
     "yomi_model/**",
@@ -52,6 +53,7 @@ phf.workspace = true
 rayon.workspace = true
 sha2.workspace = true
 tar.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 vibrato-rkyv.workspace = true

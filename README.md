@@ -21,7 +21,7 @@
 
 ## Features
 
-- **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_mapping`, `g2p_mapping_detailed`).  
+- **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
   This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
 - **Performance:** Achieves fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Benchmark](#benchmark))
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
@@ -101,7 +101,7 @@ print(f"Katakana reading: {kana}")
 
 ### Getting Phoneme Mapping with the Original Word String
 
-Haqumei implements `g2p_mapping` to obtain the correspondence between phonemes and their original words.  
+Haqumei implements `g2p_pairs` to obtain the correspondence between phonemes and their original words.  
 This is achieved by traversing the `JPCommon` structure and tracking the pointers to the words to which each phoneme belongs.
 
 ```rust
@@ -110,17 +110,17 @@ use haqumei::Haqumei;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
-  println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺＆お冷を頼んだ")?);
-  // [WordPhonemeMap {
+  println!("{:?}", haqumei.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ")?);
+  // [WordPhonemePair {
   //     word: "𰻞𰻞",
   //     phonemes: ["pau"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "＆",
   //     phonemes: ["a", "N", "d", "o"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"]
   // }, ... ]
@@ -138,7 +138,7 @@ Please note that `sp` does not refer to raw space characters in the input, but r
 - **Unknown words**: `unk`
 - **Spaces, etc.**: `sp` (Space)
 
-Using `g2p_mapping_detailed`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
+Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
 
 ```rust
 use haqumei::Haqumei;
@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺")?);
   // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
-  println!("{:?}", haqumei.g2p_mapping_detailed("𰻞𰻞麺 お冷を頼んだ")?);
+  println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
   // [WordPhonemeDetail {
   //     word: "𰻞𰻞",
   //     phonemes: ["unk"],

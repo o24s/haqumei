@@ -56,7 +56,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let manifest_dir = Path::new(&manifest_dir);
     let target = std::env::var("TARGET").unwrap();
 
-    let watch_files = ["redirect.c", "redirect.h", "wrapper.h", src_dir_str];
+    let watch_files = [
+        "redirect.c",
+        "redirect.h",
+        "redirect_cpp.cpp",
+        "wrapper.h",
+        src_dir_str,
+    ];
 
     for path in &watch_files {
         println!("cargo:rerun-if-changed={}", path);
@@ -210,6 +216,11 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     let redirect_flag = redirect_header_path.as_os_str();
 
     cc::Build::new().file("redirect.c").compile("redirect_impl");
+
+    cc::Build::new()
+        .cpp(true)
+        .file("redirect_cpp.cpp")
+        .compile("redirect_cpp_impl");
 
     let mut build = cc::Build::new();
     build.cpp(true);
@@ -428,6 +439,17 @@ fn build_dict_indexer(
 ) -> Result<PathBuf, Box<dyn Error>> {
     let main_wrapper_src = r#"
 #include "mecab.h"
+#include <stdio.h>
+
+// Since mecab-dict-index is a self-contained executable not linked with Rust,
+// we provide this dummy implementation of the rust_print() function that redirect.c attempts to call.
+extern "C" void haqumei_rust_print(const char* msg, int is_stderr) {
+    if (is_stderr) {
+        fprintf(stderr, "%s", msg);
+    } else {
+        fprintf(stdout, "%s", msg);
+    }
+}
 
 int main(int argc, char **argv) {
   return mecab_dict_index(argc, argv);
@@ -450,6 +472,7 @@ int main(int argc, char **argv) {
     let exe_path = out_dir.join(exe_name);
 
     command.arg(&main_wrapper_path);
+
     if compiler.is_like_msvc() {
         let mut arg = OsString::from("/Fe");
         arg.push(exe_path.as_os_str());
@@ -479,12 +502,16 @@ int main(int argc, char **argv) {
         command.arg(arg);
 
         command.arg("openjtalk.lib");
+        command.arg("redirect_impl.lib");
+        command.arg("redirect_cpp_impl.lib");
     } else {
         let mut arg = OsString::from("-L");
         arg.push(out_dir);
         command.arg(arg);
 
         command.arg("-lopenjtalk");
+        command.arg("-lredirect_impl");
+        command.arg("-lredirect_cpp_impl");
         if cfg!(unix) {
             command.arg("-lm");
         }

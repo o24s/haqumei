@@ -126,7 +126,7 @@ fn evaluate_phoneme_dataset(
     let mut total_i = 0usize;
     let mut total_phonemes = 0usize;
 
-    let results = haqumei.g2p_mapping_detailed_batch(texts)?;
+    let results = haqumei.g2p_mapping_batch(texts)?;
 
     for (i, sentence_details) in results.iter().enumerate() {
         let expected_raw: &[&str] = phonemes.get(i).ok_or("missing phoneme gold")?;
@@ -408,7 +408,6 @@ fn evaluate_kana_dataset(
 fn main() -> Result<(), Box<dyn Error>> {
     let mut haqumei = Haqumei::from_path(
         DICT_DIR,
-        None,
         HaqumeiOptions {
             predict_nani: true,
             ..Default::default()
@@ -424,7 +423,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut haqumei = Haqumei::from_path(
         DICT_DIR,
-        None,
         HaqumeiOptions {
             predict_nani: true,
             revert_long_vowels: true,

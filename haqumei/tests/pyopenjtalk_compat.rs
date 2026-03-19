@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use haqumei::{Haqumei, HaqumeiOptions};
+    use haqumei::{
+        Haqumei, HaqumeiOptions, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair,
+    };
 
     #[test]
     fn test_njd_features() {
@@ -368,5 +370,472 @@ mod tests {
         assert_eq!(f[8].read, "ノ");
         assert_eq!(f[8].pron, "ノ");
         assert_eq!(f[8].mora_size, 1);
+    }
+
+    const PHONEME_MAPPING_CORPUS: &[&str] = &[
+        "こんにちは",
+        "おはようございます",
+        "東京は日本の首都です",
+        "東京都知事が記者会見を行った。",
+        "大阪",
+        "外国人参政権",
+        "学生生活",
+        "学生々活は楽しい",
+        "部分々々",
+        "東京、大阪",
+        "東京　大阪",
+        "（テスト・ケース）",
+        "今日は2112年9月3日です",
+        "電話番号は090-1234-5678です",
+        "明日は雨が降るでしょう",
+        "ご遠慮ください",
+        "お入りください",
+        "食べよう",
+        "見よう",
+        "読もう",
+        "書こう",
+        "遊ぼう",
+        "起きよう",
+        "考えよう",
+        "見せよう",
+        "行こう",
+        "入ろう",
+        "来よう",
+        "しよう",
+        "食べている",
+        "読んでいる",
+        "書いている",
+        "走っている",
+        "見ている",
+        "起きている",
+        "つまみ出されようとした",
+    ];
+
+    const LONG_VOWEL_MERGE_CASES: &[(&str, &str, &str)] = &[
+        ("食べよう", "食べよう", "食べる"),
+        ("見よう", "見よう", "見る"),
+        ("読もう", "読もう", "読む"),
+        ("書こう", "書こう", "書く"),
+        ("遊ぼう", "遊ぼう", "遊ぶ"),
+        ("起きよう", "起きよう", "起きる"),
+        ("考えよう", "考えよう", "考える"),
+        ("見せよう", "見せよう", "見せる"),
+        ("行こう", "行こう", "行く"),
+        ("入ろう", "入ろう", "入る"),
+        ("来よう", "来よう", "来る"),
+        ("つまみ出されようとした", "れよう", "れる"),
+        (
+            "あーーーーーーーーあ",
+            "あーーーーーーーー",
+            "あーーーーーーーー",
+        ),
+    ];
+
+    trait PhonemesExtractor {
+        fn get_phonemes(&self) -> &[String];
+    }
+    impl PhonemesExtractor for WordPhonemePair {
+        fn get_phonemes(&self) -> &[String] {
+            &self.phonemes
+        }
+    }
+    impl PhonemesExtractor for WordPhonemeMap {
+        fn get_phonemes(&self) -> &[String] {
+            &self.phonemes
+        }
+    }
+    impl PhonemesExtractor for WordPhonemeDetail {
+        fn get_phonemes(&self) -> &[String] {
+            &self.phonemes
+        }
+    }
+
+    fn flatten_mapping_phonemes<T: PhonemesExtractor>(
+        mapping: &[T],
+        keep_pause: bool,
+    ) -> Vec<String> {
+        let mut phonemes = Vec::new();
+        for entry in mapping {
+            let p = entry.get_phonemes();
+            if !keep_pause && (p == ["pau"] || p == ["sp"]) {
+                continue;
+            }
+            if p == ["unk"] {
+                continue;
+            }
+            phonemes.extend(p.iter().cloned());
+        }
+        phonemes
+    }
+
+    fn extract_label_phonemes(labels: &[String], keep_pause: bool) -> Vec<String> {
+        if labels.len() <= 2 {
+            return vec![];
+        }
+        let mut phonemes = Vec::new();
+        for label in &labels[1..labels.len() - 1] {
+            let p = label.split('-').nth(1).unwrap().split('+').next().unwrap();
+            if !keep_pause && p == "pau" {
+                continue;
+            }
+            phonemes.push(p.to_string());
+        }
+        phonemes
+    }
+
+    #[test]
+    fn test_run_frontend_empty_string() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let features = ojt.run_frontend("").unwrap();
+        assert!(features.is_empty());
+    }
+
+    #[test]
+    fn test_run_frontend_very_long_text() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let long_text = "あ".repeat(10000);
+        let err = ojt.run_frontend(&long_text);
+        assert!(err.is_err());
+
+        let features = ojt.run_frontend("こんにちは").unwrap();
+        assert!(!features.is_empty());
+    }
+
+    #[test]
+    fn test_run_frontend_special_characters_only() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let features = ojt.run_frontend("!@#$%^&*()").unwrap();
+        assert!(!features.is_empty() || features.is_empty()); // 少なくともクラッシュしないこと
+    }
+
+    #[test]
+    fn test_run_frontend_null_bytes_should_not_segfault() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let err = ojt.run_frontend("\x00\x01\x02");
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_run_frontend_mixed_japanese_ascii() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let features = ojt.run_frontend("Hello世界123").unwrap();
+        assert!(!features.is_empty());
+    }
+
+    #[test]
+    fn test_make_label_too_long_feature_should_not_crash() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mut features = ojt.run_frontend("こんにちは").unwrap();
+        features[0].pron = "ア".repeat(400);
+        let labels = ojt.make_label(&features).unwrap();
+        assert!(!labels.is_empty());
+    }
+
+    #[test]
+    fn test_make_label_empty_string_fields_should_not_crash() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mut features = ojt.run_frontend("こんにちは").unwrap();
+        dbg!(&features);
+        features[0].pron = "".to_string();
+        features[0].pos = "".to_string();
+        features[0].ctype = "".to_string();
+        features[0].cform = "".to_string();
+        let labels = ojt.make_label(&features).unwrap();
+        assert_eq!(labels, &[] as &[String])
+    }
+
+    #[test]
+    fn test_make_label_null_character_should_not_break_next_call() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mut features = ojt.run_frontend("こんにちは").unwrap();
+        features[0].pron = "ア\x00イ".to_string();
+        let err = ojt.make_label(&features);
+        assert!(err.is_err());
+
+        let features2 = ojt.run_frontend("こんにちは").unwrap();
+        let labels = ojt.make_label(&features2).unwrap();
+        assert!(!labels.is_empty());
+    }
+
+    #[test]
+    fn test_g2p_large_digit_sequence_should_keep_place_reading() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let pron = ojt.g2p("10000").unwrap().join(" ");
+        assert_eq!(pron, "i ch i m a N");
+    }
+
+    #[test]
+    fn test_g2p_large_digit_sequence_with_oku_should_keep_place_reading() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let pron = ojt.g2p("100000000").unwrap().join(" ");
+        assert_eq!(pron, "i ch i o k u");
+    }
+
+    #[test]
+    fn test_run_mecab_runtime_error_should_not_break_next_call() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let long_text = "😎".repeat(5000);
+        let err = ojt.run_mecab(&long_text);
+        assert!(err.is_err());
+
+        let morphs = ojt.run_mecab("こんにちは").unwrap();
+        assert!(!morphs.is_empty());
+    }
+
+    #[test]
+    fn test_run_mecab_detailed_known_word() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let morphs = ojt.run_mecab_detailed("こんにちは").unwrap();
+        assert!(!morphs.is_empty());
+        assert!(morphs.iter().any(|m| !m.is_unknown));
+    }
+
+    #[test]
+    fn test_run_mecab_detailed_unknown_word() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let morphs = ojt.run_mecab_detailed("xtjq").unwrap();
+        assert!(morphs.iter().any(|m| m.is_unknown));
+    }
+
+    #[test]
+    fn test_run_mecab_detailed_includes_ignored() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let normal = ojt.run_mecab("東京　大阪").unwrap();
+        let detailed = ojt.run_mecab_detailed("東京　大阪").unwrap();
+        assert!(detailed.len() >= normal.len());
+    }
+
+    #[test]
+    fn test_run_mecab_detailed_feature_format() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let morphs = ojt.run_mecab_detailed("こんにちは").unwrap();
+        for morph in morphs {
+            assert!(morph.feature.starts_with(&morph.surface));
+        }
+    }
+
+    #[test]
+    fn test_make_phoneme_mapping_basic() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_pairs("こんにちは").unwrap();
+        assert!(!mapping.is_empty());
+        for entry in mapping {
+            assert!(!entry.phonemes.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_make_phoneme_mapping_with_punctuation() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_pairs("東京、大阪").unwrap();
+        assert!(mapping.iter().any(|e| e.phonemes == ["pau"]));
+    }
+
+    #[test]
+    fn test_make_phoneme_mapping_boundary_punctuation_end() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_pairs("あ。").unwrap();
+        assert_eq!(mapping[0].word, "あ");
+        assert_eq!(mapping[0].phonemes, ["a"]);
+        assert_eq!(mapping[1].word, "。");
+        assert_eq!(mapping[1].phonemes, ["pau"]);
+    }
+
+    #[test]
+    fn test_make_phoneme_mapping_pause_like_symbols() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_pairs("（テスト・ケース）").unwrap();
+        assert_eq!(mapping[0].word, "（");
+        assert_eq!(mapping[0].phonemes, ["pau"]);
+        assert_eq!(mapping[1].word, "テスト");
+        assert_eq!(mapping[1].phonemes, ["t", "e", "s", "U", "t", "o"]);
+        assert_eq!(mapping[2].word, "・");
+        assert_eq!(mapping[2].phonemes, ["pau"]);
+    }
+
+    #[test]
+    fn test_make_phoneme_mapping_digit() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_pairs("123").unwrap();
+        assert!(!mapping.is_empty());
+    }
+
+    #[test]
+    fn test_g2p_mapping_basic() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let detailed = ojt.g2p_mapping("こんにちは").unwrap();
+        assert!(!detailed.is_empty());
+        assert!(detailed.iter().any(|e| !e.is_unknown));
+    }
+
+    #[test]
+    fn test_g2p_mapping_unknown_word() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let detailed = ojt.g2p_mapping("xtjqは最高").unwrap();
+        assert!(detailed.iter().any(|e| e.is_unknown));
+    }
+
+    #[test]
+    fn test_g2p_mapping_unknown_after_digit_normalization() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let detailed = ojt.g2p_mapping("7xyz").unwrap();
+        assert!(detailed.iter().any(|e| e.word == "七"));
+        let xyz_entry = detailed.iter().find(|e| e.word == "ｘｙｚ").unwrap();
+        assert!(xyz_entry.is_unknown);
+    }
+
+    #[test]
+    fn test_g2p_mapping_corpus_phoneme_consistency() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        for text in PHONEME_MAPPING_CORPUS {
+            let mapping = ojt.g2p_mapping(text).unwrap();
+            let labels = ojt.extract_fullcontext(text).unwrap();
+
+            assert_eq!(
+                flatten_mapping_phonemes(&mapping, false),
+                extract_label_phonemes(&labels, false)
+            );
+        }
+    }
+
+    #[test]
+    fn test_g2p_mapping_detailed_long_vowel_metadata() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        for &(text, merged_surface, expected_orig) in LONG_VOWEL_MERGE_CASES {
+            let mapping = ojt.g2p_mapping_detailed(text).unwrap();
+            let merged_entry = mapping.iter().find(|e| e.word == merged_surface).unwrap();
+            assert!(merged_entry.features.is_empty());
+            assert_eq!(merged_entry.orig, expected_orig);
+        }
+    }
+
+    #[test]
+    fn test_run_frontend_detailed_basic() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let text = "こんにちは";
+        let (njd, morphs) = ojt.run_frontend_detailed(text).unwrap();
+        let njd_normal = ojt.run_frontend(text).unwrap();
+        assert_eq!(njd, njd_normal);
+        assert!(!morphs.is_empty());
+    }
+
+    #[test]
+    fn test_g2p_mapping_detailed_features_populated() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_mapping_detailed("東京は日本の首都です").unwrap();
+        for entry in mapping {
+            if !entry.features.is_empty() {
+                assert_eq!(entry.features[0], entry.word);
+                assert!(entry.features.len() >= 8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_g2p_mapping_detailed_features_unknown_word() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_mapping_detailed("xtjqは最高").unwrap();
+        let xtjq = mapping.iter().find(|e| e.word == "ｘｔｊｑ").unwrap();
+        assert!(xtjq.is_unknown);
+        assert_eq!(xtjq.features.len(), 8);
+        assert_eq!(xtjq.features[0], "ｘｔｊｑ");
+    }
+
+    #[test]
+    fn test_g2p_mapping_odori_resync() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let mapping = haqumei.g2p_mapping_detailed("学生々活は楽しい").unwrap();
+
+        let words: Vec<_> = mapping.iter().map(|e| e.word.as_str()).collect();
+        assert!(words.contains(&"学生"));
+        assert!(words.contains(&"生活"));
+        assert!(words.contains(&"は"));
+        assert!(words.contains(&"楽しい"));
+
+        let seikatsu = mapping.iter().find(|e| e.word == "生活").unwrap();
+        assert_eq!(seikatsu.phonemes, ["s", "e", "e", "k", "a", "ts", "u"]);
+
+        let tanoshii = mapping.iter().find(|e| e.word == "楽しい").unwrap();
+        assert!(!tanoshii.phonemes.is_empty());
+    }
+
+    #[test]
+    fn test_g2p_mapping_odori_digit_unknown_combined() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_mapping_detailed("学生々活7xyz大阪").unwrap();
+
+        let xyz = mapping.iter().find(|e| e.word == "ｘｙｚ").unwrap();
+        assert!(xyz.is_unknown);
+
+        let osaka = mapping.iter().find(|e| e.word == "大阪").unwrap();
+        assert!(!osaka.is_unknown);
+        assert_eq!(osaka.phonemes, ["o", "o", "s", "a", "k", "a"]);
+    }
+
+    #[test]
+    fn test_g2p_mapping_accent_phrase_boundary() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt
+            .g2p_mapping_detailed("東京都知事が記者会見を行った。")
+            .unwrap();
+
+        let tokyo = mapping.iter().find(|e| e.word == "東京").unwrap();
+        let tochiji = mapping.iter().find(|e| e.word == "都知事").unwrap();
+        let ga = mapping.iter().find(|e| e.word == "が").unwrap();
+        let kisha = mapping.iter().find(|e| e.word == "記者").unwrap();
+
+        assert!(tokyo.chain_flag == -1 || tokyo.chain_flag == 0);
+        assert_eq!(tochiji.chain_flag, 1);
+        assert_eq!(ga.chain_flag, 1);
+        assert_eq!(kisha.chain_flag, 0);
+    }
+
+    #[test]
+    fn test_odoriji_voiced_and_voiceless_conversion() {
+        let mut haqumei = Haqumei::new().unwrap();
+        assert_eq!(haqumei.g2p_kana("がゝ").unwrap(), "ガカ");
+        assert_eq!(haqumei.g2p_kana("バヽ").unwrap(), "バハ");
+        assert_eq!(haqumei.g2p_kana("かゞ").unwrap(), "カガ");
+        assert_eq!(haqumei.g2p_kana("ハヾ").unwrap(), "ハバ");
+    }
+
+    #[test]
+    fn test_g2p_mapping_integrity() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let text = "吾輩は猫である。名前　はまだ無　い。𰻞𰻞麺を、　食べたい。";
+        let mapping = ojt.g2p_mapping(text).unwrap();
+        let reconstructed: String = mapping.into_iter().map(|e| e.word).collect();
+        assert_eq!(reconstructed, text);
+    }
+
+    #[test]
+    fn test_g2p_mapping_unknown_word_rare_kanji_mix() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let mapping = ojt.g2p_mapping("𰻞𰻞麺").unwrap();
+        assert_eq!(mapping[0].word, "𰻞𰻞");
+        assert_eq!(mapping[0].phonemes, ["unk"]);
+        assert!(mapping[0].is_unknown);
+
+        assert_eq!(mapping[1].word, "麺");
+        assert_eq!(mapping[1].phonemes, ["m", "e", "N"]);
+        assert!(!mapping[1].is_unknown);
+    }
+
+    #[test]
+    fn test_g2p_recovery_after_error() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let long_text = "あ".repeat(10000);
+        let _ = ojt.g2p(&long_text); // Returns error
+
+        let result = ojt.g2p("復帰").unwrap().join(" ");
+        assert_eq!(result, "f u cl k i");
+    }
+
+    #[test]
+    fn test_g2p_symbols_and_control_chars() {
+        let mut ojt = OpenJTalk::new().unwrap();
+        let result = ojt.g2p("#$%&'()\n\t").unwrap();
+        // Should not crash and should return something (or empty)
+        assert!(result.is_empty() || !result.is_empty());
     }
 }

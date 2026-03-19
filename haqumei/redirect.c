@@ -8,7 +8,7 @@
   #define GET_FILENO fileno
 #endif
 
-extern void haqumei_rust_print(const char *msg, int is_stderr);
+extern void haqumei_rust_print(const char* msg, int is_stderr);
 
 static int redirect_to_rust(const char* format, va_list args, int is_stderr) {
     char buffer[1024];
@@ -29,6 +29,21 @@ static int redirect_to_rust(const char* format, va_list args, int is_stderr) {
     return ret;
 }
 
+#ifdef __GNUC__
+    __attribute__((format(printf, 1, 2)))
+#endif
+int haqumei_redirect_printf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int ret = redirect_to_rust(format, args, 0);
+    va_end(args);
+
+    return ret;
+}
+
+#ifdef __GNUC__
+__attribute__((format(printf, 2, 3)))
+#endif
 int haqumei_redirect_fprintf(FILE *stream, const char *format, ...) {
     int fd = GET_FILENO(stream);
     int is_stderr = (fd == 2);

@@ -21,7 +21,7 @@
 
 ## 特徴 (Features)
 
-- Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
+- Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
 - パフォーマンス: Rustによるネイティブ実装と、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装されたいくつかの改善を取り入れ、高速なG2Pを実現しています。([ベンチマーク](#ベンチマーク))
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
@@ -100,7 +100,7 @@ print(f"カタカナ読み: {kana}")
 
 ### 元の単語文字列との音素マッピングを得る
 
-音素から元の単語の対応を得る `g2p_mapping` が実装されています。  
+音素から元の単語の対応を得る `g2p_pairs` が実装されています。  
 `JPCommon` の構造体を走査し、各音素の属する単語のポインタを追うことによって実現しています。
 
 ```rust
@@ -109,17 +109,17 @@ use haqumei::Haqumei;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
-  println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺＆お冷を頼んだ")?);
-  // [WordPhonemeMap {
+  println!("{:?}", haqumei.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ")?);
+  // [WordPhonemePair {
   //     word: "𰻞𰻞",
   //     phonemes: ["pau"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "＆",
   //     phonemes: ["a", "N", "d", "o"]
-  // }, WordPhonemeMap {
+  // }, WordPhonemePair {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"]
   // }, ...
@@ -137,7 +137,7 @@ Open JTalk (pyopenjtalk) では、未知語は `pau` として扱われますが
 - 未知語: `unk`
 - 空白等: `sp` (Space)
 
-`g2p_mapping_detailed` を使用すると、未知語かどうか (`is_unknown`)、本来のパイプラインで無視されるかどうか (`is_ignored`) という情報とともに、音素と元の単語のマッピングを取得可能です。
+`g2p_mapping` を使用すると、未知語かどうか (`is_unknown`)、本来のパイプラインで無視されるかどうか (`is_ignored`) という情報とともに、音素と元の単語のマッピングを取得可能です。
 
 ```rust
 use haqumei::Haqumei;
@@ -148,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺")?);
   // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
-  println!("{:?}", haqumei.g2p_mapping_detailed("𰻞𰻞麺 お冷を頼んだ")?);
+  println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
   // [WordPhonemeDetail {
   //     word: "𰻞𰻞",
   //     phonemes: ["unk"],

@@ -8,7 +8,10 @@ use std::{
 use libc::{c_char, c_int};
 use thiserror::Error;
 
-use crate::{errors::HaqumeiError, ffi, open_jtalk::model::MecabModel};
+use crate::{
+    errors::HaqumeiError, ffi, open_jtalk::model::MecabModel, setup_cpp_redirect,
+    teardown_cpp_redirect,
+};
 
 static DICT_EXTRACT_LOCK: Mutex<()> = Mutex::new(());
 
@@ -42,7 +45,6 @@ impl Dictionary {
 
     #[cfg(feature = "embed-dictionary")]
     pub fn from_embedded() -> Result<Self, HaqumeiError> {
-        use crate::utils::collect_dict_files;
         use crate::utils::compute_metadata_key;
         use fs4::fs_std::FileExt;
 
@@ -189,7 +191,7 @@ pub struct MecabDictIndexCompiler {
     dict_dir: PathBuf,
     out_dir: PathBuf,
     model_in: Option<PathBuf>,
-    userdic_out: Option<PathBuf>,
+    userdict_out: Option<PathBuf>,
     build_unknown: bool,
     build_model: bool,
     build_charcategory: bool,
@@ -207,7 +209,7 @@ impl MecabDictIndexCompiler {
             dict_dir: PathBuf::from("."),
             out_dir: PathBuf::from("."),
             model_in: None,
-            userdic_out: None,
+            userdict_out: None,
             build_unknown: false,
             build_model: false,
             build_charcategory: false,
@@ -239,8 +241,8 @@ impl MecabDictIndexCompiler {
     }
 
     /// Sets the output file path for the user dictionary to be built. Corresponds to the `-u` or `--userdic` option.
-    pub fn userdic_out<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        self.userdic_out = Some(path.as_ref().to_path_buf());
+    pub fn userdict_out_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+        self.userdict_out = Some(path.as_ref().to_path_buf());
         self
     }
 
@@ -305,12 +307,15 @@ impl MecabDictIndexCompiler {
     ///
     /// # Default Behavior
     ///
-    /// If `userdic_out` is not set and none of the `build_*` flags are explicitly
+    /// If `userdict_out` is not set and none of the `build_*` flags are explicitly
     /// enabled, this method will automatically enable all `build_*` flags to compile
     /// a full system dictionary. This mimics the default behavior of the
     /// `mecab-dict-index` command-line tool.
     pub fn run(&self) -> Result<(), DictCompilerError> {
         let mut c_string_args: Vec<CString> = Vec::new();
+        unsafe {
+            setup_cpp_redirect();
+        };
 
         let dict_dir = &self.dict_dir.canonicalize()?;
         let out_dir = &self.out_dir;
@@ -384,7 +389,7 @@ impl MecabDictIndexCompiler {
             Ok(())
         }
 
-        let should_build_all = self.userdic_out.is_none()
+        let should_build_all = self.userdict_out.is_none()
             && [
                 self.build_charcategory,
                 self.build_matrix,
@@ -398,7 +403,7 @@ impl MecabDictIndexCompiler {
         add_path_arg(&mut c_string_args, "-d", dict_dir)?;
         add_path_arg(&mut c_string_args, "-o", out_dir)?;
         add_optional_path_arg(&mut c_string_args, "-m", &self.model_in)?;
-        add_optional_path_arg(&mut c_string_args, "-u", &self.userdic_out)?;
+        add_optional_path_arg(&mut c_string_args, "-u", &self.userdict_out)?;
         add_flag_arg(
             &mut c_string_args,
             "--build-unknown",
@@ -443,6 +448,10 @@ impl MecabDictIndexCompiler {
 
         let result = unsafe { ffi::mecab_dict_index(argc, argv.as_mut_ptr()) };
 
+        unsafe {
+            teardown_cpp_redirect();
+        }
+
         if result == 0 {
             Ok(())
         } else {
@@ -455,4 +464,24 @@ impl Default for MecabDictIndexCompiler {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(feature = "embed-dictionary")]
+pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut paths = Vec::new();
+
+    for entry in walkdir::WalkDir::new(dir) {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file()
+            && let Some(extension) = path.extension()
+            && (extension == "dic" || extension == "bin")
+        {
+            paths.push(path.to_path_buf());
+        }
+    }
+
+    paths.sort();
+
+    Ok(paths)
 }
