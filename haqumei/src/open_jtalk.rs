@@ -1,7 +1,6 @@
 pub mod dictionary;
 mod jp_common;
 mod mapping;
-mod mapping_utills;
 mod mecab;
 mod model;
 mod njd;
@@ -308,7 +307,12 @@ impl OpenJTalk {
 
         let mecab_morphs = self.run_mecab_detailed(text)?;
         Ok((
-            self.run_njd_from_mecab(mecab_morphs.iter().map(|morph| &morph.feature))?,
+            self.run_njd_from_mecab(
+                mecab_morphs
+                    .iter()
+                    .filter(|morph| !morph.is_ignored)
+                    .map(|morph| &morph.feature),
+            )?,
             mecab_morphs,
         ))
     }
@@ -562,26 +566,13 @@ impl OpenJTalk {
 
         let morphs = self.run_mecab_detailed(text)?;
 
-        let valid_features_str: Vec<String> = morphs
-            .iter()
-            .filter(|m| !m.is_ignored)
-            .map(|m| m.feature.clone())
-            .collect();
-
-        if valid_features_str.is_empty() {
-            return Ok(morphs
-                .into_iter()
-                .map(|m| WordPhonemeMap {
-                    word: m.surface,
-                    phonemes: vec!["sp".to_string()],
-                    is_unknown: m.is_unknown,
-                    is_ignored: true,
-                })
-                .collect());
-        }
-
         // 本来の Open JTalk パイプラインと同じ状態にして渡す
-        let njd_features = self.run_njd_from_mecab(&valid_features_str)?;
+        let njd_features = self.run_njd_from_mecab(
+            morphs
+                .iter()
+                .filter(|m| !m.is_ignored)
+                .map(|morph| morph.feature.as_str()),
+        )?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
@@ -660,7 +651,7 @@ impl OpenJTalk {
 
         let mapping = self.g2p_mapping_inner(&njd_features)?;
 
-        self.make_phoneme_mapping_detailed(morphs, mapping)
+        self.make_phoneme_mapping(morphs, mapping)
     }
 
     pub(crate) fn g2p_pairs_inner(

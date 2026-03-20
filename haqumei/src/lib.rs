@@ -524,17 +524,15 @@ impl Haqumei {
         let text = &self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>, bool), HaqumeiError> {
+        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
             let morphs = self.open_jtalk.run_mecab_detailed(text)?;
-
-            let valid_features_str: Vec<String> = morphs
-                .iter()
-                .filter(|m| !m.is_ignored)
-                .map(|m| m.feature.clone())
-                .collect();
-
-            let njd_features = self.open_jtalk.run_njd_from_mecab(&valid_features_str)?;
-            Ok((njd_features, morphs, valid_features_str.is_empty()))
+            let njd_features = self.open_jtalk.run_njd_from_mecab(
+                morphs
+                    .iter()
+                    .filter(|m| !m.is_ignored)
+                    .map(|morph| morph.feature.as_str()),
+            )?;
+            Ok((njd_features, morphs))
         };
 
         let (mut njd_features, morphs) = {
@@ -548,19 +546,7 @@ impl Haqumei {
                 run_mecab()
             };
 
-            let (njd_features, morphs, is_valid_features_empty) = res?;
-
-            if is_valid_features_empty {
-                return Ok(morphs
-                    .into_iter()
-                    .map(|m| WordPhonemeMap {
-                        word: m.surface,
-                        phonemes: vec!["sp".to_string()],
-                        is_unknown: m.is_unknown,
-                        is_ignored: true,
-                    })
-                    .collect());
-            }
+            let (njd_features, morphs) = res?;
 
             (self.apply_postprocessing(text, njd_features)?, morphs)
         };
@@ -645,12 +631,13 @@ impl Haqumei {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
         }
+
+        // normalize_unicode_if_needed, revert_pron_to_read はここで実行される
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
         let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
 
-        self.open_jtalk
-            .make_phoneme_mapping_detailed(morphs, mapping)
+        self.open_jtalk.make_phoneme_mapping(morphs, mapping)
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。

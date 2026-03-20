@@ -1,15 +1,290 @@
-use super::mapping_utills::{
-    adjust_unknown_phonemes, consume_mismatched_morphs, consume_odori_morphs,
-};
 use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::utils::has_odori_chars;
-use crate::word_phoneme::WordPhonemeEntry;
 use crate::{MecabMorph, OpenJTalk};
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use std::collections::HashMap;
 use std::ffi::CStr;
+
+pub(crate) trait WordPhonemeEntry {
+    fn phonemes_mut(&mut self) -> &mut Vec<String>;
+    fn phonemes(&self) -> &[String];
+
+    /// 他の要素が空音素としてマージされる際に、テキストや付随情報を自身に結合する
+    fn merge_from(&mut self, other: &mut Self);
+}
+
+impl WordPhonemeEntry for WordPhonemePair {
+    fn phonemes_mut(&mut self) -> &mut Vec<String> {
+        &mut self.phonemes
+    }
+    fn phonemes(&self) -> &[String] {
+        &self.phonemes
+    }
+
+    fn merge_from(&mut self, other: &mut Self) {
+        let text_to_merge = std::mem::take(&mut other.word);
+        self.word.push_str(&text_to_merge);
+    }
+}
+
+impl WordPhonemeEntry for WordPhonemeDetail {
+    fn phonemes_mut(&mut self) -> &mut Vec<String> {
+        &mut self.phonemes
+    }
+    fn phonemes(&self) -> &[String] {
+        &self.phonemes
+    }
+
+    fn merge_from(&mut self, other: &mut Self) {
+        let text_to_merge = std::mem::take(&mut other.word);
+        self.word.push_str(&text_to_merge);
+
+        self.mora_count += other.mora_count;
+
+        // orig は辞書の原形を表すため、活用形の吸収では連結しないが、
+        // リテラルの長音記号 ("ー") が吸収された場合は入力テキストを保持するため連結する
+        if !other.orig.is_empty() && other.orig.chars().all(|c| c == 'ー') {
+            let orig_to_merge = std::mem::take(&mut other.orig);
+            self.orig.push_str(&orig_to_merge);
+        }
+
+        let read_to_merge = std::mem::take(&mut other.read);
+        self.read.push_str(&read_to_merge);
+
+        let pron_to_merge = std::mem::take(&mut other.pron);
+        self.pron.push_str(&pron_to_merge);
+    }
+}
+
+pub(crate) trait IntoPhonemeMapItem: Sized {
+    type Output;
+
+    fn word(&self) -> &str;
+
+    /// is_ignored な形態素用の出力を生成
+    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output;
+
+    /// morphs が尽きた場合の処理
+    fn into_unmatched_remainder(self) -> Self::Output;
+
+    /// 完全一致の場合の処理
+    fn into_exact_match(self, morph: &MecabMorph) -> Self::Output;
+
+    /// 先頭一致（結合）の場合の処理
+    fn into_prefix_match(self, is_unknown_word: bool) -> Self::Output;
+
+    /// 不一致の場合の処理
+    fn into_mismatch(self) -> Self::Output;
+}
+
+impl IntoPhonemeMapItem for WordPhonemePair {
+    type Output = WordPhonemeMap;
+
+    #[inline]
+    fn word(&self) -> &str {
+        &self.word
+    }
+
+    #[inline]
+    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
+        WordPhonemeMap {
+            word: surface,
+            phonemes: vec!["sp".to_string()],
+            is_unknown,
+            is_ignored: true,
+        }
+    }
+
+    #[inline]
+    fn into_unmatched_remainder(self) -> Self::Output {
+        let is_ignored = self.phonemes.is_empty();
+        WordPhonemeMap {
+            word: self.word,
+            phonemes: self.phonemes,
+            is_unknown: false,
+            is_ignored,
+        }
+    }
+
+    #[inline]
+    fn into_exact_match(self, morph: &MecabMorph) -> Self::Output {
+        // JPCommonが音素を割り当てなかったとき is_ignored にする
+        let is_ignored = self.phonemes.is_empty();
+        let mut phonemes = self.phonemes;
+
+        if morph.is_unknown && (phonemes.is_empty() || phonemes == ["pau"]) {
+            phonemes = vec!["unk".to_string()];
+        }
+
+        WordPhonemeMap {
+            word: self.word,
+            phonemes,
+            is_unknown: morph.is_unknown,
+            is_ignored,
+        }
+    }
+
+    #[inline]
+    fn into_prefix_match(self, is_unknown_word: bool) -> Self::Output {
+        let mut phonemes = self.phonemes;
+        let is_ignored = phonemes.is_empty();
+        adjust_unknown_phonemes(&mut phonemes, is_unknown_word);
+
+        WordPhonemeMap {
+            word: self.word,
+            phonemes,
+            is_unknown: is_unknown_word,
+            is_ignored,
+        }
+    }
+
+    #[inline]
+    fn into_mismatch(self) -> Self::Output {
+        let is_ignored = self.phonemes.is_empty();
+        WordPhonemeMap {
+            word: self.word,
+            phonemes: self.phonemes,
+            is_unknown: false,
+            is_ignored,
+        }
+    }
+}
+
+impl IntoPhonemeMapItem for WordPhonemeDetail {
+    type Output = WordPhonemeDetail;
+
+    #[inline]
+    fn word(&self) -> &str {
+        &self.word
+    }
+
+    #[inline]
+    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
+        WordPhonemeDetail {
+            word: surface.clone(),
+            phonemes: vec!["sp".to_string()],
+            features: Vec::new(),
+            pos: "記号".to_string(),
+            pos_group1: "空白".to_string(),
+            pos_group2: "*".to_string(),
+            pos_group3: "*".to_string(),
+            ctype: "*".to_string(),
+            cform: "*".to_string(),
+            orig: surface.clone(),
+            read: surface.clone(),
+            pron: surface,
+            accent_nucleus: 0,
+            mora_count: 0,
+            chain_rule: "*".to_string(),
+            chain_flag: -1,
+            is_unknown,
+            is_ignored: true,
+        }
+    }
+
+    #[inline]
+    fn into_unmatched_remainder(mut self) -> Self::Output {
+        self.is_ignored = self.phonemes.is_empty();
+        self
+    }
+
+    #[inline]
+    fn into_exact_match(mut self, morph: &MecabMorph) -> Self::Output {
+        if morph.is_unknown && (self.phonemes.is_empty() || self.phonemes == ["pau"]) {
+            self.phonemes = vec!["unk".to_string()];
+        }
+        self.is_unknown = morph.is_unknown;
+
+        // JPCommonが音素を割り当てなかったとき is_ignored にする
+        self.is_ignored = self.phonemes.is_empty();
+        self.features = morph.feature.split(',').map(|s| s.to_string()).collect();
+        self
+    }
+
+    #[inline]
+    fn into_prefix_match(mut self, is_unknown_word: bool) -> Self::Output {
+        if is_unknown_word && (self.phonemes.is_empty() || self.phonemes == ["pau"]) {
+            self.phonemes = vec!["unk".to_string()];
+        }
+        self.is_unknown = is_unknown_word;
+        self.is_ignored = self.phonemes.is_empty();
+        self.features = Vec::new();
+        self
+    }
+
+    #[inline]
+    fn into_mismatch(mut self) -> Self::Output {
+        self.is_unknown = false;
+        self.is_ignored = self.phonemes.is_empty();
+        self.features = Vec::new();
+        self
+    }
+}
+
+#[inline]
+pub(super) fn adjust_unknown_phonemes(phonemes: &mut Vec<String>, is_unknown: bool) {
+    if is_unknown && (phonemes.is_empty() || *phonemes == ["pau"]) {
+        *phonemes = vec!["unk".to_string()];
+    }
+}
+
+#[inline]
+pub(super) fn consume_odori_morphs(
+    morphs: &[MecabMorph],
+    morph_idx: usize,
+    map_word: &str,
+) -> usize {
+    let mut consumed = 1;
+    if let Some(ahead) = morphs.get(morph_idx + 1)
+        && !ahead.is_ignored
+        && map_word.ends_with(&ahead.surface)
+    {
+        consumed += 1;
+    }
+    consumed
+}
+
+#[inline]
+pub(super) fn consume_mismatched_morphs(
+    morphs: &[MecabMorph],
+    morph_idx: usize,
+    bases_after_current: usize,
+) -> usize {
+    // 残りの有効な morph 数と、残りの base_mapping 数を計算
+    let non_ignored_remaining = morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
+
+    // NJD 挿入ノード: morph を消費しない (e.g, "10" -> "十" などで桁が挿入された)
+    if non_ignored_remaining <= bases_after_current {
+        return 0;
+    }
+
+    let mut consumed = 1;
+    while let Some(ahead) = morphs.get(morph_idx + consumed) {
+        if ahead.is_ignored {
+            break;
+        }
+        if !matches!(
+            ahead.surface.as_str(),
+            "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９"
+        ) {
+            break;
+        }
+
+        let non_ign = morphs[(morph_idx + consumed)..]
+            .iter()
+            .filter(|m| !m.is_ignored)
+            .count();
+
+        if non_ign > bases_after_current {
+            consumed += 1;
+        } else {
+            break;
+        }
+    }
+    consumed
+}
 
 impl OpenJTalk {
     pub(crate) fn assign_and_merge_phonemes<T: WordPhonemeEntry>(
@@ -113,11 +388,12 @@ impl OpenJTalk {
         }
     }
 
-    pub(crate) fn make_phoneme_mapping(
-        &mut self,
+    #[inline(always)]
+    pub(crate) fn make_phoneme_mapping<T: IntoPhonemeMapItem>(
+        &self,
         morphs: Vec<MecabMorph>,
-        mapping: Vec<WordPhonemePair>,
-    ) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
+        mapping: Vec<T>,
+    ) -> Result<Vec<T::Output>, HaqumeiError> {
         let mut result = Vec::with_capacity(morphs.len());
         let mut morph_idx = 0;
         let mapping_len = mapping.len();
@@ -126,200 +402,33 @@ impl OpenJTalk {
             // is_ignored な Morph を先に進めておく
             while let Some(m) = morphs.get(morph_idx) {
                 if m.is_ignored {
-                    result.push(WordPhonemeMap {
-                        word: m.surface.clone(),
-                        phonemes: vec!["sp".to_string()],
-                        is_unknown: m.is_unknown,
-                        is_ignored: true,
-                    });
+                    result.push(T::new_ignored(m.surface.clone(), m.is_unknown));
                     morph_idx += 1;
                 } else {
                     break;
                 }
             }
 
-            // morphs が尽きた場合: 後処理で feature 数が変動しうるため出力を継続
+            // morphs が尽きた場合
             if morph_idx >= morphs.len() {
-                let is_ignored = map.phonemes.is_empty();
-                result.push(WordPhonemeMap {
-                    word: map.word,
-                    phonemes: map.phonemes,
-                    is_unknown: false,
-                    is_ignored,
-                });
+                result.push(map.into_unmatched_remainder());
                 continue;
             }
 
             let morph = &morphs[morph_idx];
 
-            if map.word == morph.surface {
-                // 完全一致: morph と NJD feature の surface が一致
-                let mut phonemes = map.phonemes.clone();
-
-                if morph.is_unknown {
-                    // 先頭の長音のような Open JTalk が破棄するもの、
-                    // または pau に置き換えられた未知語は unk にしておく
-                    if phonemes.is_empty() || phonemes == ["pau"] {
-                        phonemes = vec!["unk".to_string()];
-                    }
-                }
-
-                result.push(WordPhonemeMap {
-                    word: map.word,
-                    phonemes,
-                    is_unknown: morph.is_unknown,
-                    is_ignored: map.phonemes.is_empty(),
-                });
-                morph_idx += 1;
-            } else if map.word.starts_with(&morph.surface) {
-                // 先頭一致: NJD が複数の morph を結合したケース
-                let mut is_unknown_word = false;
-                let mut matched_len = 0;
-
-                while let Some(inner_morph) = morphs.get(morph_idx) {
-                    if inner_morph.is_ignored {
-                        result.push(WordPhonemeMap {
-                            word: inner_morph.surface.clone(),
-                            phonemes: vec!["sp".to_string()],
-                            is_unknown: inner_morph.is_unknown,
-                            is_ignored: true,
-                        });
-                        morph_idx += 1;
-                        continue;
-                    }
-
-                    let remaining = &map.word[matched_len..];
-
-                    if remaining.starts_with(&inner_morph.surface) {
-                        is_unknown_word |= inner_morph.is_unknown;
-                        matched_len += inner_morph.surface.len();
-                        morph_idx += 1;
-
-                        if matched_len == map.word.len() {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                let mut phonemes = map.phonemes.clone();
-                let is_ignored = phonemes.is_empty();
-                adjust_unknown_phonemes(&mut phonemes, is_unknown_word);
-
-                result.push(WordPhonemeMap {
-                    word: map.word,
-                    phonemes,
-                    is_unknown: is_unknown_word,
-                    is_ignored,
-                });
-            } else {
-                // 不一致: 数字正規化・踊り字展開等で surface が変化したケース
-                result.push(WordPhonemeMap {
-                    word: map.word.clone(),
-                    phonemes: map.phonemes.clone(),
-                    is_unknown: false,
-                    is_ignored: map.phonemes.is_empty(),
-                });
-
-                if has_odori_chars(&morph.surface) {
-                    morph_idx += consume_odori_morphs(&morphs, morph_idx, &map.word);
-                } else {
-                    morph_idx +=
-                        consume_mismatched_morphs(&morphs, morph_idx, mapping_len - idx - 1);
-                }
-            }
-        }
-
-        // mapping 終了後、morphs の末尾に無視トークン(空白等)が残っていれば回収する
-        while let Some(m) = morphs.get(morph_idx) {
-            if m.is_ignored {
-                result.push(WordPhonemeMap {
-                    word: m.surface.clone(),
-                    phonemes: vec!["sp".to_string()],
-                    is_unknown: m.is_unknown,
-                    is_ignored: true,
-                });
-            }
-            morph_idx += 1;
-        }
-
-        Ok(result)
-    }
-
-    pub(crate) fn make_phoneme_mapping_detailed(
-        &mut self,
-        morphs: Vec<MecabMorph>,
-        mapping: Vec<WordPhonemeDetail>,
-    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
-        let mut result = Vec::with_capacity(morphs.len());
-        let mut morph_idx = 0;
-        let mapping_len = mapping.len();
-
-        // 無視トークン(sp)用のダミー値エントリ生成クロージャ
-        let sp_entry = |surface: String, is_unknown: bool| WordPhonemeDetail {
-            word: surface.clone(),
-            phonemes: vec!["sp".to_string()],
-            features: Vec::new(),
-            pos: "記号".to_string(),
-            pos_group1: "空白".to_string(),
-            pos_group2: "*".to_string(),
-            pos_group3: "*".to_string(),
-            ctype: "*".to_string(),
-            cform: "*".to_string(),
-            orig: surface.clone(),
-            read: surface.clone(),
-            pron: surface,
-            accent_nucleus: 0,
-            mora_count: 0,
-            chain_rule: "*".to_string(),
-            chain_flag: -1,
-            is_unknown,
-            is_ignored: true,
-        };
-
-        for (base_idx, mut map) in mapping.into_iter().enumerate() {
-            while let Some(m) = morphs.get(morph_idx) {
-                if m.is_ignored {
-                    result.push(sp_entry(m.surface.clone(), m.is_unknown));
-                    morph_idx += 1;
-                } else {
-                    break;
-                }
-            }
-
-            if morph_idx >= morphs.len() {
-                map.is_ignored = map.phonemes.is_empty();
-                result.push(map);
-                continue;
-            }
-
-            let current_map_word = map.word.clone();
-            let morph = &morphs[morph_idx];
-
-            if current_map_word == morph.surface {
+            if map.word() == morph.surface {
                 // 完全一致
-                let mut phonemes = map.phonemes.clone();
-                if morph.is_unknown && (phonemes.is_empty() || phonemes == ["pau"]) {
-                    phonemes = vec!["unk".to_string()];
-                }
-
-                map.phonemes = phonemes;
-                map.is_unknown = morph.is_unknown;
-                map.is_ignored = map.phonemes.is_empty();
-
-                map.features = morph.feature.split(',').map(|s| s.to_string()).collect();
-
-                result.push(map);
+                result.push(map.into_exact_match(morph));
                 morph_idx += 1;
-            } else if current_map_word.starts_with(&morph.surface) {
+            } else if map.word().starts_with(&morph.surface) {
                 // 先頭一致
                 let mut is_unknown_word = false;
                 let mut matched_len = 0;
 
                 while let Some(inner_morph) = morphs.get(morph_idx) {
                     if inner_morph.is_ignored {
-                        result.push(sp_entry(
+                        result.push(T::new_ignored(
                             inner_morph.surface.clone(),
                             inner_morph.is_unknown,
                         ));
@@ -327,14 +436,14 @@ impl OpenJTalk {
                         continue;
                     }
 
-                    let remaining = &current_map_word[matched_len..];
+                    let remaining = &map.word()[matched_len..];
 
                     if remaining.starts_with(&inner_morph.surface) {
                         is_unknown_word |= inner_morph.is_unknown;
                         matched_len += inner_morph.surface.len();
                         morph_idx += 1;
 
-                        if matched_len == current_map_word.len() {
+                        if matched_len == map.word().len() {
                             break;
                         }
                     } else {
@@ -342,37 +451,25 @@ impl OpenJTalk {
                     }
                 }
 
-                let mut phonemes = map.phonemes.clone();
-                if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
-                    phonemes = vec!["unk".to_string()];
-                }
-
-                map.phonemes = phonemes;
-                map.is_unknown = is_unknown_word;
-                map.is_ignored = map.phonemes.is_empty();
-                // 複数結合された場合は features を空にする
-                map.features = Vec::new();
-
-                result.push(map);
+                result.push(map.into_prefix_match(is_unknown_word));
             } else {
                 // 不一致 (踊り字展開など)
-                map.is_unknown = false;
-                map.is_ignored = map.phonemes.is_empty();
-                map.features = Vec::new();
-                result.push(map);
-
+                // map を into_mismatch で消費する前に、借用して文字列を参照する
                 if has_odori_chars(&morph.surface) {
-                    morph_idx += consume_odori_morphs(&morphs, morph_idx, &current_map_word);
+                    morph_idx += consume_odori_morphs(&morphs, morph_idx, map.word());
                 } else {
                     morph_idx +=
-                        consume_mismatched_morphs(&morphs, morph_idx, mapping_len - base_idx - 1);
+                        consume_mismatched_morphs(&morphs, morph_idx, mapping_len - idx - 1);
                 }
+
+                result.push(map.into_mismatch());
             }
         }
 
+        // 余った ignored morphs を回収
         while let Some(m) = morphs.get(morph_idx) {
             if m.is_ignored {
-                result.push(sp_entry(m.surface.clone(), m.is_unknown));
+                result.push(T::new_ignored(m.surface.clone(), m.is_unknown));
             }
             morph_idx += 1;
         }
