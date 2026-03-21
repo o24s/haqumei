@@ -138,7 +138,8 @@ Please note that `sp` does not refer to raw space characters in the input, but r
 - **Unknown words**: `unk`
 - **Spaces, etc.**: `sp` (Space)
 
-Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
+Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`). Additionally, using `g2p_mapping_detailed` allows you to retrieve not only the mapping but also part-of-speech information and accent details.
+
 
 ```rust
 use haqumei::Haqumei;
@@ -174,6 +175,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //     is_unknown: false,
   //     is_ignored: false,
   // }, ... ]
+
+  println!("{:?}", haqumei.g2p_mapping_detailed("薄明")?);
+  // [WordPhonemeDetail {
+  //    word: "薄明",
+  //    phonemes: ["h","a","k","u","m","e","e"],
+  //    features: [
+  //        "薄明",
+  //        "名詞",
+  //        "一般",
+  //        "*",
+  //        "*",
+  //        "*",
+  //        "*",
+  //        "薄明",
+  //        "ハクメイ",
+  //        "ハクメー",
+  //        "0/4",
+  //        "C2",
+  //    ],
+  //    pos: "名詞",
+  //    pos_group1: "一般",
+  //    pos_group2: "*",
+  //    pos_group3: "*",
+  //    ctype: "*",
+  //    cform: "*",
+  //    orig: "薄明",
+  //    read: "ハクメイ",
+  //    pron: "ハクメー",
+  //    accent_nucleus: 0,
+  //    mora_count: 4,
+  //    chain_rule: "C2",
+  //    chain_flag: -1,
+  //    is_unknown: false,
+  //    is_ignored: false,
+  // }
+  // ```
 }
 ```
 
