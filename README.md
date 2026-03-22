@@ -138,7 +138,8 @@ Please note that `sp` does not refer to raw space characters in the input, but r
 - **Unknown words**: `unk`
 - **Spaces, etc.**: `sp` (Space)
 
-Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`). Additionally, using `g2p_mapping_detailed` allows you to retrieve not only the mapping but also part-of-speech information and accent details.
+Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
+In addition, using `g2p_mapping_detailed` allows you to retrieve not only the mapping but also part-of-speech information and accent details.
 
 
 ```rust
@@ -209,8 +210,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    chain_flag: -1,
   //    is_unknown: false,
   //    is_ignored: false,
-  // }
-  // ```
+  // }]
 }
 ```
 

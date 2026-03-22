@@ -207,8 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    chain_flag: -1,
   //    is_unknown: false,
   //    is_ignored: false,
-  // }
-  // ```
+  // }]
 }
 ```
 
