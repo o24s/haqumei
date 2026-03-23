@@ -40,6 +40,19 @@ pub fn is_dakuon(c: char) -> bool {
     )
 }
 
+/// デフォルトの「pau を割り当てない記号」の判定関数。
+/// 括弧類など、音声として休止を置くべきでなさそうな記号に対して `true` を返します。
+#[rustfmt::skip]
+pub fn default_is_non_pause_symbol(s: &str) -> bool {
+    matches!(
+        s,
+        "「" | "」" | "『" | "』" | "（" | "）" | "(" | ")" |
+        "【" | "】" | "［" | "］" | "[" | "]" | "〈" | "〉" |
+        "《" | "》" | "〔" | "〕" | "｛" | "｝" | "{" | "}" |
+        "\"" | "\'" | "”" | "“" | "’" | "‘"
+    )
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub(crate) enum Dan {

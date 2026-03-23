@@ -78,6 +78,7 @@ use crate::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
     },
+    utils::default_is_non_pause_symbol,
 };
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> =
@@ -98,6 +99,8 @@ pub struct Haqumei {
     options: HaqumeiOptions,
 }
 
+/// `Haqumei` の設定。
+/// 詳細は、それぞれのフィールドのドキュメントを見てください。
 #[derive(Debug, Clone, Copy)]
 pub struct HaqumeiOptions {
     /// 入力テキストを [UnicodeNormalization] の指定された方法で正規化する。
@@ -174,6 +177,33 @@ pub struct HaqumeiOptions {
     ///
     /// デフォルトで有効になっています。
     pub process_odoriji: bool,
+
+    /// NJD は未知語や多くの記号を読点として扱うが、`*_detailed` な関数において、
+    /// 実際には音素 `pau` を割り当てるべきでない記号の判定関数を設定するフィールド。
+    ///
+    /// `true` を返した記号には `pau` が付与されません。
+    /// 閉じ括弧に `pau` を割り当てたくないようなケースに使ってください。
+    ///
+    /// デフォルトでは、以下の表層系に `pau` が割り当てられません。
+    /// `「` , `」` , `『` , `』` , `（` , `）` , `(` , `)` ,
+    /// `【` , `】` , `［` , `］` , `[` , `]` , `〈` , `〉` ,
+    /// `《` , `》` , `〔` , `〕` , `｛` , `｝` , `{` , `}` ,
+    /// `"` , `'` , `”` , `“` , `’` , `‘`
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use haqumei::utils::default_is_non_pause_symbol;
+    ///
+    /// fn my_custom_pause_rule(s: &str) -> bool {
+    ///     if s == "「" {
+    ///         return false; // false を返すと pau が割り当てられる
+    ///     }
+    ///     // それ以外はデフォルトの挙動を継承
+    ///     default_is_non_pause_symbol(s)
+    /// }
+    /// ```
+    pub is_non_pause_symbol: fn(&str) -> bool,
 }
 
 impl Default for HaqumeiOptions {
@@ -189,6 +219,7 @@ impl Default for HaqumeiOptions {
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
             process_odoriji: true,
+            is_non_pause_symbol: default_is_non_pause_symbol,
         }
     }
 }
@@ -458,7 +489,8 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        self.open_jtalk.g2p_pairs_inner(&features)
+        self.open_jtalk
+            .g2p_pairs_inner(&features, self.options.is_non_pause_symbol)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを未知語などの情報とともに返します。
@@ -561,7 +593,9 @@ impl Haqumei {
             self.revert_pron_to_read(&mut njd_features);
         }
 
-        let mapping = self.open_jtalk.g2p_pairs_inner(&njd_features)?;
+        let mapping = self
+            .open_jtalk
+            .g2p_pairs_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
         self.open_jtalk.make_phoneme_mapping(morphs, mapping)
     }
@@ -635,7 +669,9 @@ impl Haqumei {
         // normalize_unicode_if_needed, revert_pron_to_read はここで実行される
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self.open_jtalk.g2p_mapping_inner(&njd_features)?;
+        let mapping = self
+            .open_jtalk
+            .g2p_mapping_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
         self.open_jtalk.make_phoneme_mapping(morphs, mapping)
     }

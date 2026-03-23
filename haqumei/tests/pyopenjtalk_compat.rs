@@ -1,3 +1,6 @@
+//! pyopenjtalk-plus のテスト移植。
+//! 設計思想が異なるために結果が変わるテストは移植していません。
+
 #[cfg(test)]
 mod tests {
     use haqumei::{
@@ -639,18 +642,6 @@ mod tests {
         assert_eq!(mapping[0].phonemes, ["a"]);
         assert_eq!(mapping[1].word, "。");
         assert_eq!(mapping[1].phonemes, ["pau"]);
-    }
-
-    #[test]
-    fn test_make_phoneme_mapping_pause_like_symbols() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mapping = ojt.g2p_pairs("（テスト・ケース）").unwrap();
-        assert_eq!(mapping[0].word, "（");
-        assert_eq!(mapping[0].phonemes, ["pau"]);
-        assert_eq!(mapping[1].word, "テスト");
-        assert_eq!(mapping[1].phonemes, ["t", "e", "s", "U", "t", "o"]);
-        assert_eq!(mapping[2].word, "・");
-        assert_eq!(mapping[2].phonemes, ["pau"]);
     }
 
     #[test]

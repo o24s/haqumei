@@ -6,7 +6,10 @@ mod tests {
         sync::LazyLock,
     };
 
-    use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk, UnicodeNormalization, errors::HaqumeiError};
+    use haqumei::{
+        Haqumei, HaqumeiOptions, OpenJTalk, UnicodeNormalization, errors::HaqumeiError,
+        utils::default_is_non_pause_symbol,
+    };
     use unicode_normalization::UnicodeNormalization as _;
 
     static MANIFEST_DIR: LazyLock<&Path> = LazyLock::new(|| Path::new(env!("CARGO_MANIFEST_DIR")));
@@ -187,15 +190,17 @@ mod tests {
 
         for (details_hq, details_ojt) in result_hq.into_iter().zip(result_ojt) {
             for (detail_hq, detail_ojt) in details_hq.clone().into_iter().zip(details_ojt) {
-                // 先頭の長音記号などは、未知語かつ無視される対象であるが、
-                // 未知語でない無視されるトークンはおそらく空白のみである
-                if detail_hq.is_ignored && !detail_hq.is_unknown {
-                    assert_eq!(detail_hq.phonemes, &["sp"]);
+                // `is_ignored` であるとき、空白として追加された sp か、NJDが割り当てなかった場合である
+                if detail_hq.is_ignored {
+                    assert!(detail_hq.phonemes == ["sp"] || detail_hq.phonemes.is_empty());
                 }
                 if detail_hq.is_unknown {
                     // 未知語の場合：
-                    // 「unk」であるか、あるいは OpenJTalk が推論した音素が入っているはず。
+                    // 「unk」であるか、あるいは Open JTalk が推論した音素が入っているはず。
                     // 少なくとも空配列や、フォールバックされただけの pau であってはならない。
+                    //
+                    // また、先頭一致のマッピング処理において `is_unknown` と異なって `is_ignored` は伝播しない。
+                    // なので、`is_unknown` かつ `is_ignored` である際に、`unk` に置き換える処理が正当化される。
                     assert!(
                         detail_hq.phonemes == ["unk"]
                             || (!detail_hq.phonemes.is_empty() && detail_hq.phonemes != ["pau"]),
@@ -203,16 +208,26 @@ mod tests {
                         detail_hq.word,
                         detail_hq.phonemes
                     );
+
+                    // 少なくとも、`is_ignored` かつ 未知語であれば、
+                    // `unk` でなければならない。
+                    //
+                    // (detailed API で音響モデルが未知語を pau として受け取ると精度にもよくないため)
+                    if detail_hq.is_ignored {
+                        assert_eq!(detail_hq.phonemes, ["unk"]);
+                    }
                 }
-                // 先頭の長音記号などは、未知語かつ無視される対象であるが、
-                // 未知語でない無視されるトークンはおそらく空白のみである
-                if detail_ojt.is_ignored && !detail_ojt.is_unknown {
-                    assert_eq!(detail_hq.phonemes, &["sp"]);
+                // is_ignored であるとき、空白として追加された sp か、NJDが割り当てなかった場合である
+                if detail_ojt.is_ignored {
+                    assert!(detail_ojt.phonemes == ["sp"] || detail_ojt.phonemes.is_empty());
                 }
                 if detail_ojt.is_unknown {
                     // 未知語の場合：
                     // 「unk」であるか、あるいは OpenJTalk が推論した音素が入っているはず。
                     // 少なくとも空配列や、フォールバックされただけの pau であってはならない。
+
+                    // また、先頭一致のマッピング処理において `is_unknown` と異なって `is_ignored` は伝播しない。
+                    // なので、`is_unknown` かつ `is_ignored` である際に、`unk` に置き換える処理が正当化される。
                     assert!(
                         detail_ojt.phonemes == ["unk"]
                             || (!detail_ojt.phonemes.is_empty() && detail_ojt.phonemes != ["pau"]),
@@ -220,6 +235,12 @@ mod tests {
                         detail_ojt.word,
                         detail_ojt.phonemes
                     );
+
+                    // 少なくとも、`is_ignored` かつ 未知語であれば、
+                    // `unk` でなければならない。
+                    if detail_ojt.is_ignored {
+                        assert_eq!(detail_ojt.phonemes, ["unk"]);
+                    }
                 }
             }
         }
@@ -229,7 +250,7 @@ mod tests {
     fn test_mapping_nightmare_case() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "\
-つまみ出されようとしたが、「「八十五歳」」にもなる 長老 に助けられた。\
+つまみ出されようとしたが、「「八十五歳」」にもなる 長老ー ー に助けられた。\
 わーいです。そこで、𰻞𰻞麺とお冷を飲み食いしたです。\
 ーっ、 𰻞ー𰻞。あ、はい。あーーーーーーーーあ\
 叙々々々々々々苑々々様々々要所々々々々々槇野々々々\
@@ -257,19 +278,20 @@ mod tests {
             ("た", vec!["t", "a"]),
             ("が", vec!["g", "a"]),
             ("、", vec!["pau"]),
-            ("「", vec!["pau"]),
-            ("「", vec!["pau"]),
+            ("「", vec![]),
+            ("「", vec![]),
             ("八", vec!["h", "a", "ch", "i"]),
             ("十", vec!["j", "u", "u"]),
             ("五", vec!["g", "o"]),
             ("歳", vec!["s", "a", "i"]),
-            ("」", vec!["pau"]),
-            ("」", vec!["pau"]),
+            ("」", vec![]),
+            ("」", vec![]),
             ("に", vec!["n", "i"]),
             ("も", vec!["m", "o"]),
             ("なる", vec!["n", "a", "r", "u"]),
             ("\u{3000}", vec!["sp"]),
-            ("長老", vec!["ch", "o", "o", "r", "o", "o"]),
+            ("長老ーー", vec!["ch", "o", "o", "r", "o", "o", "o", "o"]),
+            ("\u{3000}", vec!["sp"]),
             ("\u{3000}", vec!["sp"]),
             ("に", vec!["n", "i"]),
             ("助け", vec!["t", "a", "s", "U", "k", "e"]),
@@ -332,6 +354,126 @@ mod tests {
         ];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_custom_pause_symbol_config() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "「あ」";
+
+        // デフォルトでは「default_is_non_pause_symbol」が使用され、
+        // 括弧類には pau が割り当てられません。
+        let mapping_default = haqumei.g2p_mapping(text).unwrap();
+
+        assert_eq!(mapping_default[0].word, "「");
+        assert!(mapping_default[0].phonemes.is_empty(),);
+        assert!(mapping_default[0].is_ignored);
+
+        // 「開き括弧『「』だけはポーズとして扱いたい」という独自のルールを作成
+        fn my_custom_pause_rule(s: &str) -> bool {
+            if s == "「" {
+                return false; // false を返すと pau が割り当てられる
+            }
+            // それ以外はデフォルトの挙動を継承
+            default_is_non_pause_symbol(s)
+        }
+
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            is_non_pause_symbol: my_custom_pause_rule,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let mapping_custom = haqumei.g2p_mapping(text).unwrap();
+
+        // 開き括弧 「
+        assert_eq!(mapping_custom[0].word, "「");
+        assert_eq!(
+            mapping_custom[0].phonemes,
+            vec!["pau".to_string()],
+            "カスタム関数により開き括弧に pau が付与されていること"
+        );
+        assert!(
+            !mapping_custom[0].is_ignored,
+            "pau があるので ignored ではなくなる"
+        );
+
+        // 中身の 「あ」
+        assert_eq!(mapping_custom[1].word, "あ");
+        assert_eq!(mapping_custom[1].phonemes, vec!["a".to_string()]);
+
+        // 閉じ括弧 」
+        assert_eq!(mapping_custom[2].word, "」");
+        assert!(
+            mapping_custom[2].phonemes.is_empty(),
+            "閉じ括弧はカスタム関数でも true (non-pause) を返すため、空のままであること"
+        );
+        assert!(mapping_custom[2].is_ignored);
+    }
+
+    #[test]
+    fn test_all_pause_denied_config() {
+        // すべての記号に対して true (non-pause) を返す極端な設定
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            is_non_pause_symbol: |_| true,
+            ..Default::default()
+        })
+        .unwrap();
+        let text = "あ、い。";
+
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        assert_eq!(mapping[0].word, "あ");
+        assert_eq!(mapping[0].phonemes, vec!["a".to_string()]);
+
+        assert_eq!(mapping[1].word, "、");
+        assert!(
+            mapping[1].phonemes.is_empty(),
+            "コンフィグにより pau が除去されていること"
+        );
+        assert!(mapping[1].is_ignored);
+
+        assert_eq!(mapping[2].word, "い");
+        assert_eq!(mapping[2].phonemes, vec!["i".to_string()]);
+
+        assert_eq!(mapping[3].word, "。");
+        assert!(
+            mapping[3].phonemes.is_empty(),
+            "コンフィグにより pau が除去されていること"
+        );
+        assert!(mapping[3].is_ignored);
+
+        assert_eq!(mapping.len(), 4);
+    }
+
+    #[test]
+    fn test_mapping_complex_punctuation() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "「東京」、大阪」…、…あ";
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        let kagi_close_1 = mapping.iter().find(|m| m.word == "」").unwrap();
+        let touten_1 = mapping.iter().find(|m| m.word == "、").unwrap();
+
+        // 括弧類はデフォルト(default_is_non_pause_symbol) では pau が割り当てられない
+        assert_eq!(kagi_close_1.phonemes, &[] as &[String]);
+        assert_eq!(touten_1.phonemes, vec!["pau"]);
+
+        let osaka_idx = mapping.iter().position(|m| m.word == "大阪").unwrap();
+
+        assert_eq!(mapping[osaka_idx + 1].word, "」");
+        assert_eq!(mapping[osaka_idx + 1].phonemes, &[] as &[String]);
+
+        // `…` は pause のように機能する記号である気がするし、
+        // これをフィルタリングするのは G2P の責務ではない
+        assert_eq!(mapping[osaka_idx + 2].word, "…");
+        assert_eq!(mapping[osaka_idx + 2].phonemes, &["pau"]);
+
+        assert_eq!(mapping[osaka_idx + 3].word, "、");
+        assert_eq!(mapping[osaka_idx + 3].phonemes, &["pau"]);
+
+        assert_eq!(mapping[osaka_idx + 4].word, "…");
+        assert_eq!(mapping[osaka_idx + 4].phonemes, &["pau"]);
     }
 
     #[test]
@@ -567,5 +709,96 @@ mod tests {
                 text
             );
         }
+    }
+
+    #[test]
+    fn test_mapping_merged_internal_spaces() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "なる　長老ー　ー　に";
+
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        // 期待される順序:
+        // 0: なる
+        // 1: sp (sp1)
+        // 2: 長老ーー (結合された単語)
+        // 3: sp (sp2 - 単語の中にあった空白)
+        // 4: sp (sp3 - 単語の後にあった空白)
+        // 5: に
+
+        assert_eq!(mapping[0].word, "なる");
+        assert_eq!(mapping[1].word, "\u{3000}"); // sp1
+        assert!(mapping[1].is_ignored);
+
+        assert_eq!(mapping[2].word, "長老ーー"); // 結合語
+        assert_eq!(mapping[2].phonemes.len(), 8); // ch o o r o o o o (長音2つ分)
+
+        assert_eq!(mapping[3].word, "\u{3000}"); // sp2 (内部にあった空白が後に回る)
+        assert!(mapping[3].is_ignored);
+
+        assert_eq!(mapping[4].word, "\u{3000}"); // sp3
+        assert!(mapping[4].is_ignored);
+
+        assert_eq!(mapping[5].word, "に");
+    }
+
+    /// 3つ以上の結合 + 複数の内部空白
+    #[test]
+    fn test_mapping_triple_merge_with_multiple_spaces() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "あー　ー　ー";
+
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        // 期待される順序:
+        // 0: あーーー (すべて結合)
+        // 1: sp (sp1)
+        // 2: sp (sp2)
+
+        assert_eq!(mapping[0].word, "あーーー");
+        assert_eq!(mapping[1].word, "\u{3000}");
+        assert_eq!(mapping[2].word, "\u{3000}");
+        assert_eq!(mapping.len(), 3);
+    }
+
+    /// 未知語 + 空白 + 長音 (未知語は音素がないため、長音を吸収せず分離される)
+    #[test]
+    fn test_mapping_unknown_merged_with_space() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "𰻞　ー";
+
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        // 期待される結果:
+        // 0: 𰻞 (unk)
+        // 1: sp (sp1)
+        // 2: ー (unk)
+
+        assert_eq!(mapping[0].word, "𰻞");
+        assert_eq!(mapping[0].phonemes, vec!["unk".to_string()]);
+
+        assert_eq!(mapping[1].word, "\u{3000}");
+
+        assert_eq!(mapping[2].word, "ー");
+        assert_eq!(mapping[2].phonemes, vec!["unk".to_string()]);
+
+        assert_eq!(mapping.len(), 3);
+    }
+
+    /// 文頭・文末の空白がマージに巻き込まれないことの確認
+    #[test]
+    fn test_mapping_merged_word_boundary_spaces() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "　あーー　";
+
+        let mapping = haqumei.g2p_mapping(text).unwrap();
+
+        // 0: sp (sp1)
+        // 1: あーー
+        // 2: sp (sp2)
+
+        assert_eq!(mapping[0].word, "\u{3000}");
+        assert_eq!(mapping[1].word, "あーー");
+        assert_eq!(mapping[2].word, "\u{3000}");
     }
 }

@@ -1,6 +1,6 @@
 use ::haqumei::{
     Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeMap, WordPhonemePair,
-    open_jtalk::Dictionary,
+    open_jtalk::Dictionary, utils::default_is_non_pause_symbol,
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -487,6 +487,7 @@ impl PyHaqumei {
             retreat_acc_nuc,
             modify_acc_after_chaining,
             process_odoriji,
+            is_non_pause_symbol: default_is_non_pause_symbol,
         };
 
         let inner = Haqumei::with_options(options).map_err(to_py_err)?;

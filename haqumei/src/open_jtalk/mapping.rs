@@ -130,7 +130,10 @@ impl IntoPhonemeMapItem for WordPhonemePair {
     fn into_prefix_match(self, is_unknown_word: bool) -> Self::Output {
         let mut phonemes = self.phonemes;
         let is_ignored = phonemes.is_empty();
-        adjust_unknown_phonemes(&mut phonemes, is_unknown_word);
+
+        if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
+            phonemes = vec!["unk".to_string()];
+        }
 
         WordPhonemeMap {
             word: self.word,
@@ -223,14 +226,7 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
     }
 }
 
-#[inline]
-pub(super) fn adjust_unknown_phonemes(phonemes: &mut Vec<String>, is_unknown: bool) {
-    if is_unknown && (phonemes.is_empty() || *phonemes == ["pau"]) {
-        *phonemes = vec!["unk".to_string()];
-    }
-}
-
-#[inline]
+#[inline(always)]
 pub(super) fn consume_odori_morphs(
     morphs: &[MecabMorph],
     morph_idx: usize,
@@ -246,7 +242,7 @@ pub(super) fn consume_odori_morphs(
     consumed
 }
 
-#[inline]
+#[inline(always)]
 pub(super) fn consume_mismatched_morphs(
     morphs: &[MecabMorph],
     morph_idx: usize,
@@ -287,51 +283,91 @@ pub(super) fn consume_mismatched_morphs(
 }
 
 impl OpenJTalk {
+    pub(crate) fn g2p_pairs_inner(
+        &mut self,
+        njd_features: &[NjdFeature],
+        is_non_pause_symbol: fn(&str) -> bool,
+    ) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
+        let mut mapping: Vec<WordPhonemePair> = njd_features
+            .iter()
+            .map(|f| WordPhonemePair {
+                word: f.string.clone(),
+                phonemes: Vec::new(),
+            })
+            .collect();
+
+        self.assign_and_merge_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
+        Ok(mapping)
+    }
+
+    pub(crate) fn g2p_mapping_inner(
+        &mut self,
+        njd_features: &[NjdFeature],
+        is_non_pause_symbol: fn(&str) -> bool,
+    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
+        let mut mapping: Vec<WordPhonemeDetail> = njd_features
+            .iter()
+            .map(|f| WordPhonemeDetail {
+                word: f.string.clone(),
+                phonemes: Vec::new(),
+                features: Vec::new(),
+                pos: f.pos.clone(),
+                pos_group1: f.pos_group1.clone(),
+                pos_group2: f.pos_group2.clone(),
+                pos_group3: f.pos_group3.clone(),
+                ctype: f.ctype.clone(),
+                cform: f.cform.clone(),
+                orig: f.orig.clone(),
+                read: f.read.clone(),
+                pron: f.pron.clone(),
+                accent_nucleus: f.acc,
+                mora_count: f.mora_size,
+                chain_rule: f.chain_rule.clone(),
+                chain_flag: f.chain_flag,
+                is_unknown: false,
+                is_ignored: false,
+            })
+            .collect();
+
+        self.assign_and_merge_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
+        Ok(mapping)
+    }
+
     pub(crate) fn assign_and_merge_phonemes<T: WordPhonemeEntry>(
         &mut self,
         njd_features: &[NjdFeature],
         mapping: &mut Vec<T>,
+        is_non_pause_symbol: fn(&str) -> bool,
     ) -> Result<(), HaqumeiError> {
         unsafe {
             let ptr_to_idx = self.prepare_jpcommon_label_internal(njd_features)?;
             let jp = self.jp_common.inner.as_mut();
 
-            let mut pause_count = 0;
             for (f_idx, f) in njd_features.iter().enumerate() {
                 let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
-                if is_pause_pron {
+
+                if is_pause_pron && !is_non_pause_symbol(&f.string) {
                     mapping[f_idx].phonemes_mut().push("pau".to_string());
-                    pause_count += 1;
                 }
             }
-
-            let needs_merge = njd_features.len() > ptr_to_idx.len() + pause_count;
 
             let mut p = (*jp.label).phoneme_head;
             while !p.is_null() {
                 let s_ptr = (*p).phoneme;
                 if !s_ptr.is_null() {
-                    let s = CStr::from_ptr(s_ptr).to_string_lossy().into_owned();
+                    let s = CStr::from_ptr(s_ptr).to_string_lossy();
 
-                    if s == "pau" {
-                        p = (*p).next;
-                        continue;
-                    }
-
-                    let mut current_word_ptr = 0usize;
-                    let mora = (*p).up;
-                    if !mora.is_null() {
-                        let word = (*mora).up;
-                        if !word.is_null() {
-                            current_word_ptr = word as usize;
+                    if s != "pau" {
+                        let mora = (*p).up;
+                        if !mora.is_null() {
+                            let word = (*mora).up;
+                            if !word.is_null()
+                                && let Some(&idx) = ptr_to_idx.get(&(word as usize))
+                                && let Some(target) = mapping.get_mut(idx)
+                            {
+                                target.phonemes_mut().push(s.into_owned());
+                            }
                         }
-                    }
-
-                    if current_word_ptr != 0
-                        && let Some(&idx) = ptr_to_idx.get(&current_word_ptr)
-                        && let Some(target) = mapping.get_mut(idx)
-                    {
-                        target.phonemes_mut().push(s);
                     }
                 }
                 p = (*p).next;
@@ -353,36 +389,38 @@ impl OpenJTalk {
             // - た: [t a]
             //
             // 音素が空になった "う" を先行する "れよ" に結合する。
-            if needs_merge {
-                let mut write_idx = 0;
-                for read_idx in 0..mapping.len() {
-                    let mut should_merge = false;
+            // このとき、`njd_features` の "う" の pron は長音に置き換えられている。
+            let mut write_idx = 0;
+            for read_idx in 0..mapping.len() {
+                let mut should_merge = false;
 
-                    if read_idx > 0 && mapping[read_idx].phonemes().is_empty() {
+                if read_idx > 0 && mapping[read_idx].phonemes().is_empty() {
+                    let pron = &njd_features[read_idx].pron;
+                    let is_absorbed_long_vowel =
+                        !pron.is_empty() && pron.chars().all(|c| c == 'ー');
+
+                    if is_absorbed_long_vowel {
                         let prev_phonemes = mapping[write_idx - 1].phonemes();
                         let prev_is_pause = prev_phonemes.len() == 1 && prev_phonemes[0] == "pau";
 
-                        if !prev_is_pause {
+                        if !prev_is_pause && !prev_phonemes.is_empty() {
                             should_merge = true;
                         }
                     }
-
-                    if should_merge {
-                        let (left, right) = mapping.split_at_mut(read_idx);
-                        let prev = &mut left[write_idx - 1];
-                        let current = &mut right[0];
-
-                        prev.merge_from(current);
-                        continue;
-                    }
-
-                    if write_idx != read_idx {
-                        mapping.swap(write_idx, read_idx);
-                    }
-                    write_idx += 1;
                 }
-                mapping.truncate(write_idx);
+
+                if should_merge {
+                    let (left, right) = mapping.split_at_mut(read_idx);
+                    left[write_idx - 1].merge_from(&mut right[0]);
+                    continue;
+                }
+
+                if write_idx != read_idx {
+                    mapping.swap(write_idx, read_idx);
+                }
+                write_idx += 1;
             }
+            mapping.truncate(write_idx);
 
             Ok(())
         }
@@ -425,10 +463,11 @@ impl OpenJTalk {
                 // 先頭一致
                 let mut is_unknown_word = false;
                 let mut matched_len = 0;
+                let mut internal_ignored = Vec::new();
 
                 while let Some(inner_morph) = morphs.get(morph_idx) {
                     if inner_morph.is_ignored {
-                        result.push(T::new_ignored(
+                        internal_ignored.push(T::new_ignored(
                             inner_morph.surface.clone(),
                             inner_morph.is_unknown,
                         ));
@@ -452,6 +491,7 @@ impl OpenJTalk {
                 }
 
                 result.push(map.into_prefix_match(is_unknown_word));
+                result.extend(internal_ignored);
             } else {
                 // 不一致 (踊り字展開など)
                 // map を into_mismatch で消費する前に、借用して文字列を参照する

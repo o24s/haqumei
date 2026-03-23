@@ -15,6 +15,7 @@ use crate::open_jtalk::{
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
+use crate::utils::default_is_non_pause_symbol;
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use arc_swap::ArcSwap;
@@ -500,7 +501,7 @@ impl OpenJTalk {
             return Ok(Vec::new());
         }
 
-        self.g2p_pairs_inner(&njd_features)
+        self.g2p_pairs_inner(&njd_features, default_is_non_pause_symbol)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを返します。
@@ -578,7 +579,7 @@ impl OpenJTalk {
             return Ok(Vec::new());
         }
 
-        let pairs = self.g2p_pairs_inner(&njd_features)?;
+        let pairs = self.g2p_pairs_inner(&njd_features, default_is_non_pause_symbol)?;
 
         self.make_phoneme_mapping(morphs, pairs)
     }
@@ -649,57 +650,9 @@ impl OpenJTalk {
         }
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self.g2p_mapping_inner(&njd_features)?;
+        let mapping = self.g2p_mapping_inner(&njd_features, default_is_non_pause_symbol)?;
 
         self.make_phoneme_mapping(morphs, mapping)
-    }
-
-    pub(crate) fn g2p_pairs_inner(
-        &mut self,
-        njd_features: &[NjdFeature],
-    ) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
-        let mut mapping: Vec<WordPhonemePair> = njd_features
-            .iter()
-            .map(|f| WordPhonemePair {
-                word: f.string.clone(),
-                phonemes: Vec::new(),
-            })
-            .collect();
-
-        self.assign_and_merge_phonemes(njd_features, &mut mapping)?;
-        Ok(mapping)
-    }
-
-    pub(crate) fn g2p_mapping_inner(
-        &mut self,
-        njd_features: &[NjdFeature],
-    ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
-        let mut mapping: Vec<WordPhonemeDetail> = njd_features
-            .iter()
-            .map(|f| WordPhonemeDetail {
-                word: f.string.clone(),
-                phonemes: Vec::new(),
-                features: Vec::new(),
-                pos: f.pos.clone(),
-                pos_group1: f.pos_group1.clone(),
-                pos_group2: f.pos_group2.clone(),
-                pos_group3: f.pos_group3.clone(),
-                ctype: f.ctype.clone(),
-                cform: f.cform.clone(),
-                orig: f.orig.clone(),
-                read: f.read.clone(),
-                pron: f.pron.clone(),
-                accent_nucleus: f.acc,
-                mora_count: f.mora_size,
-                chain_rule: f.chain_rule.clone(),
-                chain_flag: f.chain_flag,
-                is_unknown: false,
-                is_ignored: false,
-            })
-            .collect();
-
-        self.assign_and_merge_phonemes(njd_features, &mut mapping)?;
-        Ok(mapping)
     }
 
     const BUFFER_SIZE: usize = 16384;
