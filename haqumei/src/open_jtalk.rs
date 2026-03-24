@@ -249,27 +249,21 @@ impl OpenJTalk {
                 use std::os::unix::ffi::OsStrExt;
 
                 CString::new(path_str.as_bytes()).map_err(|_| {
-                    HaqumeiError::InvalidDictionaryPath(
-                        path_str.to_string_lossy().to_string()
-                    )
+                    HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
                 })
             }
 
             #[cfg(windows)]
             {
                 let mut s = path_str.to_str().ok_or_else(|| {
-                    HaqumeiError::InvalidDictionaryPath(
-                        path_str.to_string_lossy().to_string()
-                    )
+                    HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
                 })?;
 
                 if let Some(stripped) = s.strip_prefix(r"\\?\") {
                     s = stripped;
                 }
 
-                CString::new(s).map_err(|_| {
-                    HaqumeiError::InvalidDictionaryPath(s.to_string())
-                })
+                CString::new(s).map_err(|_| HaqumeiError::InvalidDictionaryPath(s.to_string()))
             }
         };
 

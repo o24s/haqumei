@@ -30,7 +30,6 @@ static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let is_ci = env::var_os("CI").is_some();
     let is_docs_rs = env::var_os("DOCS_RS").is_some();
     let out_dir = env::var("OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
@@ -38,13 +37,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let has_download = env::var_os("CARGO_FEATURE_DOWNLOAD_DICTIONARY").is_some();
     let has_build = env::var_os("CARGO_FEATURE_BUILD_DICTIONARY").is_some();
 
-    if (has_download && has_build) && !(is_ci || is_docs_rs) {
+    if (has_download && has_build) && !is_docs_rs {
         panic!(
             "The features \"download-dictionary\" and \"build-dictionary\" cannot be enabled simultaneously."
         );
     }
 
-    if !(has_download || has_build || is_ci || is_docs_rs) {
+    if !(has_download || has_build || is_docs_rs) {
         panic!(
             "You must enable either \"download-dictionary\" or \"build-dictionary\" to prepare the dictionary."
         );
@@ -97,7 +96,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     }
 
     #[cfg(feature = "download-dictionary")]
-    if has_download && !(is_ci || is_docs_rs) {
+    if has_download && !is_docs_rs {
         let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
         let mut need_download = true;
 
@@ -348,7 +347,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings to file");
 
-    if is_ci || is_docs_rs {
+    if is_docs_rs {
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             manifest_dir.join("build.rs").display()
