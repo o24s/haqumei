@@ -132,15 +132,14 @@ pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFea
 
 impl Haqumei {
     pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
-        let tokens: Vec<UnidicFeature> = VIBRATO_CACHE
-            .get(text)
-            .unwrap_or({
+        let tokens: Vec<UnidicFeature> = if let Some(rx) = self.rx.take() {
+            rx.recv().unwrap_or_default()
+        } else {
+            VIBRATO_CACHE.get(text).unwrap_or_else(|| {
                 let mut worker = self.tokenizer.as_ref().unwrap().new_worker();
                 vibrato_analysis(&mut worker, text)
             })
-            .into_iter()
-            .filter(|t| MULTI_READ_KANJI_LIST.contains(t.surface.as_str()))
-            .collect();
+        };
 
         if tokens.is_empty() {
             return;

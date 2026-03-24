@@ -5,33 +5,38 @@ macro_rules! impl_batch_method_haqumei {
     ) => {
         $(#[$meta])*
         ///
-        /// `HaqumeiOptions` の `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        /// 有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+        #[doc = concat!(
+            "複数のテキストに対して並行して `",
+            stringify!($batch_method),
+            "` を実行します。"
+        )]
         pub fn $batch_method<S>(&mut self, texts: &[S]) -> Result<Vec<$ret_type>, HaqumeiError>
         where
             S: AsRef<str> + Sync,
         {
-            if !self.options.modify_kanji_yomi {
                 let dict = GLOBAL_MECAB_DICTIONARY.load_full();
                 if !dict.model.is_initialized() {
                     return Err(HaqumeiError::GlobalDictionaryNotInitialized);
                 }
                 let options = self.options;
+                let tokenizer = self.tokenizer.clone(); // かなり無料
 
-                return texts
+                texts
                     .par_iter()
                     .map_init(
-                        || {
-                            let ojt = OpenJTalk::from_shared_dictionary(dict.clone())
-                                .expect("Failed to initialize OpenJTalk worker");
-                            Haqumei::from_open_jtalk(ojt, options).unwrap()
-                        },
-                        |haqumei, text| haqumei.$inner_method(text.as_ref()),
-                    )
-                    .collect();
-            }
-
-            texts.iter().map(|text| self.$inner_method(text.as_ref())).collect()
+                    || {
+                        let ojt = OpenJTalk::from_shared_dictionary(dict.clone())
+                            .expect("Failed to initialize OpenJTalk worker");
+                        Haqumei {
+                            open_jtalk: ojt,
+                            tokenizer: tokenizer.clone(),
+                            rx: None,
+                            options,
+                        }
+                    },
+                    |haqumei, text| haqumei.$inner_method(text.as_ref()),
+                )
+                .collect()
         }
     };
 }

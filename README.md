@@ -253,7 +253,7 @@ Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/
 | **haqumei** (Default) | 1.303 s | 244k chars/s | **1.81x** |
 | **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
 | **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
-| **haqumei** (`g2p_batch`, Heavy) | 2.208 s | 144k chars/s | 1.07x |
+| **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
 The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk).
 
@@ -262,28 +262,9 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
 ### Performance Notes
 
 - **Throughput Variation by Input Structure**:  
-  Compared to `pyopenjtalk`, throughput (chars/s) improves as the average number of characters per line increases. This is due to reduced FFI call overhead and the efficient direct extraction of labels from Open JTalk's internal structures.  
-  When processing large amounts of text, it's most efficient to pass the content in batches at reasonable lengths rather than breaking it into excessively fine-grained lines.
+  Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. This efficiency stems from an implementation that directly extracts labels from Open JTalk's internal structures, combined with minimal FFI overhead. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
 - **Difference Between Default and Heavy**:  
   In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `modify_kanji_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
-
-### Considerations on Heavy Configuration Performance
-
-#### Scaling Limitations of `*_batch` Methods
-
-When the `modify_kanji_yomi` option is enabled, [vibrato-rkyv](https://github.com/stellanomia/vibrato-rkyv) is run concurrently with Mecab to correct readings using Unidic. Because of this, the `*_batch` methods are designed to process sequentially within the same instance.  
-Generating a Unidic tokenizer per thread is inefficient in terms of memory and initialization costs. Parallelizing this would require implementing more advanced multithreading. However, since the significant accuracy improvement from `modify_kanji_yomi` is not clearly demonstrated (as the base `pyopenjtalk-plus` dictionary is already of high quality) and considering the implementation costs, multithreading for the Heavy configuration is currently not implemented.
-
-#### Overhead of the `predict_nani` Feature
-
-`predict_nani` uses ONNX. Since creating an ONNX session per OS thread is a bit wild, a `Mutex` is used to share the session. (While ONNX sessions themselves are thread-safe, the Rust binding `ort` requires exclusive reference for `Session::run` as discussed [here](https://github.com/pykeio/ort/issues/402#issuecomment-2949993914)).  
-Regarding concerns about this becoming a bottleneck: the Nani Predictor itself is extremely lightweight. Also, unless the input contains an unusually massive amount of "何 (nani)", it practically does not affect performance. Furthermore, a concurrency-resilient caching mechanism is in place, providing some tolerance against extreme inputs.  
-In fact, even in the benchmark using "I Am a Cat" (which contains nearly 800 instances of "何"), the difference in execution time between the default setting and the one with `predict_nani` enabled was negligible, confirming it is not a practical bottleneck.
-
-#### Comparison with `pyopenjtalk-plus`
-
-It is known that `pyopenjtalk-plus`, which incorporates reading corrections via Sudachi and the Nani Predictor, is tens to hundreds of times slower than the original [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) (see [voicevox_engine#1486](https://github.com/VOICEVOX/voicevox_engine/issues/1486)). Thus, we believe the current execution speed is quite reasonable.  
-Haqumei runs about 50 times faster than `pyopenjtalk-plus` under a similar Heavy configuration. However, since `pyopenjtalk-plus` achieves slightly higher accuracy using models like [ROHAN4600](https://github.com/mmorise/rohan4600), it is not treated merely as a target for speed comparison. If significant accuracy improvements from Unidic corrections are confirmed in the future, we might pursue more aggressive optimizations or adopt Sudachi similarly to `pyopenjtalk-plus`.
 
 ## Dictionary
 

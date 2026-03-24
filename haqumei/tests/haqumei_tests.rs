@@ -378,11 +378,7 @@ mod tests {
             default_is_non_pause_symbol(s)
         }
 
-        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
-            is_non_pause_symbol: my_custom_pause_rule,
-            ..Default::default()
-        })
-        .unwrap();
+        haqumei.options.is_non_pause_symbol = my_custom_pause_rule;
 
         let mapping_custom = haqumei.g2p_mapping(text).unwrap();
 
@@ -486,12 +482,8 @@ mod tests {
         assert!(kana_default.contains("コーカ"));
         assert!(kana_default.contains("ワ")); // 助詞は「ワ」
 
-        let mut haqumei_revert = Haqumei::with_options(HaqumeiOptions {
-            revert_long_vowels: true,
-            ..Default::default()
-        })
-        .unwrap();
-        let kana_revert = haqumei_revert.g2p_kana(text).unwrap();
+        haqumei.options.revert_long_vowels = true;
+        let kana_revert = haqumei.g2p_kana(text).unwrap();
 
         assert!(kana_revert.contains("セイ"));
         assert!(kana_revert.contains("コウカ"));
@@ -507,12 +499,8 @@ mod tests {
         assert!(kana_default.contains("ハナジ"));
         assert!(kana_default.contains("キズカズ"));
 
-        let mut haqumei_revert = Haqumei::with_options(HaqumeiOptions {
-            revert_yotsugana: true,
-            ..Default::default()
-        })
-        .unwrap();
-        let kana_revert = haqumei_revert.g2p_kana(text).unwrap();
+        haqumei.options.revert_yotsugana = true;
+        let kana_revert = haqumei.g2p_kana(text).unwrap();
 
         assert!(kana_revert.contains("ハナヂ"));
         assert!(kana_revert.contains("キヅカズ"));
@@ -522,17 +510,13 @@ mod tests {
     fn test_g2p_kana_use_read_as_pron() {
         let text = "こんにちは、人生。";
 
-        let mut haqumei_default = Haqumei::new().unwrap();
-        let kana_default = haqumei_default.g2p_kana(text).unwrap();
+        let mut haqumei = Haqumei::new().unwrap();
+        let kana_default = haqumei.g2p_kana(text).unwrap();
         assert!(kana_default.contains("コンニチワ")); // 助詞は「ワ」
         assert!(kana_default.contains("ジンセー")); // 長音化
 
-        let mut haqumei_read = Haqumei::with_options(HaqumeiOptions {
-            use_read_as_pron: true,
-            ..Default::default()
-        })
-        .unwrap();
-        let kana_read = haqumei_read.g2p_kana(text).unwrap();
+        haqumei.options.use_read_as_pron = true;
+        let kana_read = haqumei.g2p_kana(text).unwrap();
 
         assert!(kana_read.contains("コンニチハ")); // 助詞が「ハ」のまま
         assert!(kana_read.contains("ジンセイ")); // 長音が「セイ」のまま

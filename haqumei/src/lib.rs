@@ -54,10 +54,12 @@ pub mod utils;
 pub mod word_phoneme;
 
 use std::{
-    path::Path,
-    sync::{Arc, LazyLock, Mutex},
+    path::{Path, PathBuf},
+    sync::{Arc, LazyLock, Mutex, OnceLock},
+    thread,
 };
 
+use crossbeam_channel::{Sender, bounded};
 use moka::sync::Cache;
 
 pub use features::NjdFeature;
@@ -87,6 +89,30 @@ static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|
 static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
+static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+type VibratoTask = (String, Sender<Vec<UnidicFeature>>);
+static VIBRATO_TASK_TX: OnceLock<Sender<VibratoTask>> = OnceLock::new();
+
+pub(crate) fn init_vibrato_workers_if_needed(tokenizer: &vibrato_rkyv::Tokenizer) {
+    VIBRATO_TASK_TX.get_or_init(|| {
+        let (tx, rx) = bounded::<VibratoTask>(1024);
+        let worker_count = 8;
+
+        for _ in 0..worker_count {
+            let rx = rx.clone();
+            let tokenizer = tokenizer.clone();
+            thread::spawn(move || {
+                let mut worker = tokenizer.new_worker();
+                while let Ok((text, res_tx)) = rx.recv() {
+                    let features = vibrato_analysis(&mut worker, &text);
+                    let _ = res_tx.send(features);
+                }
+            });
+        }
+        tx
+    });
+}
 
 /// Open JTalk をバインディングしたG2Pエンジン。
 ///
@@ -94,9 +120,10 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
 ///
 /// [Haqumei::with_options], [HaqumeiOptions] を使うことで、出力をカスタマイズできます。
 pub struct Haqumei {
-    open_jtalk: OpenJTalk,
-    tokenizer: Option<vibrato_rkyv::Tokenizer>,
-    options: HaqumeiOptions,
+    pub(crate) open_jtalk: OpenJTalk,
+    pub(crate) tokenizer: Option<vibrato_rkyv::Tokenizer>,
+    pub(crate) rx: Option<crossbeam_channel::Receiver<Vec<UnidicFeature>>>,
+    pub options: HaqumeiOptions,
 }
 
 /// `Haqumei` の設定。
@@ -249,29 +276,51 @@ impl Haqumei {
         open_jtalk: OpenJTalk,
         options: HaqumeiOptions,
     ) -> Result<Self, HaqumeiError> {
-        let tokenizer = if options.modify_kanji_yomi {
-            let Some(cache_dir) = dirs::cache_dir().map(|dir| dir.join("haqumei")) else {
-                Err(HaqumeiError::CacheDirectoryNotFound)?
-            };
-
-            let kind = PresetDictionaryKind::UnidicCwj;
-            log::info!("Downloading {} dictionary...", kind.name());
-            let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
-                kind,
-                cache_dir.join(kind.name()),
-            )?;
-            log::info!("Downloaded {} dictionary.", kind.name());
-
-            Some(vibrato_rkyv::Tokenizer::new(vibrato_dict))
-        } else {
-            None
+        let mut haqumei = Haqumei {
+            open_jtalk,
+            tokenizer: None,
+            rx: None,
+            options,
         };
 
-        Ok(Haqumei {
-            open_jtalk,
-            tokenizer,
-            options,
-        })
+        if options.modify_kanji_yomi {
+            haqumei.init_tokenizer_if_needed()?;
+        }
+
+        Ok(haqumei)
+    }
+
+    pub(crate) fn init_tokenizer_if_needed(&mut self) -> Result<(), HaqumeiError> {
+        if self.tokenizer.is_some() {
+            return Ok(());
+        }
+
+        if CACHE_DIR.get().is_none() {
+            let base = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?;
+            CACHE_DIR.get_or_init(|| base.join("haqumei"));
+        }
+        let cache_dir = CACHE_DIR.get().unwrap();
+
+        let kind = PresetDictionaryKind::UnidicCsj;
+        log::info!("Downloading {} dictionary...", kind.name());
+        let vibrato_dict =
+            vibrato_rkyv::Dictionary::from_preset_with_download(kind, cache_dir.join(kind.name()))?;
+        log::info!("Downloaded {} dictionary.", kind.name());
+
+        self.tokenizer = Some(vibrato_rkyv::Tokenizer::new(vibrato_dict));
+
+        Ok(())
+    }
+
+    pub(crate) fn init_tokenizer_if_needed_and_modify_kanji_yomi_enabled(
+        &mut self,
+    ) -> Result<Option<vibrato_rkyv::Tokenizer>, HaqumeiError> {
+        if self.options.modify_kanji_yomi {
+            self.init_tokenizer_if_needed()?;
+            Ok(self.tokenizer.clone()) // かなり無料
+        } else {
+            Ok(None)
+        }
     }
 
     /// [open_jtalk::Dictionary] から [Haqumei] を作ります。
@@ -555,36 +604,32 @@ impl Haqumei {
         let text = &self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let mut run_mecab = || -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
-            let morphs = self.open_jtalk.run_mecab_detailed(text)?;
-            let njd_features = self.open_jtalk.run_njd_from_mecab(
-                morphs
-                    .iter()
-                    .filter(|m| !m.is_ignored)
-                    .map(|morph| morph.feature.as_str()),
-            )?;
-            Ok((njd_features, morphs))
+        self.rx = if let Some(tokenizer) =
+            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+        {
+            init_vibrato_workers_if_needed(&tokenizer);
+            let (tx, rx) = bounded(1);
+            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
+                let _ = task_tx.send((text.to_string(), tx));
+            }
+            Some(rx)
+        } else {
+            None
         };
 
-        let (mut njd_features, morphs) = {
-            let res = if let Some(tokenizer) = &self.tokenizer {
-                rayon::join(&mut run_mecab, || {
-                    let mut worker = tokenizer.new_worker();
-                    vibrato_analysis(&mut worker, text);
-                })
-                .0
-            } else {
-                run_mecab()
-            };
-
-            let (njd_features, morphs) = res?;
-
-            (self.apply_postprocessing(text, njd_features)?, morphs)
-        };
+        let morphs = self.open_jtalk.run_mecab_detailed(text)?;
+        let njd_features = self.open_jtalk.run_njd_from_mecab(
+            morphs
+                .iter()
+                .filter(|m| !m.is_ignored)
+                .map(|morph| morph.feature.as_str()),
+        )?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
         }
+
+        let mut njd_features = self.apply_postprocessing(text, njd_features)?;
 
         let options = &self.options;
 
@@ -685,18 +730,20 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let mut njd_features = if let Some(tokenizer) = &self.tokenizer {
-            rayon::join(
-                || self.open_jtalk.run_frontend(text),
-                || {
-                    let mut worker = tokenizer.new_worker();
-                    vibrato_analysis(&mut worker, text);
-                },
-            )
-            .0
+        self.rx = if let Some(tokenizer) =
+            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+        {
+            init_vibrato_workers_if_needed(&tokenizer);
+            let (tx, rx) = bounded(1);
+            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
+                let _ = task_tx.send((text.to_string(), tx));
+            }
+            Some(rx)
         } else {
-            self.open_jtalk.run_frontend(text)
-        }?;
+            None
+        };
+
+        let mut njd_features = self.open_jtalk.run_frontend(text)?;
 
         let options = &self.options;
 
@@ -722,18 +769,20 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let (mut njd_features, mecab_morphs) = if let Some(tokenizer) = &self.tokenizer {
-            rayon::join(
-                || self.open_jtalk.run_frontend_detailed(text),
-                || {
-                    let mut worker = tokenizer.new_worker();
-                    vibrato_analysis(&mut worker, text);
-                },
-            )
-            .0
+        self.rx = if let Some(tokenizer) =
+            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+        {
+            init_vibrato_workers_if_needed(&tokenizer);
+            let (tx, rx) = bounded(1);
+            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
+                let _ = task_tx.send((text.to_string(), tx));
+            }
+            Some(rx)
         } else {
-            self.open_jtalk.run_frontend_detailed(text)
-        }?;
+            None
+        };
+
+        let (mut njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
 
         let options = &self.options;
 

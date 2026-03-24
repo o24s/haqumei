@@ -36,7 +36,7 @@ fn bench_g2p(c: &mut Criterion) {
         ..Default::default()
     })
     .unwrap();
-    group.bench_function("SingleThread (Heavy Options)", |b| {
+    group.bench_function("MultiThread (Heavy Options)", |b| {
         b.iter(|| black_box(hq_heavy.g2p_batch(black_box(&lines))))
     });
 

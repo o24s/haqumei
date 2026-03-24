@@ -250,7 +250,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | **haqumei** (Default) | 1.303 s | 244k chars/s | 1.81x |
 | **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
 | **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
-| **haqumei** (`g2p_batch`, Heavy) | 2.208 s | 144k chars/s | 1.07x |
+| **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
 ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
 
@@ -260,40 +260,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### 注意点
 
 - 入力構造によるスループットの変化:  
-  本ライブラリは、`pyopenjtalk` に対しては、1行あたりの文字数が多くなるほどスループット（chars/s）が高くなる傾向にあります。  
-  これは G2P処理 が Open JTalk 内部の構造体から、直接ラベルを取り出すように実装されていたり、  
-  FFI のオーバーヘッドが少ないためであると考えられます。  
+  特に `_bacth` 系 API において、`pyopenjtalk` と比べ、1行あたりの文字数が多くなるほどスループット（chars/s）が高くなる傾向にあります (だいたい 4KB ぐらいまでは)。  
+  これは G2P処理 が Open JTalk 内部の構造体から、直接ラベルを取り出すように実装されていたり、FFI のオーバーヘッドが少ないためであると考えられます。  
   大量の文章を処理する場合は、極端に細かく改行せずにある程度の長さでバッチ処理に渡すのが最も効率的です。
 
 - Default, Heavy の違い:  
   表中のDefault は `Haqumei::new` をそのまま使用しており、  
   Heavyは [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `modify_kanji_yomi` を有効にした場合の計測です。
 
-### Heavy 遅くない?
+### Heavy について
 
-#### `*_batch` 系メソッドの実装
+#### `modify_kanji_yomi` オプション
 
-`modify_kanji_yomi` オプションが有効であるとき、Unidic の読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/stellanomia/vibrato-rkyv) を動かす関係で、  
-`*_batch` 系メソッドでは同一のインスタンスが順次処理を行う設計になっています。  
-  
-Unidicのトークナイザをスレッドごとに生成するのはメモリや初期化コストの観点で非効率であり、これを並行化するにはより高度なマルチスレッディングの実装が必要となります。しかし、`modify_kanji_yomi` による明確な精度向上がそこまで自明ではないこと（ベースとなる pyopenjtalk-plus 辞書が元から高品質であるため）、および実装コストの兼ね合いから、現在はHeavy設定でのマルチスレッド対応は見送っています。
+`modify_kanji_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/stellanomia/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
+そのため、若干の解析速度の低下が見られます。
 
 #### `predict_nani` 機能
 
 `predict_nani` は ONNX を用いますが、セッションをOSスレッドごとに作るのは正気ではないため、`Mutex` を使用しています。(ONNX のセッションはスレッドセーフだが、そのバインディングの ort は `Session::run` を[排他参照をとるようにしている](https://github.com/pykeio/ort/issues/402#issuecomment-2949993914))  
-
-それがボトルネックではないかという懸念に対しては、そもそもこのモデル自体はまず軽量です。  
-また、並行に処理をしている際に、入力に大量の"何"がくることでボトルネックになってしまうケースはまれですし、  
-そして並行性に耐性のあるキャッシュ機構を挟んでいるため、DOS的な入力への多少の耐性はあるように思います。  
+それがボトルネックではないかという懸念に対しては、そもそも並行に処理をしている際に、入力に大量の"何"がくることでボトルネックになってしまうケースはまれです。  
+また、このモデル自体は軽量ですし、並行性に耐性のあるキャッシュ機構を挟んでいるため、DOS的な入力への多少の耐性はあるように思います。  
 
 「吾輩は猫である」 (800個近くの"何"を含む) を用いたベンチマーク(`haqumei-bench`)でも、デフォルトの `Haqumei` とその `predict_nani` を有効にした比較は、平均的には非常に小さい誤差に収まったために、実際にはボトルネックではありません。  
 
 #### `pyopenjtalk-plus` との比較
 
 Sudachi や ONNX モデルによる読み補正やその他の改善を取り入れた `pyopenjtalk-plus` は、  
-フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べて数十倍～百倍遅いことが知られているので、(see [voicevox_engine#1486](https://github.com/VOICEVOX/voicevox_engine/issues/1486))  
+フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べて数十倍～百倍遅いことが知られているので、(See [voicevox_engine#1486](https://github.com/VOICEVOX/voicevox_engine/issues/1486))  
 そこまで悪い速度ではないと思っています。  
-`pyopenjtalk-plus` に対しては、似た設定(Heavy)で 50倍 ほど速いですが、  
+`pyopenjtalk-plus` に対しては、似た設定(Heavy)で数十倍ほど速いですが、  
 ROHAN4600 では Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
 (Unidic 補正で有意に精度が向上することが分かれば、より攻めた最適化をしたり、また `pyopenjtalk-plus` と同様に Sudachi を使うかもしれません。)  
 
