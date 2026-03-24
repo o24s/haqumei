@@ -33,7 +33,7 @@
 ### Rust
 
 ```bash
-cargo add haqumei"
+cargo add haqumei
 ```
 
 ### Python
@@ -149,25 +149,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
   println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
-  // [WordPhonemeDetail {
+  // [WordPhonemeMap {
   //     word: "𰻞𰻞",
   //     phonemes: ["unk"],
   //     is_unknown: true,
   //     is_ignored: false,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"],
   //     is_unknown: false,
   //     is_ignored: false,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "\u{3000}",
   //     phonemes: ["sp"],
   //     is_unknown: false,
   //     is_ignored: true,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"],
   //     is_unknown: false,
@@ -260,7 +260,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### 注意点
 
 - 入力構造によるスループットの変化:  
-  特に `_bacth` 系 API において、`pyopenjtalk` と比べ、1行あたりの文字数が多くなるほどスループット（chars/s）が高くなる傾向にあります (だいたい 4KB ぐらいまでは)。  
+  特に `*_batch` 系 API において、`pyopenjtalk` と比べ、1行あたりの文字数が多くなるほどスループット（chars/s）が高くなる傾向にあります (だいたい 4KB ぐらいまでは)。  
   これは G2P処理 が Open JTalk 内部の構造体から、直接ラベルを取り出すように実装されていたり、FFI のオーバーヘッドが少ないためであると考えられます。  
   大量の文章を処理する場合は、極端に細かく改行せずにある程度の長さでバッチ処理に渡すのが最も効率的です。
 
@@ -291,6 +291,38 @@ Sudachi や ONNX モデルによる読み補正やその他の改善を取り入
 `pyopenjtalk-plus` に対しては、似た設定(Heavy)で数十倍ほど速いですが、  
 ROHAN4600 では Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
 (Unidic 補正で有意に精度が向上することが分かれば、より攻めた最適化をしたり、また `pyopenjtalk-plus` と同様に Sudachi を使うかもしれません。)  
+
+## カスタム辞書の埋め込みビルド
+
+`haqumei` はデフォルトで、ビルド時に辞書をダウンロードしてバイナリに埋め込みます。
+これにより、crates.io への公開と自己完結したバイナリを両立しています。
+
+もし、自前の辞書をバイナリに埋め込んでビルドしたい場合は、以下の手順で設定を変更できます。
+
+### Cargo の Feature を変更する
+
+デフォルトの `download-dictionary` を無効にし、`build-dictionary` を有効にします。
+
+```toml
+[dependencies]
+haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary"], default-features = false }
+```
+
+### 辞書ソースの準備と環境変数の設定
+
+ビルド時にコンパイルさせるための辞書ソース (`.csv` や `.def` が含まれたディレクトリ) を用意し、そのパスを環境変数 `HAQUMEI_DICT_SRC` に設定してビルドを実行します。
+
+Unix 系の場合:
+```bash
+HAQUMEI_DICT_SRC="/path/to/your/dictionary" cargo build --release
+```
+
+Windows (PowerShell) の場合:
+```powershell
+& { $env:HAQUMEI_DICT_SRC="C:\path\to\your\dictionary"; cargo build --release }
+```
+
+> **Note:** 環境変数が設定されていない場合は、クレートのルートから相対パスで `../dictionary` を参照します。
 
 ## 辞書
 

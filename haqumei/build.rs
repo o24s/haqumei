@@ -21,8 +21,6 @@ const COMPRESSED_DICTIONARY_HASH: &str =
 const DICTIONARY_HASH: &str = "5dbb19b8302188ba5c1a0a2af04e0ee6be480563401dfb0c9391ba9f2d625604";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
-const DICTIONARY_SRC_DIR: &str = "../dictionary";
-
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let cache_dir = dirs::cache_dir().unwrap().join("haqumei");
     fs::create_dir_all(&cache_dir).unwrap();
@@ -365,8 +363,17 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         return Ok(());
     }
 
+    let dict_src_raw = env::var_os("HAQUMEI_DICT_SRC")
+        .map(PathBuf::from)
+        .unwrap_or(PathBuf::from("../dictionary"));
+
+    let dict_src_dir = if dict_src_raw.is_relative() {
+        manifest_dir.join(dict_src_raw)
+    } else {
+        dict_src_raw
+    };
+
     let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
-    let dict_src_dir = manifest_dir.join(DICTIONARY_SRC_DIR);
     let dict_out_dir = out_dir.join("dictionary_out");
     let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
     let dict_hash_path = CACHE_DIR.join("dictionary.sha256");

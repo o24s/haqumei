@@ -23,11 +23,11 @@
 
 - **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
   This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
-- **Performance:** Achieves fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Benchmark](#benchmark))
+- **Performance:** Enables fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Benchmark](#benchmark))
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
 
-Code examples can be found in [haqumei/examples](https://github.com/stellanomia/haqumei/tree/main/haqumei/examples).
+Examples can be found in [haqumei/examples](https://github.com/stellanomia/haqumei/tree/main/haqumei/examples).
 
 ## Install
 
@@ -152,25 +152,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
   println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
-  // [WordPhonemeDetail {
+  // [WordPhonemeMap {
   //     word: "𰻞𰻞",
   //     phonemes: ["unk"],
   //     is_unknown: true,
   //     is_ignored: false,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"],
   //     is_unknown: false,
   //     is_ignored: false,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "\u{3000}",
   //     phonemes: ["sp"],
   //     is_unknown: false,
   //     is_ignored: true,
   // },
-  // WordPhonemeDetail {
+  // WordPhonemeMap {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"],
   //     is_unknown: false,
@@ -265,6 +265,37 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
   Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. This efficiency stems from an implementation that directly extracts labels from Open JTalk's internal structures, combined with minimal FFI overhead. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
 - **Difference Between Default and Heavy**:  
   In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `modify_kanji_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
+
+## Building with a Custom Embedded Dictionary
+
+By default, `haqumei` downloads the dictionary at build time and embeds it into the binary.
+This allows the crate to be published to crates.io while still producing a self-contained binary.
+
+If you want to build with your own dictionary embedded in the binary, you can change the configuration as follows.
+
+### Change the Cargo Features
+
+Disable the default `download-dictionary` feature and enable `build-dictionary`.
+```toml
+[dependencies]
+haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary"], default-features = false }
+```
+
+### Prepare the Dictionary Source and Set the Environment Variable
+
+Prepare a dictionary source directory containing `.csv` and `.def` files to be compiled at build time, then set its path to the `HAQUMEI_DICT_SRC` environment variable before running the build.
+
+On Unix-like systems:
+```bash
+HAQUMEI_DICT_SRC="/path/to/your/dictionary" cargo build --release
+```
+
+On Windows (PowerShell):
+```powershell
+& { $env:HAQUMEI_DICT_SRC="C:\path\to\your\dictionary"; cargo build --release }
+```
+
+> **Note:** If the environment variable is not set, the build script falls back to `../dictionary`, relative to the crate root.
 
 ## Dictionary
 
