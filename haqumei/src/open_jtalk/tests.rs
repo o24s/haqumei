@@ -131,7 +131,7 @@ fn test_userdict() {
     .unwrap();
     let user_csv_path = user_csv.into_temp_path();
 
-    let user_out_path = NamedTempFile::new().unwrap();
+    let user_out_path = NamedTempFile::new().unwrap().into_temp_path();
 
     let dict_dir = GLOBAL_MECAB_DICTIONARY.load().dict_dir.clone();
     MecabDictIndexCompiler::new()

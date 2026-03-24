@@ -25,7 +25,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::Cell;
 use std::ffi::{CStr, CString, c_char};
 use std::marker::PhantomData;
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -244,9 +243,34 @@ impl OpenJTalk {
         let path_to_cstring = |p: &Path| -> Result<CString, HaqumeiError> {
             let p = p.canonicalize()?;
             let path_str = p.as_os_str();
-            CString::new(path_str.as_bytes()).map_err(|_| {
-                HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
-            })
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::ffi::OsStrExt;
+
+                CString::new(path_str.as_bytes()).map_err(|_| {
+                    HaqumeiError::InvalidDictionaryPath(
+                        path_str.to_string_lossy().to_string()
+                    )
+                })
+            }
+
+            #[cfg(windows)]
+            {
+                let mut s = path_str.to_str().ok_or_else(|| {
+                    HaqumeiError::InvalidDictionaryPath(
+                        path_str.to_string_lossy().to_string()
+                    )
+                })?;
+
+                if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                    s = stripped;
+                }
+
+                CString::new(s).map_err(|_| {
+                    HaqumeiError::InvalidDictionaryPath(s.to_string())
+                })
+            }
         };
 
         let c_dict_dir = path_to_cstring(dict_dir)?;
