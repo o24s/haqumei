@@ -88,6 +88,9 @@ class WordPhonemePair:
     phonemes: List[str]
     """その単語に対応する音素のリスト。"""
 
+    def __repr__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
+
 class WordPhonemeMap:
     """単語とその音素列の対応関係を表すデータクラス。
 
@@ -104,7 +107,54 @@ class WordPhonemeMap:
     """MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。"""
 
     is_ignored: bool
-    """`OpenJTalk` のパイプラインで無視される対象かどうか。"""
+    """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
+
+    def __repr__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
+
+
+class WordPhonemeDetail:
+    """形態素ごとの音素マッピングと、NJDによる詳細な解析情報を保持する構造体"""
+
+    word: str
+    """表層形 (surface)"""
+    phonemes: List[str]
+    """音素のリスト"""
+    features: List[str]
+    """Mecab が出力した features。既知語は 12 列、未知語は 8 列"""
+    pos: str
+    """品詞"""
+    pos_group1: str
+    """品詞細分類1"""
+    pos_group2: str
+    """品詞細分類2"""
+    pos_group3: str
+    """品詞細分類3"""
+    ctype: str
+    """活用型"""
+    cform: str
+    """活用形"""
+    orig: str
+    """原形"""
+    read: str
+    """読み"""
+    pron: str
+    """発音形式"""
+    accent_nucleus: int
+    """アクセント核位置 (0: 平板型, 1-n: n番目のモーラにアクセント核)"""
+    mora_count: int
+    """モーラ数"""
+    chain_rule: str
+    """アクセント結合規則 (C1-C5/F1-F5/P1-P2 等)"""
+    chain_flag: int
+    """アクセント句連結フラグ"""
+    is_unknown: bool
+    """MeCab が未知語と判定したかどうか"""
+    is_ignored: bool
+    """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
+
+    def __repr__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
 
 class UnicodeNormalization(IntEnum):
     """Unicode正規化の方式を指定する。"""
@@ -330,6 +380,21 @@ class OpenJTalk:
         """
         ...
 
+    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+        """
+        入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
+        """
+        ...
 
     def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
         """複数のテキストに対して `run_frontend` を実行します。
@@ -461,6 +526,22 @@ class OpenJTalk:
 
         Returns:
             List[List[WordPhonemeMap]]: 各テキストに対応する詳細なマッピング情報のリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+        """
+        入力テキストのリストに対して `g2p_mapping_detailed` を並列に実行します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
         ...
 
@@ -651,6 +732,22 @@ class Haqumei:
         """
         ...
 
+    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+        """
+        入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
+        """
+        ...
+
     def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
         """複数のテキストに対して `run_frontend` を実行します。
 
@@ -777,6 +874,22 @@ class Haqumei:
 
         Returns:
             List[List[WordPhonemeMap]]: 各テキストに対応する詳細なマッピング情報のリスト。
+        """
+        ...
+
+    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+        """
+        入力テキストのリストに対して `g2p_mapping_detailed` を並列に実行します。
+
+        - 既知語: 通常の音素列 (読点などは `pau`)
+        - 未知語: `unk`
+        - 空白等: `sp` (Space)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
         ...
 

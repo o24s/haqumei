@@ -17,7 +17,7 @@ wheels = [
 [[package]]
 name = "haqumei"
 version = "0.1.0"
-source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#b383dee7f6d37dd39937f85417b66558ab78ca3c" }
+source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#ba9b7b4e64ea52e6e98b1d066fd17ea51ebe44ae" }
 
 [[package]]
 name = "mpmath"
@@ -278,7 +278,7 @@ onnxruntime = [
 ]
 
 [[package]]
-name = "scripts"
+name = "pyopenjtalk-plus-bench"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

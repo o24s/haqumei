@@ -1,6 +1,6 @@
 use ::haqumei::{
-    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeMap, WordPhonemePair,
-    open_jtalk::Dictionary, utils::default_is_non_pause_symbol,
+    Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeDetail, WordPhonemeMap,
+    WordPhonemePair, open_jtalk::Dictionary, utils::default_is_non_pause_symbol,
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -9,36 +9,22 @@ fn to_py_err<E: std::fmt::Debug>(err: E) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(format!("{:?}", err))
 }
 
-#[pyclass(name = "NjdFeature", module = "haqumei", skip_from_py_object)]
+#[pyclass(name = "NjdFeature", module = "haqumei", get_all, skip_from_py_object)]
 #[derive(Clone)]
 struct PyNjdFeature {
-    #[pyo3(get)]
     string: String,
-    #[pyo3(get)]
     pos: String,
-    #[pyo3(get)]
     pos_group1: String,
-    #[pyo3(get)]
     pos_group2: String,
-    #[pyo3(get)]
     pos_group3: String,
-    #[pyo3(get)]
     ctype: String,
-    #[pyo3(get)]
     cform: String,
-    #[pyo3(get)]
     orig: String,
-    #[pyo3(get)]
     read: String,
-    #[pyo3(get)]
     pron: String,
-    #[pyo3(get)]
     acc: i32,
-    #[pyo3(get)]
     mora_size: i32,
-    #[pyo3(get)]
     chain_rule: String,
-    #[pyo3(get)]
     chain_flag: i32,
 }
 
@@ -63,24 +49,16 @@ impl From<NjdFeature> for PyNjdFeature {
     }
 }
 
-#[pyclass(name = "MecabMorph", module = "haqumei", skip_from_py_object)]
+#[pyclass(name = "MecabMorph", module = "haqumei", get_all, skip_from_py_object)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyMecabMorph {
-    #[pyo3(get)]
     pub surface: String,
-    #[pyo3(get)]
     pub feature: String,
-    #[pyo3(get)]
     pub left_id: u16,
-    #[pyo3(get)]
     pub right_id: u16,
-    #[pyo3(get)]
     pub pos_id: u16,
-    #[pyo3(get)]
     pub word_cost: i16,
-    #[pyo3(get)]
     pub is_unknown: bool,
-    #[pyo3(get)]
     pub is_ignored: bool,
 }
 
@@ -131,16 +109,17 @@ impl PyWordPhonemePair {
     }
 }
 
-#[pyclass(name = "WordPhonemeMap", module = "haqumei", skip_from_py_object)]
+#[pyclass(
+    name = "WordPhonemeMap",
+    module = "haqumei",
+    get_all,
+    skip_from_py_object
+)]
 #[derive(Clone)]
 pub struct PyWordPhonemeMap {
-    #[pyo3(get)]
     pub word: String,
-    #[pyo3(get)]
     pub phonemes: Vec<String>,
-    #[pyo3(get)]
     pub is_unknown: bool,
-    #[pyo3(get)]
     pub is_ignored: bool,
 }
 
@@ -167,6 +146,104 @@ impl PyWordPhonemeMap {
     fn __eq__(&self, other: &Self) -> bool {
         self.word == other.word
             && self.phonemes == other.phonemes
+            && self.is_unknown == other.is_unknown
+            && self.is_ignored == other.is_ignored
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[pyclass(module = "haqumei", get_all, skip_from_py_object)]
+pub struct PyWordPhonemeDetail {
+    pub word: String,
+    pub phonemes: Vec<String>,
+    pub features: Vec<String>,
+    pub pos: String,
+    pub pos_group1: String,
+    pub pos_group2: String,
+    pub pos_group3: String,
+    pub ctype: String,
+    pub cform: String,
+    pub orig: String,
+    pub read: String,
+    pub pron: String,
+    pub accent_nucleus: i32,
+    pub mora_count: i32,
+    pub chain_rule: String,
+    pub chain_flag: i32,
+    pub is_unknown: bool,
+    pub is_ignored: bool,
+}
+impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
+    fn from(detail: WordPhonemeDetail) -> Self {
+        Self {
+            word: detail.word,
+            phonemes: detail.phonemes,
+            features: detail.features,
+            pos: detail.pos,
+            pos_group1: detail.pos_group1,
+            pos_group2: detail.pos_group2,
+            pos_group3: detail.pos_group3,
+            ctype: detail.ctype,
+            cform: detail.cform,
+            orig: detail.orig,
+            read: detail.read,
+            pron: detail.pron,
+            accent_nucleus: detail.accent_nucleus,
+            mora_count: detail.mora_count,
+            chain_rule: detail.chain_rule,
+            chain_flag: detail.chain_flag,
+            is_unknown: detail.is_unknown,
+            is_ignored: detail.is_ignored,
+        }
+    }
+}
+
+#[pymethods]
+impl PyWordPhonemeDetail {
+    fn __repr__(&self) -> String {
+        format!(
+            "WordPhonemeDetail(word={:?}, phonemes={:?}, features={:?}, pos={:?}, pos_group1={:?}, \
+             pos_group2={:?}, pos_group3={:?}, ctype={:?}, cform={:?}, orig={:?}, \
+             read={:?}, pron={:?}, accent_nucleus={}, mora_count={}, chain_rule={:?}, \
+             chain_flag={}, is_unknown={}, is_ignored={})",
+            self.word,
+            self.phonemes,
+            self.features,
+            self.pos,
+            self.pos_group1,
+            self.pos_group2,
+            self.pos_group3,
+            self.ctype,
+            self.cform,
+            self.orig,
+            self.read,
+            self.pron,
+            self.accent_nucleus,
+            self.mora_count,
+            self.chain_rule,
+            self.chain_flag,
+            self.is_unknown,
+            self.is_ignored,
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.word == other.word
+            && self.phonemes == other.phonemes
+            && self.features == other.features
+            && self.pos == other.pos
+            && self.pos_group1 == other.pos_group1
+            && self.pos_group2 == other.pos_group2
+            && self.pos_group3 == other.pos_group3
+            && self.ctype == other.ctype
+            && self.cform == other.cform
+            && self.orig == other.orig
+            && self.read == other.read
+            && self.pron == other.pron
+            && self.accent_nucleus == other.accent_nucleus
+            && self.mora_count == other.mora_count
+            && self.chain_rule == other.chain_rule
+            && self.chain_flag == other.chain_flag
             && self.is_unknown == other.is_unknown
             && self.is_ignored == other.is_ignored
     }
@@ -434,6 +511,30 @@ impl PyOpenJTalk {
                 .map_err(to_py_err)?
                 .into_iter()
                 .map(|map| map.into_iter().map(PyWordPhonemeMap::from).collect())
+                .collect())
+        })
+    }
+
+    fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
+        let mut guard = self.inner.lock().unwrap();
+        let mapping = guard.g2p_mapping_detailed(text).map_err(to_py_err)?;
+        Ok(mapping.into_iter().map(PyWordPhonemeDetail::from).collect())
+    }
+
+    fn g2p_mapping_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
                 .collect())
         })
     }
@@ -734,6 +835,30 @@ impl PyHaqumei {
                 .map_err(to_py_err)?
                 .into_iter()
                 .map(|map| map.into_iter().map(PyWordPhonemeMap::from).collect())
+                .collect())
+        })
+    }
+
+    fn g2p_mapping_detailed(&self, text: &str) -> PyResult<Vec<PyWordPhonemeDetail>> {
+        let mut guard = self.inner.lock().unwrap();
+        let mapping = guard.g2p_mapping_detailed(text).map_err(to_py_err)?;
+        Ok(mapping.into_iter().map(PyWordPhonemeDetail::from).collect())
+    }
+
+    fn g2p_mapping_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordPhonemeDetail>>> {
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_mapping_detailed_batch(&texts)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(|map| map.into_iter().map(PyWordPhonemeDetail::from).collect())
                 .collect())
         })
     }
