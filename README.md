@@ -33,6 +33,9 @@ Examples can be found in [haqumei/examples](https://github.com/stellanomia/haqum
 
 ### Rust
 
+During the initial build of `haqumei`, the dictionary is downloaded and embedded into the binary due to the file size limits on crates.io.
+For custom dictionaries, or for environments where network access is unavailable during the build, please refer to [here](#building-with-a-custom-embedded-dictionary).
+
 ```bash
 cargo add haqumei
 ```

@@ -182,6 +182,7 @@ pub struct HaqumeiOptions {
     pub predict_nani: bool,
 
     /// Unidic を使って、漢字の読みを修正する。
+    /// 有効にした初回実行時には、辞書のダウンロードが発生します。
     ///
     /// デフォルトで無効になっています。
     pub modify_kanji_yomi: bool,
