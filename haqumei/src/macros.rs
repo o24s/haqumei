@@ -7,7 +7,7 @@ macro_rules! impl_batch_method_haqumei {
         ///
         #[doc = concat!(
             "複数のテキストに対して並行して `",
-            stringify!($batch_method),
+            stringify!($inner_method),
             "` を実行します。"
         )]
         pub fn $batch_method<S>(&mut self, texts: &[S]) -> Result<Vec<$ret_type>, HaqumeiError>
@@ -50,7 +50,7 @@ macro_rules! impl_batch_method_openjtalk {
         ///
         #[doc = concat!(
             "複数のテキストに対して並行して `",
-            stringify!($batch_method),
+            stringify!($inner_method),
             "` を実行します。"
         )]
         pub fn $batch_method<S>(&mut self, texts: &[S]) -> Result<Vec<$ret_type>, HaqumeiError>
