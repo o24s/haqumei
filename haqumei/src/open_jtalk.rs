@@ -30,6 +30,9 @@ use std::sync::{Arc, LazyLock};
 
 pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::new(|| {
     #[cfg(feature = "embed-dictionary")]
     {
@@ -105,6 +108,7 @@ pub struct OpenJTalk {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MecabMorph {
     /// 形態素の表層形。
     pub surface: String,

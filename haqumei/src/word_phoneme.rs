@@ -1,10 +1,15 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemePair {
     pub word: String,
     pub phonemes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeMap {
     pub word: String,
     pub phonemes: Vec<String>,
@@ -22,6 +27,7 @@ pub struct WordPhonemeMap {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeDetail {
     /// 表層形 (surface)
     pub word: String,

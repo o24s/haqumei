@@ -1,6 +1,6 @@
 [package]
 name = "haqumei"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 authors = ["stellanomia <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
@@ -38,6 +38,7 @@ default = ["embed-dictionary", "download-dictionary"]
 embed-dictionary = []
 build-dictionary = []
 download-dictionary = ["dep:reqwest", "dep:tempfile"]
+serde = ["dep:serde"]
 
 [dependencies]
 arc-swap.workspace = true
@@ -60,6 +61,8 @@ unicode-normalization.workspace = true
 vibrato-rkyv.workspace = true
 walkdir.workspace = true
 zstd.workspace = true
+
+serde = { workspace = true, optional = true }
 
 [build-dependencies]
 bindgen = "0.72.1"

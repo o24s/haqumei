@@ -843,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -861,6 +861,7 @@ dependencies = [
  "phf",
  "rayon",
  "reqwest",
+ "serde",
  "sha2",
  "tar",
  "tempfile",
