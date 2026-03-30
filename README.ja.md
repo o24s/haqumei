@@ -22,7 +22,8 @@
 ## 特徴 (Features)
 
 - Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
-- パフォーマンス: Rustによるネイティブ実装と、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装されたいくつかの改善を取り入れ、高速なG2Pを実現しています。([ベンチマーク](#ベンチマーク))
+- パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
+- 精度: [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
 
@@ -288,11 +289,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #### `pyopenjtalk-plus` との比較
 
-Sudachi や ONNX モデルによる読み補正やその他の改善を取り入れた `pyopenjtalk-plus` は、  
-フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べて数十倍～百倍遅いことが知られているので、(See [voicevox_engine#1486](https://github.com/VOICEVOX/voicevox_engine/issues/1486))  
-そこまで悪い速度ではないと思っています。  
-`pyopenjtalk-plus` に対しては、似た設定(Heavy)で数十倍ほど速いですが、  
-ROHAN4600 では Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
+前提として、Sudachi や ONNX モデルによる読み補正やその他の改善を取り入れた `pyopenjtalk-plus` は、  
+フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べてほぼ同じスループットです。
+
+しかし、`pyopenjtalk-plus` は、ROHAN において Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
 (Unidic 補正で有意に精度が向上することが分かれば、より攻めた最適化をしたり、また `pyopenjtalk-plus` と同様に Sudachi を使うかもしれません。)  
 
 ## カスタム辞書の埋め込みビルド

@@ -23,7 +23,8 @@
 
 - **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
   This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
-- **Performance:** Enables fast G2P through a native Rust implementation and by incorporating several improvements from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Benchmark](#benchmark))
+- **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
+- **Accuracy:** Improves accuracy by incorporating many techniques implemented in [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus).
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
 
