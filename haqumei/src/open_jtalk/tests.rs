@@ -135,7 +135,7 @@ fn test_userdict() {
 
     let dict_dir = GLOBAL_MECAB_DICTIONARY.load().dict_dir.clone();
     MecabDictIndexCompiler::new()
-        .dict_dir(manifest_dir.parent().unwrap().join("dictionary"))
+        .dict_dir(manifest_dir.join("dictionary"))
         .add_input_file(&user_csv_path)
         .userdict_out_path(&user_out_path)
         .run()

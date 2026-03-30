@@ -325,7 +325,7 @@ Windows (PowerShell) の場合:
 & { $env:HAQUMEI_DICT_SRC="C:\path\to\your\dictionary"; cargo build --release }
 ```
 
-> **Note:** 環境変数が設定されていない場合は、クレートのルートから相対パスで `../dictionary` を参照します。
+> **Note:** 環境変数が設定されていない場合は、クレートのルートから相対パスで `dictionary` を参照します。
 
 ## 辞書
 

@@ -13,12 +13,12 @@ use std::io::{self, Seek, SeekFrom};
 
 #[cfg(feature = "download-dictionary")]
 const DICTIONARY_URL: &str =
-    "https://github.com/stellanomia/haqumei/releases/download/v0.1.0/dictionary.tar.zst";
+    "https://github.com/stellanomia/haqumei/releases/download/v0.2.4/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
-    "2250152f64158f90b6234d1945f8a4099cd6e7218def079f5c610315a859b8d0";
+    "3a86f4f2b1d4c858b39f9a0cf2d5a25a2c08bf4cd7e89846417dc29e70d6a524";
 #[cfg(feature = "download-dictionary")]
-const DICTIONARY_HASH: &str = "5dbb19b8302188ba5c1a0a2af04e0ee6be480563401dfb0c9391ba9f2d625604";
+const DICTIONARY_HASH: &str = "2e5f5b2c395161046ce06b9458a02b3c4645aacd4aadf10e8762830bcf71dc0b";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -365,7 +365,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     let dict_src_raw = env::var_os("HAQUMEI_DICT_SRC")
         .map(PathBuf::from)
-        .unwrap_or(PathBuf::from("../dictionary"));
+        .unwrap_or(PathBuf::from("dictionary"));
 
     let dict_src_dir = if dict_src_raw.is_relative() {
         manifest_dir.join(dict_src_raw)
@@ -394,12 +394,16 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         && compressed_dict_hash_path.exists()
         && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&compressed_dict_path)
         && let Ok(dict_hash) = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])
-        && let Ok(saved_dict_hash_path) = fs::read_to_string(&dict_hash_path)
-        && let Ok(saved_compressed_dict_hash_path) = fs::read_to_string(&compressed_dict_hash_path)
-        && saved_dict_hash_path == dict_hash
-        && saved_compressed_dict_hash_path == compressed_dict_hash
+        && let Ok(saved_dict_hash) = fs::read_to_string(&dict_hash_path)
+        && let Ok(saved_compressed_dict_hash) = fs::read_to_string(&compressed_dict_hash_path)
+        && saved_dict_hash == dict_hash
+        && saved_compressed_dict_hash == compressed_dict_hash
     {
-        println!("Dictionary cache in MANIFEST_DIR is up-to-date. Skipping compilation.");
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
+            &compressed_dict_path.display()
+        );
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", &saved_dict_hash);
         return Ok(());
     }
 

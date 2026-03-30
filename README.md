@@ -298,7 +298,7 @@ On Windows (PowerShell):
 & { $env:HAQUMEI_DICT_SRC="C:\path\to\your\dictionary"; cargo build --release }
 ```
 
-> **Note:** If the environment variable is not set, the build script falls back to `../dictionary`, relative to the crate root.
+> **Note:** If the environment variable is not set, the build script falls back to `dictionary`, relative to the crate root.
 
 ## Dictionary
 
