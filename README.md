@@ -4,7 +4,7 @@
     Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust.
   </p>
   <p>
-    English | <a href="https://github.com/stellanomia/haqumei/blob/main/README.ja.md">日本語</a>
+    English | <a href="https://github.com/o24s/haqumei/blob/main/README.ja.md">日本語</a>
   </p>
   <p>
     <a href="https://crates.io/crates/haqumei">
@@ -28,7 +28,7 @@
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
 
-Examples can be found in [haqumei/examples](https://github.com/stellanomia/haqumei/tree/main/haqumei/examples).
+Examples can be found in [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples).
 
 ## Install
 
@@ -44,7 +44,7 @@ cargo add haqumei
 ### Python
 
 ```bash
-pip install "git+https://github.com/stellanomia/haqumei.git#subdirectory=haqumei-python"
+pip install "git+https://github.com/o24s/haqumei.git#subdirectory=haqumei-python"
 ```
 
 ## Usage
@@ -259,9 +259,9 @@ Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/
 | **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
 | **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
-The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk).
+The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk).
 
-Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://crates.io/crates/criterion) can be run via `cargo bench` in the `haqumei-bench` crate. The comparison benchmark with `pyopenjtalk-plus` is located in [`haqumei-bench/pyopenjtalk-plus`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus).
+Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://crates.io/crates/criterion) can be run via `cargo bench` in the `haqumei-bench` crate. The comparison benchmark with `pyopenjtalk-plus` is located in [`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus).
 
 ### Performance Notes
 

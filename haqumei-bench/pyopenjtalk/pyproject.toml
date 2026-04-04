@@ -8,4 +8,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-haqumei = { git = "https://github.com/stellanomia/haqumei.git", subdirectory = "haqumei-python" }
+haqumei = { git = "https://github.com/o24s/haqumei.git", subdirectory = "haqumei-python" }

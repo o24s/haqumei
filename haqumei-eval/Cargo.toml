@@ -10,9 +10,10 @@ csv.workspace = true
 haqumei = { path = "../haqumei" }
 rayon.workspace = true
 regex.workspace = true
-similar = "2.7.0"
+similar = "3.0.0"
 
 [build-dependencies]
+digest-io.workspace = true
 hex.workspace = true
 reqwest.workspace = true
 sha2.workspace = true

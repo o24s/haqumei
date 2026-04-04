@@ -6,6 +6,7 @@ use std::{
     path::Path,
 };
 
+use digest_io::IoWrapper;
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,10 +20,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut need_download = true;
 
     if jsut_label_path.exists() {
-        let mut hasher = Sha256::new();
+        let mut hasher = IoWrapper(Sha256::new());
         let mut file = File::open(&jsut_label_path)?;
         io::copy(&mut file, &mut hasher)?;
-        if hex::encode(hasher.finalize()) == checksum {
+        if hex::encode(hasher.0.finalize()) == checksum {
             need_download = false;
         }
     }
@@ -39,9 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         temp_file.seek(SeekFrom::Start(0))?;
         let calculated_hash = {
-            let mut hasher = Sha256::new();
+            let mut hasher = IoWrapper(Sha256::new());
             io::copy(&mut temp_file, &mut hasher)?;
-            hex::encode(hasher.finalize())
+            hex::encode(hasher.0.finalize())
         };
 
         if calculated_hash != checksum {

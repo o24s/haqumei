@@ -4,7 +4,7 @@
     Haqumeiは、Rustで実装された日本語の Grapheme-to-Phoneme (G2P) ライブラリです。
   </p>
   <p>
-    <a href="https://github.com/stellanomia/haqumei/">English</a> | 日本語
+    <a href="https://github.com/o24s/haqumei/">English</a> | 日本語
   </p>
   <p>
     <a href="https://crates.io/crates/haqumei">
@@ -27,7 +27,7 @@
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
 
-コード例は [haqumei/examples](https://github.com/stellanomia/haqumei/tree/main/haqumei/examples) にあります。
+コード例は [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples) にあります。
 
 ## インストール
 
@@ -43,7 +43,7 @@ cargo add haqumei
 ### Python
 
 ```bash
-pip install "git+https://github.com/stellanomia/haqumei.git#subdirectory=haqumei-python"
+pip install "git+https://github.com/o24s/haqumei.git#subdirectory=haqumei-python"
 ```
 
 ## 使い方 (Usage)
@@ -256,10 +256,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
 | **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
-ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
+ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
 
 また、[`Criterion.rs`](https://crates.io/crates/criterion) を使用した Haqumei のベンチマークは、`haqumei-bench` クレートで `cargo bench` することで実行できます。
-`pyopenjtalk-plus` との比較ベンチマークは、[`haqumei-bench/pyopenjtalk-plus`](https://github.com/stellanomia/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus) にあります。
+`pyopenjtalk-plus` との比較ベンチマークは、[`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus) にあります。
 
 ### 注意点
 
@@ -276,7 +276,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #### `modify_kanji_yomi` オプション
 
-`modify_kanji_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/stellanomia/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
+`modify_kanji_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/o24s/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
 そのため、若干の解析速度の低下が見られます。
 
 #### `predict_nani` 機能

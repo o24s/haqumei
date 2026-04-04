@@ -29,7 +29,7 @@ wheels = [
 [[package]]
 name = "haqumei"
 version = "0.1.0"
-source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#1931fb01a051b8608bf61628c79298c9b7637caa" }
+source = { git = "https://github.com/o24s/haqumei.git?subdirectory=haqumei-python#1931fb01a051b8608bf61628c79298c9b7637caa" }
 
 [[package]]
 name = "humanfriendly"
@@ -331,7 +331,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "haqumei", git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python" },
+    { name = "haqumei", git = "https://github.com/o24s/haqumei.git?subdirectory=haqumei-python" },
     { name = "pyopenjtalk-plus", extras = ["onnxruntime"], git = "https://github.com/tsukumijima/pyopenjtalk-plus.git?branch=master" },
 ]
 

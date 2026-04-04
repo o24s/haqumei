@@ -1,13 +1,13 @@
 [package]
 name = "haqumei"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2024"
-authors = ["stellanomia <fulmlumo@gmail.com>"]
+authors = ["o24s <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
 license = "Apache-2.0"
 readme = "../README.md"
-homepage = "https://github.com/stellanomia/haqumei"
-repository = "https://github.com/stellanomia/haqumei"
+homepage = "https://github.com/o24s/haqumei"
+repository = "https://github.com/o24s/haqumei"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
 include = [
@@ -66,7 +66,8 @@ serde = { workspace = true, optional = true }
 
 [build-dependencies]
 bindgen = "0.72.1"
-cc = "1.2.58"
+cc = "1.2.59"
+digest-io.workspace = true
 dirs.workspace = true
 glob.workspace = true
 hex.workspace = true

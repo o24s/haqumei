@@ -6,14 +6,15 @@ use std::process::Command;
 use std::sync::LazyLock;
 use std::{env, fs};
 
-use sha2::{Digest, Sha256};
-
 #[cfg(feature = "download-dictionary")]
 use std::io::{self, Seek, SeekFrom};
 
+use digest_io::IoWrapper;
+use sha2::{Digest, Sha256};
+
 #[cfg(feature = "download-dictionary")]
 const DICTIONARY_URL: &str =
-    "https://github.com/stellanomia/haqumei/releases/download/v0.2.4/dictionary.tar.zst";
+    "https://github.com/o24s/haqumei/releases/download/v0.2.4/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
     "3a86f4f2b1d4c858b39f9a0cf2d5a25a2c08bf4cd7e89846417dc29e70d6a524";
@@ -99,10 +100,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         let mut need_download = true;
 
         if compressed_dict_path.exists() {
-            let mut hasher = Sha256::new();
+            let mut hasher = IoWrapper(Sha256::new());
             let mut file = File::open(&compressed_dict_path)?;
             io::copy(&mut file, &mut hasher)?;
-            if hex::encode(hasher.finalize()) == COMPRESSED_DICTIONARY_HASH {
+            if hex::encode(hasher.0.finalize()) == COMPRESSED_DICTIONARY_HASH {
                 need_download = false;
             }
         }
@@ -118,9 +119,9 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
             temp_file.seek(SeekFrom::Start(0))?;
             let calculated_hash = {
-                let mut hasher = Sha256::new();
+                let mut hasher = IoWrapper(Sha256::new());
                 io::copy(&mut temp_file, &mut hasher)?;
-                hex::encode(hasher.finalize())
+                hex::encode(hasher.0.finalize())
             };
 
             if calculated_hash != COMPRESSED_DICTIONARY_HASH {
@@ -148,7 +149,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         ("PACKAGE_STRING", Some("\"open_jtalk 1.11\"")),
         (
             "PACKAGE_BUGREPORT",
-            Some("\"https://github.com/stellanomia/haqumei\""),
+            Some("\"https://github.com/o24s/haqumei\""),
         ),
         ("PACKAGE_NAME", Some("\"open_jtalk\"")),
         ("CHARSET_UTF_8", None),
@@ -579,19 +580,19 @@ fn run_dict_indexer(
 }
 
 fn calculate_compressed_dict_hash(path: &Path) -> Result<String, Box<dyn Error>> {
-    let mut hasher = Sha256::new();
+    let mut hasher = IoWrapper(Sha256::new());
 
     let mut file = File::open(path)?;
     std::io::copy(&mut file, &mut hasher)?;
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok(hex::encode(hasher.0.finalize()))
 }
 
 fn calculate_hash_for_extensions(
     dir: &Path,
     extensions: &[&str],
 ) -> Result<String, Box<dyn Error>> {
-    let mut hasher = Sha256::new();
+    let mut hasher = IoWrapper(Sha256::new());
     let mut paths = Vec::new();
 
     for entry in walkdir::WalkDir::new(dir) {
@@ -613,5 +614,5 @@ fn calculate_hash_for_extensions(
         std::io::copy(&mut file, &mut hasher)?;
     }
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok(hex::encode(hasher.0.finalize()))
 }

@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "haqumei"
 version = "0.1.0"
-source = { git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python#ba9b7b4e64ea52e6e98b1d066fd17ea51ebe44ae" }
+source = { git = "https://github.com/o24s/haqumei.git?subdirectory=haqumei-python#ba9b7b4e64ea52e6e98b1d066fd17ea51ebe44ae" }
 
 [[package]]
 name = "numpy"
@@ -116,7 +116,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "haqumei", git = "https://github.com/stellanomia/haqumei.git?subdirectory=haqumei-python" },
+    { name = "haqumei", git = "https://github.com/o24s/haqumei.git?subdirectory=haqumei-python" },
     { name = "pyopenjtalk", specifier = ">=0.4.1" },
 ]
 
