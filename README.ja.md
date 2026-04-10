@@ -46,6 +46,15 @@ cargo add haqumei
 pip install "git+https://github.com/o24s/haqumei.git#subdirectory=haqumei-python"
 ```
 
+## CLI
+
+ターミナルから手軽にテキスト処理を行える `haqumei-cli` も提供しています。
+詳しい使い方（パイプ処理や JSON 出力など）については、[`haqumei-cli/README.ja.md`](https://github.com/o24s/haqumei/tree/main/haqumei-cli/README.ja.md) を参照してください。
+
+```bash
+cargo install haqumei-cli
+```
+
 ## 使い方 (Usage)
 
 ### Rust
