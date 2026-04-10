@@ -174,7 +174,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     ];
 
     if cfg!(unix) {
-        defines.extend(vec![
+        defines.extend([
             ("HAVE_DIRENT_H", Some("1")),
             ("HAVE_STRINGS_H", Some("1")),
             ("HAVE_SYS_MMAN_H", Some("1")),

@@ -268,7 +268,7 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
 - **Throughput Variation by Input Structure**:  
   Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. This efficiency stems from an implementation that directly extracts labels from Open JTalk's internal structures, combined with minimal FFI overhead. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
 - **Difference Between Default and Heavy**:  
-  In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `modify_kanji_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
+  In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `use_unidic_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
 
 ## Building with a Custom Embedded Dictionary
 

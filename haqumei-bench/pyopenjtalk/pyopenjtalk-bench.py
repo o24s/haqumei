@@ -103,7 +103,7 @@ def main():
 
     ojt = haqumei.OpenJTalk()
     hq = haqumei.Haqumei()
-    hq_heavy = haqumei.Haqumei(predict_nani=True, modify_kanji_yomi=True)
+    hq_heavy = haqumei.Haqumei(predict_nani=True, use_unidic_yomi=True)
 
     t_ojt = measure("OpenJTalk (Single)", lambda d: run_openjtalk_single(ojt, d), lines)
     t_ojt_batch = measure("OpenJTalk.g2p_batch", lambda d: run_openjtalk_batch(ojt, d), lines)

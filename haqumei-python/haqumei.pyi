@@ -591,7 +591,7 @@ class Haqumei:
         revert_yotsugana: bool = False,
         modify_filler_accent: bool = True,
         predict_nani: bool = False,
-        modify_kanji_yomi: bool = False,
+        use_unidic_yomi: bool = False,
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,
@@ -777,9 +777,6 @@ class Haqumei:
     def g2p_batch(self, texts: List[str]) -> List[List[str]]:
         """複数のテキストに対して `g2p` を実行します。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
-
         Args:
             texts (List[str]): 入力テキストのリスト。
 
@@ -795,9 +792,6 @@ class Haqumei:
         - 未知語: `unk`
         - 空白等: `sp` (Space)
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
-
         Args:
             texts (List[str]): 入力テキストのリスト。
 
@@ -808,9 +802,6 @@ class Haqumei:
 
     def g2p_kana_batch(self, texts: List[str]) -> List[str]:
         """カタカナ変換のバッチ処理。
-
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
             texts (List[str]): 入力テキストのリスト。
@@ -838,9 +829,6 @@ class Haqumei:
     def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
         """単語ごとに分割された音素リストのバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
-
         Args:
             texts (List[str]): 入力テキストのリスト。
 
@@ -851,9 +839,6 @@ class Haqumei:
 
     def g2p_pairs_batch(self, texts: List[str]) -> List[List[WordPhonemePair]]:
         """形態素ごとの音素マッピングのバッチ処理。
-
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
             texts (List[str]): 入力テキストのリスト。
@@ -866,8 +851,7 @@ class Haqumei:
     def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
         """形態素ごとの音素マッピング（詳細版）のバッチ処理。
 
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
+        マルチスレッドで処理を行います。
 
         Args:
             texts (List[str]): 入力テキストのリスト。
@@ -895,9 +879,6 @@ class Haqumei:
 
     def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
         """フルコンテキストラベル抽出のバッチ処理。
-
-        `modify_kanji_yomi` が無効な場合、マルチスレッドで処理を行います。
-        有効な場合は、シングルスレッドでの逐次処理にフォールバックします。
 
         Args:
             texts (List[str]): 入力テキストのリスト。

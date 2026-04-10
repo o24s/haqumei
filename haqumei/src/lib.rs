@@ -185,7 +185,7 @@ pub struct HaqumeiOptions {
     /// 有効にした初回実行時には、辞書のダウンロードが発生します。
     ///
     /// デフォルトで無効になっています。
-    pub modify_kanji_yomi: bool,
+    pub use_unidic_yomi: bool,
 
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
     /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
@@ -242,7 +242,7 @@ impl Default for HaqumeiOptions {
             revert_yotsugana: false,
             modify_filler_accent: true,
             predict_nani: true,
-            modify_kanji_yomi: false,
+            use_unidic_yomi: false,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
             process_odoriji: true,
@@ -284,7 +284,7 @@ impl Haqumei {
             options,
         };
 
-        if options.modify_kanji_yomi {
+        if options.use_unidic_yomi {
             haqumei.init_tokenizer_if_needed()?;
         }
 
@@ -316,7 +316,7 @@ impl Haqumei {
     pub(crate) fn init_tokenizer_if_needed_and_modify_kanji_yomi_enabled(
         &mut self,
     ) -> Result<Option<vibrato_rkyv::Tokenizer>, HaqumeiError> {
-        if self.options.modify_kanji_yomi {
+        if self.options.use_unidic_yomi {
             self.init_tokenizer_if_needed()?;
             Ok(self.tokenizer.clone()) // かなり無料
         } else {
@@ -818,7 +818,7 @@ impl Haqumei {
         if options.predict_nani {
             self.predict_nani_reading(&mut njd_features);
         }
-        if options.modify_kanji_yomi {
+        if options.use_unidic_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);
         }
         if options.retreat_acc_nuc {

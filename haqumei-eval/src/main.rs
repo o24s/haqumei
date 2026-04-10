@@ -410,7 +410,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         DICT_DIR,
         HaqumeiOptions {
             predict_nani: true,
-            modify_kanji_yomi: true,
+            use_unidic_yomi: true,
             ..Default::default()
         },
     )?;

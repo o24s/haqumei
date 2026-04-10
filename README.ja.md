@@ -270,13 +270,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - Default, Heavy の違い:  
   表中のDefault は `Haqumei::new` をそのまま使用しており、  
-  Heavyは [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `modify_kanji_yomi` を有効にした場合の計測です。
+  Heavyは [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `use_unidic_yomi` を有効にした場合の計測です。
 
 ### Heavy について
 
-#### `modify_kanji_yomi` オプション
+#### `use_unidic_yomi` オプション
 
-`modify_kanji_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/o24s/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
+`use_unidic_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/o24s/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
 そのため、若干の解析速度の低下が見られます。
 
 #### `predict_nani` 機能

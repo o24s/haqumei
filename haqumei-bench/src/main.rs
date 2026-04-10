@@ -32,7 +32,7 @@ fn bench_g2p(c: &mut Criterion) {
 
     let mut hq_heavy = Haqumei::with_options(HaqumeiOptions {
         predict_nani: true,
-        modify_kanji_yomi: true,
+        use_unidic_yomi: true,
         ..Default::default()
     })
     .unwrap();
