@@ -46,7 +46,6 @@ impl Dictionary {
     #[cfg(feature = "embed-dictionary")]
     pub fn from_embedded() -> Result<Self, HaqumeiError> {
         use crate::utils::compute_metadata_key;
-        use fs4::fs_std::FileExt;
 
         use sha2::{Digest, Sha256};
         use std::{fs::File, io::Read};
@@ -74,12 +73,10 @@ impl Dictionary {
             .truncate(true)
             .open(&lock_file_path)?;
 
-        lock_file
-            .lock_exclusive()
-            .map_err(|e| HaqumeiError::CacheIo {
-                path: lock_file_path.clone(),
-                source: e,
-            })?;
+        fs4::FileExt::lock(&lock_file).map_err(|e| HaqumeiError::CacheIo {
+            path: lock_file_path.clone(),
+            source: e,
+        })?;
 
         let hash_files_full = |paths: &Vec<PathBuf>| -> Result<_, HaqumeiError> {
             let mut file_hasher = Sha256::new();
