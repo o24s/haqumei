@@ -805,16 +805,6 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
-dependencies = [
- "rustix",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "fs4"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
@@ -956,9 +946,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3fe20c53d8cc2b2ae36ee3eb9bc8f3f35b361d97553ffad66179ea9632c6217"
+version = "0.3.1"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -966,7 +954,7 @@ dependencies = [
  "crossbeam-channel",
  "digest-io",
  "dirs",
- "fs4 0.13.1",
+ "fs4",
  "glob",
  "hex",
  "libc",
@@ -991,6 +979,8 @@ dependencies = [
 [[package]]
 name = "haqumei"
 version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44a2f81e57721a3ea671a3f4003d15c2f45ac0905d8a6a96e1e919aa7bf8240f"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -998,7 +988,7 @@ dependencies = [
  "crossbeam-channel",
  "digest-io",
  "dirs",
- "fs4 1.1.0",
+ "fs4",
  "glob",
  "hex",
  "libc",
@@ -1030,12 +1020,12 @@ dependencies = [
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
  "env_logger",
- "haqumei 0.3.0",
+ "haqumei 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "serde",
  "serde_json",
@@ -3211,7 +3201,7 @@ dependencies = [
  "csv-core",
  "digest-io",
  "dirs",
- "fs4 1.1.0",
+ "fs4",
  "hashbrown 0.17.0",
  "hex",
  "log",
@@ -3509,15 +3499,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]

@@ -327,7 +327,7 @@ fn process_line(
                             "{} {}\t{}",
                             status,
                             map.word,
-                            map.phonemes.join(" ")
+                            map.phonemes.join(" "),
                         )?;
                     }
                 }
@@ -348,13 +348,17 @@ fn process_line(
                         };
                         writeln!(
                             writer,
-                            "{} {}\tPOS:{}\tPRON:{}\tACC:{}/{}",
+                            "{} {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}\tCHAIN_FLAG: {}\tCHAIN_RULE: {}",
                             status,
                             detail.word,
                             detail.pos,
+                            detail.pos_group1,
                             detail.pron,
+                            detail.read,
                             detail.accent_nucleus,
-                            detail.mora_count
+                            detail.mora_count,
+                            detail.chain_flag,
+                            detail.chain_rule,
                         )?;
                     }
                 }
