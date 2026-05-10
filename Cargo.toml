@@ -6,6 +6,7 @@ members = [
     "haqumei-cli",
     "haqumei-dict-tool",
     "haqumei-eval",
+    "haqumei-jlabel",
     "haqumei-python",
 ]
 

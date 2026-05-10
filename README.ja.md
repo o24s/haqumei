@@ -342,13 +342,13 @@ Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) �
 
 ## ライセンス
 
-Haqumei のRustコードは、Apache License 2.0 の条件に基づいて配布されています。詳細については、リポジトリのルートにある `LICENSE` ファイルを参照してください。
+`haqumei-jlabel` を除く Haqumei の Rust コードは、Apache License 2.0 の条件に基づいて配布されています。
 
 ### 同梱ソフトウェアのライセンスと由来
 
 Haqumei は、G2P を提供するために、改変された Open JTalk の C/C++ コードを含んでいます。この同梱コードの由来とライセンスは以下の通りです。
 
-- 同梱されているOpen JTalkソースコード
+- 同梱されている Open JTalk ソースコード
   - 由来: `vendor/open_jtalk` ディレクトリに含まれるコードは、[tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) リポジトリに基づいています。これは、Open JTalkの拡張版に、さまざまなコミュニティフォーク (VOICEVOXプロジェクトなど) による改善を統合したものです。
   - ライセンス: 同梱されている Open JTalk ソースコードは、修正BSDライセンスの下でライセンスされています。このライセンスは `vendor/open_jtalk` にあるコードにのみ適用され、このプロジェクトの他の部分には適用されません。再配布要件に従い、修正BSDライセンスの全文は `vendor/open_jtalk/src/COPYING` に含まれています。
 
@@ -357,6 +357,13 @@ Haqumei は、G2P を提供するために、改変された Open JTalk の C/C+
     [tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) をベースとしています。これは
     [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk) のフォークです。
   - ライセンス: 辞書データの著作権は `haqumei/dictionary/COPYING` ファイルに記載された内容に準拠します。
+
+- バンドルされた `haqumei-jlabel` ソースコード
+  - 由来: `haqumei-jlabel` ディレクトリに含まれるコードは、
+    [jpreprocess/jlabel](https://github.com/jpreprocess/jlabel) リポジトリをベースとしています。
+  - ライセンス: バンドルされている `haqumei-jlabel` ソースコードは BSD 3-Clause License の下でライセンスされています。このライセンスは
+    `haqumei-jlabel` ディレクトリ内のコードにのみ適用され、本プロジェクトの他の部分には適用されません。再配布に関する要件に従い、BSD 3-Clause License の全文は
+    `haqumei-jlabel/LICENSE` ファイルに含められています。
 
 
 ## 謝辞

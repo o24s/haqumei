@@ -290,9 +290,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.61"
+version = "1.2.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d16d90359e986641506914ba71350897565610e87ce0ad9e6f28569db3dd5c6d"
+checksum = "a1dce859f0832a7d088c4f1119888ab94ef4b5d6795d1ce05afb7fe159d79f98"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -947,38 +947,6 @@ dependencies = [
 [[package]]
 name = "haqumei"
 version = "0.3.1"
-dependencies = [
- "arc-swap",
- "bindgen",
- "cc",
- "crossbeam-channel",
- "digest-io",
- "dirs",
- "fs4",
- "glob",
- "hex",
- "libc",
- "log",
- "moka",
- "ndarray",
- "ort",
- "phf",
- "rayon",
- "reqwest",
- "serde",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "unicode-normalization",
- "vibrato-rkyv",
- "walkdir",
- "zstd",
-]
-
-[[package]]
-name = "haqumei"
-version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44a2f81e57721a3ea671a3f4003d15c2f45ac0905d8a6a96e1e919aa7bf8240f"
 dependencies = [
@@ -1011,11 +979,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "haqumei"
+version = "0.4.0"
+dependencies = [
+ "arc-swap",
+ "bindgen",
+ "cc",
+ "crossbeam-channel",
+ "digest-io",
+ "dirs",
+ "fs4",
+ "glob",
+ "haqumei-jlabel",
+ "hex",
+ "libc",
+ "log",
+ "moka",
+ "ndarray",
+ "ort",
+ "phf",
+ "rayon",
+ "reqwest",
+ "serde",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "unicode-normalization",
+ "vibrato-rkyv",
+ "walkdir",
+ "zstd",
+]
+
+[[package]]
 name = "haqumei-bench"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "haqumei 0.3.1",
+ "haqumei 0.4.0",
 ]
 
 [[package]]
@@ -1025,7 +1026,7 @@ dependencies = [
  "anyhow",
  "clap",
  "env_logger",
- "haqumei 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "haqumei 0.3.1",
  "log",
  "serde",
  "serde_json",
@@ -1037,7 +1038,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "glob",
- "haqumei 0.3.1",
+ "haqumei 0.4.0",
  "thiserror 2.0.18",
 ]
 
@@ -1047,7 +1048,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "digest-io",
- "haqumei 0.3.1",
+ "haqumei 0.4.0",
  "hex",
  "rayon",
  "regex",
@@ -1058,10 +1059,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "haqumei-jlabel"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "haqumei-python"
 version = "0.1.0"
 dependencies = [
- "haqumei 0.3.1",
+ "haqumei 0.4.0",
  "pyo3",
 ]
 

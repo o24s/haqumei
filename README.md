@@ -316,7 +316,7 @@ Haqumei uses the dictionary included in [pyopenjtalk-plus](https://github.com/ts
 
 ## License
 
-The Rust code of `haqumei` is distributed under the terms of the Apache License 2.0. See the `LICENSE` file in the repository root for details.
+The Rust code of Haqumei, excluding `haqumei-jlabel`, is distributed under the terms of the Apache License 2.0.
 
 ### Licenses and Origins of Bundled Software
 
@@ -337,6 +337,14 @@ The Rust code of `haqumei` is distributed under the terms of the Apache License 
     [tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus), a modified fork of
     [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk).
   - License: The dictionary data is covered by the license notices in `haqumei/dictionary/COPYING`.
+
+- Bundled `haqumei-jlabel` Source Code
+  - Origin: The code contained in the `haqumei-jlabel` directory is based on the
+    [jpreprocess/jlabel](https://github.com/jpreprocess/jlabel) repository.
+  - License: The bundled `haqumei-jlabel` source code is licensed under the BSD 3-Clause License. This license applies
+    only to the code located in `haqumei-jlabel`, and does not apply to the rest of this project. In accordance
+    with redistribution requirements, the full text of the BSD 3-Clause License is included in
+    `haqumei-jlabel/LICENSE`.
 
 ## Acknowledgements
 

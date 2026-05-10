@@ -1,0 +1,24 @@
+[package]
+name = "haqumei-jlabel"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+license = "BSD-3-Clause"
+readme = "README.md"
+documentation = "https://docs.rs/haqumei-jlabel"
+description = "Structures, parser, and serializer for extended HTS-style full-context labels"
+repository = "https://github.com/o24s/haqumei"
+keywords = ["tts", "openjtalk", "library"]
+categories = ["encoding"]
+
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
