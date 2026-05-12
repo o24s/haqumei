@@ -1,6 +1,6 @@
-use std::{mem::MaybeUninit, ptr::NonNull};
-
 use crate::{errors::HaqumeiError, ffi};
+
+use std::{mem::MaybeUninit, ptr::NonNull};
 
 #[derive(Debug)]
 pub(crate) struct JpCommon {

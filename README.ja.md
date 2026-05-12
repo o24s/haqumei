@@ -22,9 +22,10 @@
 ## 特徴 (Features)
 
 - Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
+- プロソディ記号付き音素列: ESPnet2 の `pyopenjtalk_prosody` より、さらにリッチな表現をもつプロソディ記号付き音素列 (`g2p_prosody`) を得ることができます。  (`g2p_prosody` の詳細については、[ここ](#g2p_prosody-の仕様) を参照してください。)
 - パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
-- 精度: [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。
-- 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`)、単語ごとの分割リスト (`g2p_per_word`) など、多様な形式で結果を取得できます。
+- 精度: [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
+- 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
 
 コード例は [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples) にあります。
@@ -65,19 +66,19 @@ use haqumei::Haqumei;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
-  let text = "日本語のテキストを音素に変換します。";
+  let text = "こんにちは、世界！";
 
   // 音素リストに変換
   let phonemes = haqumei.g2p(text)?;
-  println!("音素リスト: {:?}", phonemes);
+  assert_eq!(phonemes, ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"]);
 
-  // pyopenjtalk のようなスペース区切り文字列に変換
-  let phoneme_str = phonemes.join(" ");
-  println!("スペース区切りの音素: {}", phoneme_str);
+  // プロソディ記号付きの音素リストを得る
+  let phones = haqumei.g2p_prosody(text)?.join(" ");
+  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i !");
 
   // カタカナ読みに変換
   let kana = haqumei.g2p_kana(text)?;
-  println!("カタカナ読み: {}", kana);
+  assert_eq!(kana, "コンニチワ、セカイ！");
 
   Ok(())
 }
@@ -91,22 +92,22 @@ from haqumei import Haqumei
 # Haqumeiを初期化 (辞書は自動でセットアップされます)
 haqumei = Haqumei()
 
-text = "日本語のテキストを音素に変換します。"
+text = "こんにちは、世界！"
 
 # 音素列に変換
 phonemes = haqumei.g2p(text)
 print(f"音素列: {phonemes}")
-# -> 音素列: ['n', 'i', 'h', 'o', 'N', 'g', 'o', 'n', 'o', 't', 'e', 'k', 'i', 's', 'U', 't', 'o', 'o', 'o', 'N', 's', 'o', 'n', 'i', 'h', 'e', 'N', 'k', 'a', 'N', 'sh', 'i', 'm', 'a', 's', 'U']
+# -> 音素列: ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"]
 
 # pyopenjtalk風のスペース区切り文字列に変換
-phoneme_str = " ".join(phonemes)
-print(f"スペース区切りの音素: {phoneme_str}")
-# -> スペース区切りの音素: n i h o N g o n o t e k i s U t o o o N s o n i h e N k a N sh i m a s U
+phones = " ".join(haqumei.g2p_prosody(text))
+print(f"プロソディ付き音素列: {phones}")
+# -> プロソディ付き音素列: ^ k o [ N n i ch i w a _ s e ] k a i !
 
 # カタカナ読みに変換
 kana = haqumei.g2p_kana(text)
 print(f"カタカナ読み: {kana}")
-# -> カタカナ読み: ニホンゴノテキストヲオンソニヘンカンシマス
+# -> カタカナ読み: コンニチワ、セカイ！
 ```
 
 ## Advanced Features
@@ -251,6 +252,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## `g2p_prosody` の仕様
+
+`g2p_prosody` は、入力テキストをプロソディ記号付き音素リストに変換します。
+
+出力には通常の音素に加えて、以下の記号が含まれます：
+
+| 記号 | 意味 | 出現位置 |
+| :--- | :--- | :--- |
+| `^` | 発話の開始 (BOS) | 文頭 |
+| `$` | 発話の終結 (EOS) | 文末 |
+| `?` | 疑問文の終結 (？) | 文末・文中 |
+| `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+| `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+| `_` | ポーズ・読点 (、) | 文中 |
+| `#` | アクセント句境界 | 文中 |
+| `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+| `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+
+記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+"Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+(Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+
+日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+`HaqumeiOptions` の `drop_unvoiced_vowels` を `true` に設定することで、ESPnet2 のように 無声母音 (A, E, I, O, U) を 通常の有声母音 (a, e, i, o, u) に潰すことができますが、あまり推奨されません。
+
+### 例
+
+```rust
+use haqumei::Haqumei;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+
+  let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
+  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+
+  let phones = haqumei.g2p_prosody("青い空、広がる。")?;
+  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+
+  Ok(())
+}
+```
+
+## 精度
+
+`haqumei-eval` クレートを用いた、JSUT corpus の Basic5000 に対するアノテーションである、jsut-label のフォーク [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label) の音素エラー率(PER)と、[ROHAN](https://github.com/mmorise/rohan4600) のカタカナエラー率(Katakana ER)を示します。
+
+### jsut-label
+
+Phoneme Error Rate (S+D+I / N_expected): 1.24%  (Substitute=2244 Delete=572 Insert=889 N=297843)
+
+`HaqumeiOptions`:
+```rust
+HaqumeiOptions {
+  use_unidic_yomi: true,
+  normalize_iu: Some(IuPronunciation::Yuu),
+  ..Default::default()
+}
+```
+
+### ROHAN
+
+Katakana Error Rate (S+D+I / N_expected): 1.64%  (S=1689 D=493 I=288 N=150637)
+
+`HaqumeiOptions`:
+```rust
+HaqumeiOptions {
+  revert_long_vowels: true,
+  revert_yotsugana: true,
+  ..Default::default()
+}
+```
+
 ## ベンチマーク
 
 約31.8万文字の日本語テキストを対象にした、`pyopenjtalk` (Baseline) と `haqumei` の比較結果です。
@@ -291,8 +366,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #### `predict_nani` 機能
 
 `predict_nani` は ONNX を用いますが、セッションをOSスレッドごとに作るのは正気ではないため、`Mutex` を使用しています。(ONNX のセッションはスレッドセーフだが、そのバインディングの ort は `Session::run` を[排他参照をとるようにしている](https://github.com/pykeio/ort/issues/402#issuecomment-2949993914))  
-それがボトルネックではないかという懸念に対しては、そもそも並行に処理をしている際に、入力に大量の"何"がくることでボトルネックになってしまうケースはまれです。  
-また、このモデル自体は軽量ですし、並行性に耐性のあるキャッシュ機構を挟んでいるため、DOS的な入力への多少の耐性はあるように思います。  
+並行に処理をしている際に、入力に大量の"何"がくることでボトルネックになってしまうケースはまれであるため、ボトルネックとなる懸念は否定されます。  
+また、このモデル自体は軽量で、並行性に耐性のあるキャッシュ機構を挟んでいるため、DOS的な入力への多少の耐性はあるといえます。  
 
 「吾輩は猫である」 (800個近くの"何"を含む) を用いたベンチマーク(`haqumei-bench`)でも、デフォルトの `Haqumei` とその `predict_nani` を有効にした比較は、平均的には非常に小さい誤差に収まったために、実際にはボトルネックではありません。  
 

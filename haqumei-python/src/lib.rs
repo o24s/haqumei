@@ -257,6 +257,16 @@ pub enum UnicodeNormalization {
     Nfkc = 2,
 }
 
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum IuPronunciation {
+    None = 0,
+    Iu = 1,
+    Yuu = 2,
+    KanjiIu = 3,
+    KanjiYuu = 4,
+}
+
 #[pyclass(name = "Dictionary", module = "haqumei")]
 struct PyDictionary {
     inner: Dictionary,
@@ -381,7 +391,7 @@ impl PyOpenJTalk {
         self.inner
             .lock()
             .unwrap()
-            .extract_fullcontext(text)
+            .extract_fullcontext_string(text)
             .map_err(to_py_err)
     }
 
@@ -394,7 +404,7 @@ impl PyOpenJTalk {
             self.inner
                 .lock()
                 .unwrap()
-                .extract_fullcontext_batch(&texts)
+                .extract_fullcontext_string_batch(&texts)
                 .map_err(to_py_err)
         })
     }
@@ -441,6 +451,24 @@ impl PyOpenJTalk {
                 .lock()
                 .unwrap()
                 .g2p_kana_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
+    fn g2p_prosody(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p_prosody(text)
+            .map_err(to_py_err)
+    }
+
+    fn g2p_prosody_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_prosody_batch(&texts)
                 .map_err(to_py_err)
         })
     }
@@ -554,24 +582,28 @@ impl PyHaqumei {
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
+        normalize_iu = IuPronunciation::None,
         modify_filler_accent = true,
         predict_nani = true,
         use_unidic_yomi = false,
         retreat_acc_nuc = true,
         modify_acc_after_chaining = true,
-        process_odoriji = true
+        process_odoriji = true,
+        drop_unvoiced_vowels = false,
     ))]
     fn new(
         normalize_unicode: UnicodeNormalization,
         use_read_as_pron: bool,
         revert_long_vowels: bool,
         revert_yotsugana: bool,
+        normalize_iu: IuPronunciation,
         modify_filler_accent: bool,
         predict_nani: bool,
         use_unidic_yomi: bool,
         retreat_acc_nuc: bool,
         modify_acc_after_chaining: bool,
         process_odoriji: bool,
+        drop_unvoiced_vowels: bool,
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             normalize_unicode: match normalize_unicode {
@@ -582,6 +614,13 @@ impl PyHaqumei {
             use_read_as_pron,
             revert_long_vowels,
             revert_yotsugana,
+            normalize_iu: match normalize_iu {
+                IuPronunciation::Iu => Some(::haqumei::IuPronunciation::Iu),
+                IuPronunciation::Yuu => Some(::haqumei::IuPronunciation::Yuu),
+                IuPronunciation::KanjiIu => Some(::haqumei::IuPronunciation::KanjiIu),
+                IuPronunciation::KanjiYuu => Some(::haqumei::IuPronunciation::KanjiYuu),
+                IuPronunciation::None => None,
+            },
             modify_filler_accent,
             predict_nani,
             use_unidic_yomi,
@@ -589,6 +628,7 @@ impl PyHaqumei {
             modify_acc_after_chaining,
             process_odoriji,
             is_non_pause_symbol: default_is_non_pause_symbol,
+            drop_unvoiced_vowels,
         };
 
         let inner = Haqumei::with_options(options).map_err(to_py_err)?;
@@ -671,7 +711,7 @@ impl PyHaqumei {
         self.inner
             .lock()
             .unwrap()
-            .extract_fullcontext(text)
+            .extract_fullcontext_string(text)
             .map_err(to_py_err)
     }
 
@@ -684,7 +724,7 @@ impl PyHaqumei {
             self.inner
                 .lock()
                 .unwrap()
-                .extract_fullcontext_batch(&texts)
+                .extract_fullcontext_string_batch(&texts)
                 .map_err(to_py_err)
         })
     }
@@ -753,6 +793,24 @@ impl PyHaqumei {
                 .lock()
                 .unwrap()
                 .g2p_kana_per_word_batch(&texts)
+                .map_err(to_py_err)
+        })
+    }
+
+    fn g2p_prosody(&self, text: &str) -> PyResult<Vec<String>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p_prosody(text)
+            .map_err(to_py_err)
+    }
+
+    fn g2p_prosody_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2p_prosody_batch(&texts)
                 .map_err(to_py_err)
         })
     }

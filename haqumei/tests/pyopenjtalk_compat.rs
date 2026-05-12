@@ -680,7 +680,7 @@ mod tests {
         let mut ojt = OpenJTalk::new().unwrap();
         for text in PHONEME_MAPPING_CORPUS {
             let mapping = ojt.g2p_mapping(text).unwrap();
-            let labels = ojt.extract_fullcontext(text).unwrap();
+            let labels = ojt.extract_fullcontext_string(text).unwrap();
 
             assert_eq!(
                 flatten_mapping_phonemes(&mapping, false),

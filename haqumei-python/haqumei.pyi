@@ -162,6 +162,14 @@ class UnicodeNormalization(IntEnum):
     Nfc = 1
     Nfkc = 2
 
+class IuPronunciation(IntEnum):
+    """「言う」の発音正規化方式を指定する。"""
+    None_ = 0
+    Iu = 1
+    Yuu = 2
+    KanjiIu = 3
+    KanjiYuu = 4
+
 class Dictionary:
     """OpenJTalk用の辞書データを管理するクラス。
 
@@ -341,6 +349,36 @@ class OpenJTalk:
         """
         ...
 
+    def g2p_prosody(self, text: str) -> List[str]:
+        """入力テキストをプロソディ記号付き音素リストに変換します。
+
+        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
+        | `^` | 発話の開始 (BOS) | 文頭 |
+        | `$` | 発話の終結 (EOS) | 文末 |
+        | `?` | 疑問文の終結 (？) | 文末・文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `_` | ポーズ・読点 (、) | 文中 |
+        | `#` | アクセント句境界 | 文中 |
+        | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+        | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+        # 互換性について
+        記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+        "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+        (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+
+        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
+        """
+        ...
+
     def g2p_per_word(self, text: str) -> List[List[str]]:
         """テキストを単語ごとに区切られた音素リストに変換します。
 
@@ -473,10 +511,40 @@ class OpenJTalk:
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 入力テキストのリスト。
 
         Returns:
-            str: カタカナ文字列 (例: `"コンニチワ"`)。
+            List[List[str]]: 単語ごとのカタカナ文字列のリストのリスト。
+        """
+        ...
+
+
+    def g2p_prosody_batch(self, text: List[str]) -> List[List[str]]:
+        """複数の入力テキストをプロソディ記号付き音素リストのリストに変換します。
+
+        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
+        | `^` | 発話の開始 (BOS) | 文頭 |
+        | `$` | 発話の終結 (EOS) | 文末 |
+        | `?` | 疑問文の終結 (？) | 文末・文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `_` | ポーズ・読点 (、) | 文中 |
+        | `#` | アクセント句境界 | 文中 |
+        | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+        | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+        # 互換性について
+        記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+        "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+        (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
         """
         ...
 
@@ -538,7 +606,7 @@ class OpenJTalk:
         - 空白等: `sp` (Space)
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 入力テキストのリスト。
 
         Returns:
             List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。
@@ -585,16 +653,18 @@ class Haqumei:
 
     def __init__(
         self,
-        normalize_unicode: bool = True,
+        normalize_unicode: UnicodeNormalization = UnicodeNormalization.None_,
         use_read_as_pron: bool = False,
         revert_long_vowels: bool = False,
         revert_yotsugana: bool = False,
+        normalize_iu: IuPronunciation = IuPronunciation.None_,
         modify_filler_accent: bool = True,
         predict_nani: bool = False,
         use_unidic_yomi: bool = False,
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,
+        drop_unvoiced_vowels: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。"""
         ...
@@ -702,6 +772,36 @@ class Haqumei:
 
         Returns:
             List[List[str]]: 単語ごとの音素リストのリスト。
+        """
+        ...
+
+
+    def g2p_prosody(self, text: str) -> List[str]:
+        """入力テキストをプロソディ記号付き音素リストに変換します。
+
+        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
+        | `^` | 発話の開始 (BOS) | 文頭 |
+        | `$` | 発話の終結 (EOS) | 文末 |
+        | `?` | 疑問文の終結 (？) | 文末・文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `_` | ポーズ・読点 (、) | 文中 |
+        | `#` | アクセント句境界 | 文中 |
+        | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+        | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+        # 互換性について
+        記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+        "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+        (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
         """
         ...
 
@@ -819,12 +919,42 @@ class Haqumei:
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 入力テキストのリスト。
 
         Returns:
-            str: カタカナ文字列 (例: `"コンニチワ"`)。
+            List[List[str]]: 単語ごとのカタカナ文字列のリストのリスト。
         """
         ...
+
+    def g2p_prosody_batch(self, text: List[str]) -> List[List[str]]:
+        """複数の入力テキストをプロソディ記号付き音素リストのリストに変換します。
+
+        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
+        | `^` | 発話の開始 (BOS) | 文頭 |
+        | `$` | 発話の終結 (EOS) | 文末 |
+        | `?` | 疑問文の終結 (？) | 文末・文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `_` | ポーズ・読点 (、) | 文中 |
+        | `#` | アクセント句境界 | 文中 |
+        | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+        | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+        # 互換性について
+        記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+        "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+        (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
+        """
+        ...
+
 
     def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
         """単語ごとに分割された音素リストのバッチ処理。
@@ -870,7 +1000,7 @@ class Haqumei:
         - 空白等: `sp` (Space)
 
         Args:
-            text (str): 入力テキスト。
+            texts (List[str]): 入力テキストのリスト。
 
         Returns:
             List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。

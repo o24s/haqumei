@@ -1,12 +1,13 @@
 mod utils;
 
 use std::borrow::Cow;
+use std::ops::Range;
 
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
-    Haqumei, NjdFeature, OpenJTalk, UnicodeNormalization, VIBRATO_CACHE,
+    Haqumei, IuPronunciation, NjdFeature, OpenJTalk, UnicodeNormalization, VIBRATO_CACHE,
     data::MULTI_READ_KANJI_LIST,
     errors::HaqumeiError,
     features::UnidicFeature,
@@ -15,7 +16,6 @@ use crate::{
         split_kana_mora,
     },
 };
-
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 
 impl Haqumei {
@@ -40,7 +40,7 @@ impl Haqumei {
         }
     }
 
-    pub(crate) fn revert_pron_to_read(&mut self, njd_features: &mut [NjdFeature]) {
+    pub(crate) fn revert_pron_to_read(&self, njd_features: &mut [NjdFeature]) {
         let options = &self.options;
         debug_assert!(
             options.use_read_as_pron || options.revert_long_vowels || options.revert_yotsugana
@@ -60,18 +60,132 @@ impl Haqumei {
         }
     }
 
-    pub(crate) fn predict_nani_reading(&mut self, njd_features: &mut [NjdFeature]) {
-        for i in 0..njd_features.len() {
-            if njd_features[i].orig == "何" {
-                let next_node_feature = njd_features.get(i + 1);
-                let is_read_nan = self.predict_is_nan(next_node_feature);
-                let yomi = if is_read_nan { "ナン" } else { "ナニ" };
+    pub(crate) fn normalize_iu(&self, njd_features: &mut [NjdFeature], option: IuPronunciation) {
+        for f in njd_features.iter_mut() {
+            let orig = f.orig.as_str();
 
-                njd_features[i].pron = yomi.to_string();
-                njd_features[i].read = yomi.to_string();
+            if matches!(option, IuPronunciation::KanjiIu | IuPronunciation::KanjiYuu)
+                && !orig.contains('言')
+                && !orig.contains('云')
+            {
+                continue;
+            }
+
+            if f.pos == "連体詞" {
+                if matches!(orig, "こういう" | "そういう" | "どういう" | "ああいう")
+                {
+                    replace_iu(f, 6..9, option);
+                }
+                continue;
+            }
+
+            if orig.starts_with("ていう") || orig.starts_with("という") {
+                replace_iu(f, 3..6, option);
+                continue;
+            }
+            if orig.starts_with("っていう") || orig.starts_with("とかいう") {
+                replace_iu(f, 6..9, option);
+                continue;
+            }
+
+            if orig.starts_with("あっという")
+                || orig.starts_with("アッという")
+                || orig.starts_with("あっと言う")
+                || orig.starts_with("アッと言う")
+            {
+                replace_iu(f, 9..12, option);
+                continue;
+            }
+
+            let is_target_pos = (f.pos == "動詞" && f.pos_group1 == "自立")
+                || (f.pos == "形容詞" && f.pos_group1.ends_with("自立") /* 自立/非自立 */ && f.ctype == "形容詞・アウオ段")
+                || (f.pos == "副詞" && f.pos_group1 == "一般");
+
+            if !is_target_pos {
+                continue;
+            }
+
+            let orig = f.orig.as_str();
+
+            if f.pron == "イウ"
+                || orig.starts_with("いう")
+                || orig.starts_with("言う")
+                || orig.starts_with("云う")
+            {
+                replace_iu(f, 0..3, option);
+            }
+            // 複合語 (e.g., 物言う) などの場合
+            else if orig.contains("言う")
+                && let Some(pos) = rfind_iu_sound_in_pron(f.pron.as_bytes())
+            {
+                replace_iu(f, pos..pos + 3, option);
             }
         }
     }
+}
+
+#[inline(always)]
+fn replace_iu(njd_feature: &mut NjdFeature, range: Range<usize>, option: IuPronunciation) {
+    let bytes = unsafe { njd_feature.pron.as_mut_vec() };
+
+    if range.end > bytes.len() {
+        return;
+    }
+
+    debug_assert_eq!(range.end - range.start, 3);
+
+    match option {
+        IuPronunciation::Iu | IuPronunciation::KanjiIu => {
+            bytes[range].copy_from_slice("イ".as_bytes());
+        }
+        IuPronunciation::Yuu | IuPronunciation::KanjiYuu => {
+            bytes[range].copy_from_slice("ユ".as_bytes());
+        }
+    }
+}
+
+#[inline(always)]
+const fn rfind_iu_sound_in_pron(bytes: &[u8]) -> Option<usize> {
+    if bytes.len() < 6 {
+        return None;
+    }
+
+    let mut i = bytes.len() - 6;
+    loop {
+        let b1 = bytes[i];
+        let b2 = bytes[i + 1];
+        let b3 = bytes[i + 2];
+
+        // 「イ」([227, 130, 164]) または 「ユ」([227, 131, 166])
+        let is_i_or_yu = (b1 == 227) && ((b2 == 130 && b3 == 164) || (b2 == 131 && b3 == 166));
+
+        if is_i_or_yu {
+            let n1 = bytes[i + 3];
+            let n2 = bytes[i + 4];
+            let n3 = bytes[i + 5];
+
+            // 次の文字が「ウ, ッ, エ, オ, ー」のいずれかであるか
+            let is_target_next = (n1 == 227)
+                && (
+                    (n2 == 130 && n3 == 166) || // ウ
+                (n2 == 131 && n3 == 131) || // ッ
+                (n2 == 130 && n3 == 168) || // エ
+                (n2 == 130 && n3 == 170) || // オ
+                (n2 == 131 && n3 == 188)
+                    // ー
+                );
+
+            if is_target_next {
+                return Some(i);
+            }
+        }
+
+        if i == 0 {
+            break;
+        }
+        i -= 1;
+    }
+    None
 }
 
 /// フィラーが acc > mora_size のときに、平版型 (acc = 0) にし、
@@ -131,6 +245,19 @@ pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFea
 }
 
 impl Haqumei {
+    pub(crate) fn predict_nani_reading(&mut self, njd_features: &mut [NjdFeature]) {
+        for i in 0..njd_features.len() {
+            if njd_features[i].orig == "何" {
+                let next_node_feature = njd_features.get(i + 1);
+                let is_read_nan = self.predict_is_nan(next_node_feature);
+                let yomi = if is_read_nan { "ナン" } else { "ナニ" };
+
+                njd_features[i].pron = yomi.to_string();
+                njd_features[i].read = yomi.to_string();
+            }
+        }
+    }
+
     pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
         let tokens: Vec<UnidicFeature> = if let Some(rx) = self.rx.take() {
             rx.recv().unwrap_or_default()

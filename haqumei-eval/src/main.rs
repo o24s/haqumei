@@ -3,7 +3,7 @@ mod data {
     include!(concat!(env!("OUT_DIR"), "/data.rs"));
 }
 
-use haqumei::{Haqumei, HaqumeiOptions};
+use haqumei::{Haqumei, HaqumeiOptions, IuPronunciation};
 use similar::{ChangeTag, TextDiff};
 use std::borrow::Cow;
 use std::error::Error;
@@ -409,8 +409,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut haqumei = Haqumei::from_path(
         DICT_DIR,
         HaqumeiOptions {
-            predict_nani: true,
             use_unidic_yomi: true,
+            normalize_iu: Some(IuPronunciation::Yuu),
             ..Default::default()
         },
     )?;
@@ -425,7 +425,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut haqumei = Haqumei::from_path(
         DICT_DIR,
         HaqumeiOptions {
-            predict_nani: true,
             revert_long_vowels: true,
             revert_yotsugana: true,
             ..Default::default()

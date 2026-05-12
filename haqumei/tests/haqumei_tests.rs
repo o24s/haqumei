@@ -7,8 +7,8 @@ mod tests {
     };
 
     use haqumei::{
-        Haqumei, HaqumeiOptions, OpenJTalk, UnicodeNormalization, errors::HaqumeiError,
-        utils::default_is_non_pause_symbol,
+        Haqumei, HaqumeiOptions, IuPronunciation, OpenJTalk, UnicodeNormalization,
+        errors::HaqumeiError, utils::default_is_non_pause_symbol,
     };
     use unicode_normalization::UnicodeNormalization as _;
 
@@ -246,15 +246,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_mapping_nightmare_case() {
-        let mut haqumei = Haqumei::new().unwrap();
-        let text = "\
+    const NIGHTMARE_TEXT: &str = "\
 つまみ出されようとしたが、「「八十五歳」」にもなる 長老ー ー に助けられた。\
 わーいです。そこで、𰻞𰻞麺とお冷を飲み食いしたです。\
 ーっ、 𰻞ー𰻞。あ、はい。あーーーーーーーーあ\
 叙々々々々々々苑々々様々々要所々々々々々槇野々々々\
+２0１８ Oｐeｎ ＪTaｌｋ　１．１１\
 ";
+
+    #[test]
+    fn test_mapping_nightmare_case() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = NIGHTMARE_TEXT;
 
         let result = haqumei.g2p_mapping(text).unwrap();
         let result: Vec<(&str, Vec<&str>)> = result
@@ -351,6 +354,22 @@ mod tests {
             ("々", vec!["y", "o", "o", "sh", "o"]),
             ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
             ("々々", vec!["n", "o", "n", "o"]),
+            ("二", vec!["n", "i"]),
+            ("千", vec!["s", "e", "N"]),
+            ("十", vec!["j", "u", "u"]),
+            ("八", vec!["h", "a", "ch", "i"]),
+            ("\u{3000}", vec!["sp"]),
+            (
+                "Ｏｐｅｎ　ＪＴａｌｋ",
+                vec![
+                    "o", "o", "p", "u", "N", "j", "e", "e", "t", "o", "o", "k", "u",
+                ],
+            ),
+            ("\u{3000}", vec!["sp"]),
+            ("一", vec!["i", "cl"]),
+            ("．", vec!["t", "e", "N"]),
+            ("一", vec!["i", "ch", "i"]),
+            ("一", vec!["i", "ch", "i"]),
         ];
 
         assert_eq!(result, expected);
@@ -784,5 +803,425 @@ mod tests {
         assert_eq!(mapping[0].word, "\u{3000}");
         assert_eq!(mapping[1].word, "あーー");
         assert_eq!(mapping[2].word, "\u{3000}");
+    }
+
+    #[test]
+    fn test_fullcontext_consistency_nightmare_case() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let text = NIGHTMARE_TEXT;
+
+        let jlabels = haqumei.extract_fullcontext(text).unwrap();
+        let struct_to_strings: Vec<String> =
+            jlabels.into_iter().map(|label| label.to_string()).collect();
+
+        let make_label_strings = haqumei.extract_fullcontext_string(text).unwrap();
+
+        assert_eq!(
+            struct_to_strings.len(),
+            make_label_strings.len(),
+            "Label length mismatch Struct: {}, Legacy: {}",
+            struct_to_strings.len(),
+            make_label_strings.len()
+        );
+
+        for (i, (s_str, l_str)) in struct_to_strings
+            .iter()
+            .zip(make_label_strings.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                s_str, l_str,
+                "Label mismatch at index {}\nStruct: {}\nLegacy: {}",
+                i, s_str, l_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_g2p_prosody_espnet2_compat() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        haqumei.options.drop_unvoiced_vowels = true;
+
+        let prosody1 = haqumei.g2p_prosody("こんにちは。").unwrap();
+        let expected1 = vec!["^", "k", "o", "[", "N", "n", "i", "ch", "i", "w", "a", "$"];
+        assert_eq!(prosody1, expected1);
+
+        let prosody2 = haqumei.g2p_prosody("テスト。").unwrap();
+        assert!(
+            prosody2.contains(&"u".to_string()),
+            "Unvoiced vowel should be dropped to 'u'"
+        );
+        assert!(
+            !prosody2.contains(&"U".to_string()),
+            "Unvoiced vowel 'U' should not exist"
+        );
+
+        let prosody3 = haqumei.g2p_prosody("本当ですか？").unwrap();
+        assert_eq!(
+            prosody3.last().unwrap(),
+            "?",
+            "Interrogative sentence should end with '?'"
+        );
+    }
+
+    #[test]
+    fn test_extract_prosody_from_labels_pure_function() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "プロソディーを抽出するテスト";
+
+        let labels = haqumei.extract_fullcontext(text).unwrap();
+
+        let phones_true = haqumei::prosody::extract_prosody_from_labels(&labels, true);
+        let phones_false = haqumei::prosody::extract_prosody_from_labels(&labels, false);
+
+        assert!(!phones_true.is_empty());
+        assert_eq!(phones_true.len(), phones_false.len());
+
+        assert_eq!(phones_true.first().unwrap(), "^");
+        assert_eq!(phones_true.last().unwrap(), "$");
+    }
+
+    #[test]
+    fn test_g2p_prosody_exclamation_support() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let prosody = haqumei.g2p_prosody("そうですか！").unwrap();
+        assert_eq!(
+            prosody.last().unwrap(),
+            "!",
+            "Should end with '!' for exclamatory sentence"
+        );
+
+        let prosody_mixed = haqumei.g2p_prosody("そうですか！？").unwrap();
+        assert_eq!(prosody_mixed.last().unwrap(), "!?",);
+    }
+
+    #[test]
+    fn test_g2p_prosody_basic_patterns() {
+        let mut haqumei = Haqumei::new().unwrap();
+        haqumei.options.drop_unvoiced_vowels = true;
+
+        // 平板型: 「こんにちは」
+        // [k o [ N n i ch i w a $]
+        let p1 = haqumei.g2p_prosody("こんにちは。").unwrap();
+        assert_eq!(
+            p1,
+            vec!["^", "k", "o", "[", "N", "n", "i", "ch", "i", "w", "a", "$"]
+        );
+
+        // 頭高型: 「テスト」
+        // [t e ] s u t o $]
+        let p2 = haqumei.g2p_prosody("テスト").unwrap();
+        assert_eq!(p2, vec!["^", "t", "e", "]", "s", "u", "t", "o", "$"]);
+
+        // 中高型: 「バドミントン」
+        let p3 = haqumei.g2p_prosody("バドミントン。").unwrap();
+        // b a [ d o m i ] N t o N $
+        assert_eq!(
+            p3,
+            vec![
+                "^", "b", "a", "[", "d", "o", "m", "i", "]", "N", "t", "o", "N", "$"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_g2p_prosody_sentence_endings() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let p1 = haqumei.g2p_prosody("本当？").unwrap();
+        assert_eq!(p1.last().unwrap(), "?");
+
+        let p2 = haqumei.g2p_prosody("本当！").unwrap();
+        assert_eq!(p2.last().unwrap(), "!");
+
+        let p3 = haqumei.g2p_prosody("本当！？").unwrap();
+        assert_eq!(p3.last().unwrap(), "!?");
+
+        let p4 = haqumei.g2p_prosody("本当。").unwrap();
+        assert_eq!(p4.last().unwrap(), "$");
+    }
+
+    #[test]
+    fn test_g2p_prosody_boundaries_and_pauses() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // アクセント句境界 (#) と 読点ポーズ (_)
+        // 「青い空、広がる」
+        let p1 = haqumei.g2p_prosody("青い空、広がる。").unwrap();
+
+        // 「青い」と「空」の間には境界 # が入る
+        // 読点の場所にはポーズ _ が入る
+        assert_eq!(
+            p1,
+            [
+                "^", "a", "[", "o", "]", "i", "#", "s", "o", "]", "r", "a", "_", "h", "i", "[",
+                "r", "o", "g", "a", "r", "u", "$"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_vowel_dropping_option() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        haqumei.options.drop_unvoiced_vowels = true;
+        let p_dropped = haqumei.g2p_prosody("テスト").unwrap();
+        assert!(p_dropped.contains(&"u".to_string()));
+        assert!(!p_dropped.contains(&"U".to_string()));
+
+        haqumei.options.drop_unvoiced_vowels = false;
+        let p_preserved = haqumei.g2p_prosody("テスト").unwrap();
+        assert!(p_preserved.contains(&"U".to_string()));
+    }
+
+    #[test]
+    fn test_g2p_prosody_complex_mixed() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let text = "えっ、本当！？すごい！";
+        let p = haqumei.g2p_prosody(text).unwrap();
+
+        assert_eq!(p.first().unwrap(), "^");
+
+        dbg!(&p);
+
+        assert!(p.contains(&"!?".to_string()));
+
+        assert_eq!(p.last().unwrap(), "!");
+
+        assert!(p.contains(&"cl".to_string()));
+    }
+
+    #[test]
+    fn test_prosody_no_crash_on_empty() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let p = haqumei.g2p_prosody("").unwrap();
+        assert!(p.is_empty());
+    }
+
+    #[test]
+    fn test_prosody_long_vowels_and_special_kana() {
+        let mut haqumei = Haqumei::new().unwrap();
+        // 「東京」 -> t o o [ ky o o $
+        let p = haqumei.g2p_prosody("東京").unwrap();
+        assert!(p.contains(&"o".to_string()));
+        assert!(p.contains(&"[".to_string()));
+    }
+
+    #[test]
+    fn test_g2p_iu_normalize_iu() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            normalize_iu: Some(IuPronunciation::Iu),
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert!(haqumei.g2p_kana("言う").unwrap().contains("イウ"));
+        assert!(haqumei.g2p_kana("言って").unwrap().contains("イッテ"));
+        assert!(haqumei.g2p_kana("言えば").unwrap().contains("イエバ"));
+        assert!(haqumei.g2p_kana("言おう").unwrap().contains("イオー"));
+        assert!(haqumei.g2p_kana("言わない").unwrap().contains("イワナイ"));
+
+        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーイウ"));
+        assert!(
+            haqumei
+                .g2p_kana("あっという間に")
+                .unwrap()
+                .contains("アットイウ")
+        );
+        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノイウ"));
+    }
+
+    #[test]
+    fn test_g2p_iu_normalize_yuu() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            normalize_iu: Some(IuPronunciation::Yuu),
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert!(haqumei.g2p_kana("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2p_kana("言って").unwrap().contains("ユッテ"));
+        assert!(haqumei.g2p_kana("言えば").unwrap().contains("ユエバ"));
+        assert!(haqumei.g2p_kana("言おう").unwrap().contains("ユオー"));
+        assert!(haqumei.g2p_kana("言わない").unwrap().contains("ユワナイ"));
+
+        assert!(haqumei.g2p_kana("そういう事").unwrap().contains("ソーユウ"));
+        assert!(
+            haqumei
+                .g2p_kana("アッと言う間に")
+                .unwrap()
+                .contains("アットユウ")
+        );
+        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+    }
+
+    #[test]
+    fn test_g2p_iu_normalize_exclusion() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        haqumei.options.normalize_iu = Some(IuPronunciation::Iu);
+        assert!(haqumei.g2p_kana("正当な理由").unwrap().contains("リユー"));
+        assert!(haqumei.g2p_kana("髪を結う").unwrap().contains("ユウ"));
+
+        haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
+        assert!(haqumei.g2p_kana("正当な理由").unwrap().contains("リユー"));
+        assert!(haqumei.g2p_kana("髪を結う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2p_kana("言い争う").unwrap().contains("イー"));
+
+        haqumei.options.normalize_iu = None;
+        let default_kana = haqumei.g2p_kana("というのも").unwrap();
+
+        haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
+        let yuu_kana = haqumei.g2p_kana("というのも").unwrap();
+
+        assert_eq!(default_kana, yuu_kana);
+    }
+
+    #[test]
+    fn test_g2p_iu_normalize() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            normalize_iu: Some(IuPronunciation::Iu),
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーイウ"));
+        assert!(haqumei.g2p_kana("ああいう事").unwrap().contains("アアイウ"));
+
+        assert!(
+            haqumei
+                .g2p_kana("あっという間に")
+                .unwrap()
+                .contains("アットイウ")
+        );
+        assert!(
+            haqumei
+                .g2p_kana("アッと言う間に")
+                .unwrap()
+                .contains("アットイウ")
+        );
+
+        assert!(haqumei.g2p_kana("君ていう人は").unwrap().contains("テイウ"));
+        assert!(haqumei.g2p_kana("彼という人は").unwrap().contains("トイウ"));
+        assert!(
+            haqumei
+                .g2p_kana("というのも")
+                .unwrap()
+                .contains("トイウノモ")
+        );
+
+        assert!(
+            haqumei
+                .g2p_kana("誰っていうの")
+                .unwrap()
+                .contains("ッテイウ")
+        );
+        assert!(haqumei.g2p_kana("誰とかいう").unwrap().contains("トカイウ"));
+
+        assert!(
+            haqumei
+                .g2p_kana("いうなれば")
+                .unwrap()
+                .contains("イウナレバ")
+        );
+        assert!(
+            haqumei
+                .g2p_kana("言うまでもない")
+                .unwrap()
+                .contains("イウマデモナイ")
+        );
+
+        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノイウ"));
+
+        haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
+
+        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーユウ"));
+        assert!(haqumei.g2p_kana("ああいう事").unwrap().contains("アアユウ"));
+        assert!(
+            haqumei
+                .g2p_kana("あっという間に")
+                .unwrap()
+                .contains("アットユウ")
+        );
+        assert!(
+            haqumei
+                .g2p_kana("アッと言う間に")
+                .unwrap()
+                .contains("アットユウ")
+        );
+        dbg!(haqumei.g2p_mapping_detailed("君ていう人は").unwrap());
+        assert!(haqumei.g2p_kana("君ていう人は").unwrap().contains("テユウ"));
+        assert!(haqumei.g2p_kana("彼という人は").unwrap().contains("トユウ"));
+        assert!(
+            haqumei
+                .g2p_kana("というのも")
+                .unwrap()
+                .contains("トユウノモ")
+        );
+        assert!(
+            haqumei
+                .g2p_kana("誰っていうの")
+                .unwrap()
+                .contains("ッテユウ")
+        );
+        assert!(haqumei.g2p_kana("誰とかいう").unwrap().contains("トカユウ"));
+        assert!(
+            haqumei
+                .g2p_kana("いうなれば")
+                .unwrap()
+                .contains("ユウナレバ")
+        );
+        assert!(
+            haqumei
+                .g2p_kana("言うまでもない")
+                .unwrap()
+                .contains("ユウマデモナイ")
+        );
+        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+    }
+
+    #[test]
+    fn test_g2p_iu_normalize_kanji_only() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        haqumei.options.normalize_iu = None;
+        let default_hiragana_iu = haqumei.g2p_kana("そういう事").unwrap();
+        let default_hiragana_teiu = haqumei.g2p_kana("君ていう人は").unwrap();
+        let default_hiragana_mono = haqumei.g2p_kana("ものいう株主").unwrap();
+
+        haqumei.options.normalize_iu = Some(IuPronunciation::KanjiYuu);
+
+        assert!(haqumei.g2p_kana("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2p_kana("言って").unwrap().contains("ユッテ"));
+        assert!(
+            haqumei
+                .g2p_kana("アッと言う間に")
+                .unwrap()
+                .contains("アットユウ")
+        );
+        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+
+        assert_eq!(haqumei.g2p_kana("そういう事").unwrap(), default_hiragana_iu);
+        assert_eq!(
+            haqumei.g2p_kana("君ていう人は").unwrap(),
+            default_hiragana_teiu
+        );
+        assert_eq!(
+            haqumei.g2p_kana("ものいう株主").unwrap(),
+            default_hiragana_mono
+        );
+        let default_hiragana_atto = {
+            haqumei.options.normalize_iu = None;
+            haqumei.g2p_kana("あっという間に").unwrap()
+        };
+        haqumei.options.normalize_iu = Some(IuPronunciation::KanjiYuu);
+        assert_eq!(
+            haqumei.g2p_kana("あっという間に").unwrap(),
+            default_hiragana_atto
+        );
     }
 }

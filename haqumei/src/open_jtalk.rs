@@ -1,5 +1,6 @@
 pub mod dictionary;
 mod jp_common;
+mod jp_common_label;
 mod mapping;
 mod mecab;
 mod model;
@@ -15,10 +16,12 @@ use crate::open_jtalk::{
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
+use crate::prosody::extract_prosody_from_labels;
 use crate::utils::default_is_non_pause_symbol;
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use arc_swap::ArcSwap;
+use haqumei_jlabel::Label;
 use mecab::Mecab;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
@@ -340,9 +343,31 @@ impl OpenJTalk {
         ))
     }
 
-    /// テキストからフルコンテキストラベルを抽出する。
-    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let njd_features = self.run_frontend(text)?;
+    /// テキストから [haqumei_jlabel::Label] のリストとしてフルコンテキストラベルを抽出する。
+    ///
+    /// pyopenjtalk の `extract_fullcontext` に相当する文字列が
+    /// 欲しい場合は、 `extract_fullcontext_string` を使用してください。
+    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<Label>, HaqumeiError> {
+        if text.is_empty() {
+            self.ensure_dictionary_is_latest()?;
+            return Ok(Vec::new());
+        }
+
+        let njd_features = self.run_frontend(text.as_ref())?;
+        self.extract_fullcontext_labels(&njd_features)
+    }
+
+    /// テキストから jpcommon が出力するフルコンテキストラベルを抽出する。
+    /// pyopenjtalk の `extract_fullcontext` に相当します。
+    ///
+    /// 構造化された [haqumei_jlabel::Label] が欲しい場合は、 `extract_fullcontext` を使用してください。
+    pub fn extract_fullcontext_string(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        if text.is_empty() {
+            self.ensure_dictionary_is_latest()?;
+            return Ok(Vec::new());
+        }
+
+        let njd_features = self.run_frontend(text.as_ref())?;
         self.make_label(&njd_features)
     }
 
@@ -455,6 +480,56 @@ impl OpenJTalk {
             .collect();
 
         Ok(kana_list)
+    }
+
+    /// 入力テキストをプロソディ記号付き音素リストに変換します。
+    ///
+    /// 出力には通常の音素に加えて、以下の制御記号が含まれます：
+    ///
+    /// | 記号 | 意味 | 出現位置 |
+    /// | :--- | :--- | :--- |
+    /// | `^` | 発話の開始 (BOS) | 文頭 |
+    /// | `$` | 発話の終結 (EOS) | 文末 |
+    /// | `?` | 疑問文の終結 (？) | 文末・文中 |
+    /// | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+    /// | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+    /// | `_` | ポーズ・読点 (、) | 文中 |
+    /// | `#` | アクセント句境界 | 文中 |
+    /// | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+    /// | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+    ///
+    /// 記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+    /// "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+    /// (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+    ///
+    /// 日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use haqumei::Haqumei;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut haqumei = Haqumei::new()?;
+    ///
+    /// let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
+    /// assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+    ///
+    /// let phones = haqumei.g2p_prosody("青い空、広がる。")?;
+    /// assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn g2p_prosody(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        let njd_features = self.run_frontend(text)?;
+
+        let labels = self.extract_fullcontext_labels(&njd_features)?;
+        if labels.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let phones = extract_prosody_from_labels(&labels, false);
+        Ok(phones)
     }
 
     /// 単語（形態素）単位に分割された音素リストを返します。
@@ -1125,6 +1200,12 @@ impl OpenJTalk {
     );
 
     impl_batch_method_openjtalk!(
+        /// 入力テキストのリストから、プロソディ記号付き音素リストを一括で抽出するバッチ処理。
+        /// [OpenJTalk::g2p_prosody] を並列に実行します。
+        g2p_prosody_batch => g2p_prosody -> Vec<String>
+    );
+
+    impl_batch_method_openjtalk!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
     );
@@ -1162,8 +1243,13 @@ impl OpenJTalk {
     );
 
     impl_batch_method_openjtalk!(
+        /// haqumei_jlabel::Label を返すフルコンテキストラベル抽出のバッチ処理。
+        extract_fullcontext_batch => extract_fullcontext -> Vec<Label>
+    );
+
+    impl_batch_method_openjtalk!(
         /// フルコンテキストラベル抽出のバッチ処理。
-        extract_fullcontext_batch => extract_fullcontext -> Vec<String>
+        extract_fullcontext_string_batch => extract_fullcontext_string -> Vec<String>
     );
 }
 

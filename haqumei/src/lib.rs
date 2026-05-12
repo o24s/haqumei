@@ -11,19 +11,13 @@ unsafe extern "C" {
     fn teardown_cpp_redirect();
 }
 
+/// This function is intended to be called from C code via FFI.
+///
 /// # Safety
 ///
-/// This function is intended to be called from C code via FFI.
 /// The caller must ensure that:
 /// - `msg` is a valid pointer to a null-terminated C string.
 /// - The memory pointed to by `msg` is accessible and not modified concurrently during this call.
-/// - `msg` is not null (though the function checks for this, the pointer itself must be valid).
-///
-/// この関数はFFI経由でC言語のコードから呼び出されることを想定しています。
-/// 呼び出し元 (C側のコード) は以下の点を保証する責任があります:
-/// - `msg` が有効な、ヌル (`\0`) 終端されたC文字列を指していること。
-/// - `msg` が指すメモリ領域が読み取り可能であり、この呼び出し中に他から変更されないこと。
-/// - `msg` がダングリングポインタ (無効なメモリを指すポインタ) ではないこと。
 #[unsafe(no_mangle)]
 unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: libc::c_int) {
     unsafe {
@@ -50,6 +44,7 @@ mod macros;
 pub mod nani_predict;
 pub mod open_jtalk;
 mod postprocess;
+pub mod prosody;
 pub mod utils;
 pub mod word_phoneme;
 
@@ -60,6 +55,7 @@ use std::{
 };
 
 use crossbeam_channel::{Sender, bounded};
+use haqumei_jlabel::Label;
 use moka::sync::Cache;
 
 pub use features::NjdFeature;
@@ -80,6 +76,7 @@ use crate::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
     },
+    prosody::extract_prosody_from_labels,
     utils::default_is_non_pause_symbol,
 };
 
@@ -170,6 +167,16 @@ pub struct HaqumeiOptions {
     /// デフォルトで無効になっています。
     pub revert_yotsugana: bool,
 
+    /// 形態素解析辞書の仕様により「イウ」と「ユウ」のどちらに解析されるか不定な
+    /// 動詞「言う」 (およびその活用形や複合語) の読み・発音を、指定した方に強制的に統一します。
+    ///
+    /// 辞書には「言う」に対して「イウ」「ユウ」の両方が登録されており、
+    /// 形態素解析のコスト計算によって出力が変動します。
+    /// `Some` を指定することで、解析結果に関わらず意図した発音に固定できます。
+    ///
+    /// デフォルトは `None` (形態素解析辞書の出力結果をそのまま使用する) です。
+    pub normalize_iu: Option<IuPronunciation>,
+
     /// - フィラーが acc > mora_size のときに、平版型 (acc = 0) にする
     /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
     ///
@@ -231,6 +238,13 @@ pub struct HaqumeiOptions {
     /// }
     /// ```
     pub is_non_pause_symbol: fn(&str) -> bool,
+
+    /// `g2p_prosody` を実行する際に、無声母音 (A, E, I, O, U) を
+    /// 通常の有声母音 (a, e, i, o, u) として扱うかどうか。
+    /// ESPnet2 互換の出力を得る場合は `true` に設定します。
+    ///
+    /// デフォルトで無効になっています。
+    pub drop_unvoiced_vowels: bool,
 }
 
 impl Default for HaqumeiOptions {
@@ -240,6 +254,7 @@ impl Default for HaqumeiOptions {
             use_read_as_pron: false,
             revert_long_vowels: false,
             revert_yotsugana: false,
+            normalize_iu: None,
             modify_filler_accent: true,
             predict_nani: true,
             use_unidic_yomi: false,
@@ -247,6 +262,7 @@ impl Default for HaqumeiOptions {
             modify_acc_after_chaining: true,
             process_odoriji: true,
             is_non_pause_symbol: default_is_non_pause_symbol,
+            drop_unvoiced_vowels: false,
         }
     }
 }
@@ -260,6 +276,21 @@ pub enum UnicodeNormalization {
     Nfc,
     /// NFKC (互換等価性による分解と合成: 半角カナ -> 全角カナ、全角英数 -> 半角英数など)
     Nfkc,
+}
+
+/// 動詞「言う」およびその派生語の発音・読みをどのように正規化するかを指定します。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IuPronunciation {
+    /// すべての「言う」「いう」を「イウ」に統一します。
+    Iu,
+    /// すべての「言う」「いう」を「ユウ」に統一します。
+    Yuu,
+    /// 漢字表記 (`言う`, `云う`) が含まれる場合のみ「イウ」に統一し、
+    /// 平仮名表記 (`いう`, `そういう`) は辞書の解析結果をそのまま使用します。
+    KanjiIu,
+    /// 漢字表記 (`言う`, `云う`) が含まれる場合のみ「ユウ」に統一し、
+    /// 平仮名表記 (`いう`, `そういう`) は辞書の解析結果をそのまま使用します。
+    KanjiYuu,
 }
 
 impl Haqumei {
@@ -467,6 +498,56 @@ impl Haqumei {
         Ok(kana_list)
     }
 
+    /// 入力テキストをプロソディ記号付き音素リストに変換します。
+    ///
+    /// 出力には通常の音素に加えて、以下の制御記号が含まれます：
+    ///
+    /// | 記号 | 意味 | 出現位置 |
+    /// | :--- | :--- | :--- |
+    /// | `^` | 発話の開始 (BOS) | 文頭 |
+    /// | `$` | 発話の終結 (EOS) | 文末 |
+    /// | `?` | 疑問文の終結 (？) | 文末・文中 |
+    /// | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
+    /// | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+    /// | `_` | ポーズ・読点 (、) | 文中 |
+    /// | `#` | アクセント句境界 | 文中 |
+    /// | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+    /// | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+    ///
+    /// 記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+    /// "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+    /// (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+    ///
+    /// 日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use haqumei::Haqumei;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut haqumei = Haqumei::new()?;
+    ///
+    /// let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
+    /// assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+    ///
+    /// let phones = haqumei.g2p_prosody("青い空、広がる。")?;
+    /// assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn g2p_prosody(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        let njd_features = self.run_frontend(text)?;
+
+        let labels = self.open_jtalk.extract_fullcontext_labels(&njd_features)?;
+        if labels.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let phones = extract_prosody_from_labels(&labels, self.options.drop_unvoiced_vowels);
+        Ok(phones)
+    }
+
     /// 単語（形態素）単位に分割された音素リストを返します。
     ///
     /// # Returns
@@ -630,13 +711,7 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        let mut njd_features = self.apply_postprocessing(text, njd_features)?;
-
-        let options = &self.options;
-
-        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
-            self.revert_pron_to_read(&mut njd_features);
-        }
+        let njd_features = self.apply_postprocessing(text, njd_features)?;
 
         let mapping = self
             .open_jtalk
@@ -744,13 +819,7 @@ impl Haqumei {
             None
         };
 
-        let mut njd_features = self.open_jtalk.run_frontend(text)?;
-
-        let options = &self.options;
-
-        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
-            self.revert_pron_to_read(&mut njd_features);
-        }
+        let njd_features = self.open_jtalk.run_frontend(text)?;
 
         self.apply_postprocessing(text, njd_features)
     }
@@ -783,19 +852,30 @@ impl Haqumei {
             None
         };
 
-        let (mut njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
-
-        let options = &self.options;
-
-        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
-            self.revert_pron_to_read(&mut njd_features);
-        }
+        let (njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
 
         Ok((self.apply_postprocessing(text, njd_features)?, mecab_morphs))
     }
 
-    /// テキストからフルコンテキストラベルを抽出する。
-    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    /// テキストから [haqumei_jlabel::Label] のリストとしてフルコンテキストラベルを抽出する。
+    ///
+    /// pyopenjtalk の `extract_fullcontext` に相当する文字列が
+    /// 欲しい場合は、 `extract_fullcontext_string` を使用してください。
+    pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<Label>, HaqumeiError> {
+        if text.is_empty() {
+            self.open_jtalk.ensure_dictionary_is_latest()?;
+            return Ok(Vec::new());
+        }
+
+        let njd_features = self.run_frontend(text.as_ref())?;
+        self.open_jtalk.extract_fullcontext_labels(&njd_features)
+    }
+
+    /// テキストから jpcommon が出力するフルコンテキストラベルを抽出する。
+    /// pyopenjtalk の `extract_fullcontext` に相当します。
+    ///
+    /// 構造化された [haqumei_jlabel::Label] が欲しい場合は、 `extract_fullcontext` を使用してください。
+    pub fn extract_fullcontext_string(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
@@ -829,6 +909,12 @@ impl Haqumei {
         }
         if options.process_odoriji {
             process_odori_features(&mut njd_features, &mut self.open_jtalk)?;
+        }
+        if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
+            self.revert_pron_to_read(&mut njd_features);
+        }
+        if let Some(iu_pron) = options.normalize_iu {
+            self.normalize_iu(&mut njd_features, iu_pron);
         }
 
         Ok(njd_features)
@@ -883,6 +969,12 @@ impl Haqumei {
     );
 
     impl_batch_method_haqumei!(
+        /// 入力テキストのリストから、プロソディ記号付き音素リストを一括で抽出するバッチ処理。
+        /// [Haqumei::g2p_prosody] を並列に実行します。
+        g2p_prosody_batch => g2p_prosody -> Vec<String>
+    );
+
+    impl_batch_method_haqumei!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
     );
@@ -920,7 +1012,12 @@ impl Haqumei {
     );
 
     impl_batch_method_haqumei!(
+        /// haqumei_jlabel::Label を返すフルコンテキストラベル抽出のバッチ処理。
+        extract_fullcontext_batch => extract_fullcontext -> Vec<Label>
+    );
+
+    impl_batch_method_haqumei!(
         /// フルコンテキストラベル抽出のバッチ処理。
-        extract_fullcontext_batch => extract_fullcontext -> Vec<String>
+        extract_fullcontext_string_batch => extract_fullcontext_string -> Vec<String>
     );
 }

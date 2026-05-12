@@ -23,9 +23,10 @@
 
 - **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
   This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
+- **Prosody-annotated phonemes:** Provides phoneme sequences enriched with prosodic symbols (`g2p_prosody`), offering a richer representation than ESPnet2's `pyopenjtalk_prosody`. (See [Specification of `g2p_prosody`](#specification-of-g2p_prosody))
 - **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
-- **Accuracy:** Improves accuracy by incorporating many techniques implemented in [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus).
-- **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`), a detailed list including unknown word information (`g2p_detailed`), and a list split by words (`g2p_per_word`).
+- **Accuracy:** Improves accuracy by incorporating many techniques implemented in [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
+- **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`) and a detailed list including unknown word information (`g2p_detailed`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
 
 Examples can be found in [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples).
@@ -66,19 +67,19 @@ use haqumei::Haqumei;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
-  let text = "日本語のテキストを音素に変換します。";
+  let text = "こんにちは、世界！";
 
-  // Convert to a list of phonemes
+  // Convert to phoneme list
   let phonemes = haqumei.g2p(text)?;
-  println!("Phoneme list: {:?}", phonemes);
+  assert_eq!(phonemes, ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"]);
 
-  // Convert to a space-separated string like pyopenjtalk
-  let phoneme_str = phonemes.join(" ");
-  println!("Space-separated phonemes: {}", phoneme_str);
+  // Get phoneme list with prosodic symbols
+  let phones = haqumei.g2p_prosody(text)?.join(" ");
+  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i !");
 
-  // Convert to Katakana reading
+  // Convert to katakana reading
   let kana = haqumei.g2p_kana(text)?;
-  println!("Katakana reading: {}", kana);
+  assert_eq!(kana, "コンニチワ、セカイ！");
 
   Ok(())
 }
@@ -92,22 +93,22 @@ from haqumei import Haqumei
 # Initialize Haqumei (the dictionary will be automatically set up)
 haqumei = Haqumei()
 
-text = "日本語のテキストを音素に変換します。"
+text = "こんにちは、世界！"
 
 # Convert to a phoneme list
 phonemes = haqumei.g2p(text)
-print(f"Phoneme list: {phonemes}")
-# -> Phoneme list: ['n', 'i', 'h', 'o', 'N', 'g', 'o', 'n', 'o', 't', 'e', 'k', 'i', 's', 'U', 't', 'o', 'o', 'o', 'N', 's', 'o', 'n', 'i', 'h', 'e', 'N', 'k', 'a', 'N', 'sh', 'i', 'm', 'a', 's', 'U']
+print(f"Phonemes: {phonemes}")
+# -> Phonemes: ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"]
 
-# Convert to a space-separated string like pyopenjtalk
-phoneme_str = " ".join(phonemes)
-print(f"Space-separated phonemes: {phoneme_str}")
-# -> Space-separated phonemes: n i h o N g o n o t e k i s U t o o o N s o n i h e N k a N sh i m a s U
+# Get phoneme list with prosodic symbols
+phones = " ".join(haqumei.g2p_prosody(text))
+print(f"Prosody-annotated phonemes: {phones}")
+# -> Prosody-annotated phonemes: ^ k o [ N n i ch i w a _ s e ] k a i !
 
-# Convert to Katakana reading
+# Convert to katakana reading
 kana = haqumei.g2p_kana(text)
 print(f"Katakana reading: {kana}")
-# -> Katakana reading: ニホンゴノテキストヲオンソニヘンカンシマス
+# -> Katakana reading: コンニチワ、セカイ！
 ```
 
 ## Advanced Features
@@ -251,6 +252,81 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   println!("{:?}", haqumei.g2p_detailed_batch(text)?);
   // Output: [["g", "a"], ["p", "a"], ["g", "o"]]
+}
+```
+
+## Specification of `g2p_prosody`
+
+`g2p_prosody` converts the input text into a phoneme list annotated with prosodic symbols.
+
+In addition to standard phonemes, the output includes the following symbols:
+
+| Symbol | Meaning | Position |
+| :--- | :--- | :--- |
+| `^` | Beginning of utterance (BOS) | Sentence-initial |
+| `$` | End of utterance (EOS) | Sentence-final |
+| `?` | End of interrogative (？) | Sentence-final / Sentence-medial |
+| `!` | End of exclamation (Custom extension) | Sentence-final / Sentence-medial |
+| `!?` | End of exclamatory-interrogative (Custom extension) | Sentence-final / Sentence-medial |
+| `_` | Pause / Comma (、) | Sentence-medial |
+| `#` | Accent phrase boundary | Sentence-medial |
+| `[` | Pitch rise (Phrase head) | Near the beginning of a phrase |
+| `]` | Pitch fall (Accent nucleus) | Right after the nuclear mora |
+
+The symbols `[` and `]` are based on the accent notation commonly used in tdmelodic and similar tools.
+They correspond to `^` and `!` in the algorithm described by Kurihara et al. (2021) in *"Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"*.
+
+For more information on Japanese accents, please refer to the [tdmelodic User Manual / Preliminary Knowledge](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html) (Japanese).
+
+By setting `drop_unvoiced_vowels` to `true` in `HaqumeiOptions`, you can collapse unvoiced vowels (A, E, I, O, U) into regular voiced vowels (a, e, i, o, u) similarly to ESPnet2, though this is generally not recommended.
+
+### Example
+
+```rust
+use haqumei::Haqumei;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+
+  let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
+  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+
+  let phones = haqumei.g2p_prosody("青い空、広がる。")?;
+  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+
+  Ok(())
+}
+```
+
+## Accuracy
+
+We evaluated the accuracy using the `haqumei-eval` crate. Below are the results:
+- **Phoneme Error Rate (PER)** evaluated on [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label), a fork of `jsut-label` providing annotations for the Basic5000 subset of the JSUT corpus.
+- **Katakana Error Rate (Katakana ER)** evaluated on [ROHAN](https://github.com/mmorise/rohan4600).
+
+### jsut-label
+
+Phoneme Error Rate (S+D+I / N_expected): **1.24%** (Substitute=2244, Delete=572, Insert=889, N=297843)
+
+`HaqumeiOptions`:
+```rust
+HaqumeiOptions {
+  use_unidic_yomi: true,
+  normalize_iu: Some(IuPronunciation::Yuu),
+  ..Default::default()
+}
+```
+
+### ROHAN
+
+Katakana Error Rate (S+D+I / N_expected): **1.64%** (Substitute=1689, Delete=493, Insert=288, N=150637)
+
+`HaqumeiOptions`:
+```rust
+HaqumeiOptions {
+  revert_long_vowels: true,
+  revert_yotsugana: true,
+  ..Default::default()
 }
 ```
 
