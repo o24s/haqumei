@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Args, Parser, ValueEnum};
-use haqumei::{Haqumei, HaqumeiOptions, UnicodeNormalization};
+use haqumei::{Haqumei, HaqumeiOptions, IuPronunciation, UnicodeNormalization};
 use std::fs::File;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
@@ -46,6 +46,8 @@ struct Cli {
 enum OutputMode {
     /// 音素列 (フラット)
     G2p,
+    /// プロソディ記号付き音素列
+    Prosody,
     /// 詳細な音素列 (記号等は sp, unk などに変換)
     G2pDetailed,
     /// カタカナ
@@ -62,6 +64,8 @@ enum OutputMode {
     MappingDetailed,
     /// フルコンテキストラベル
     Fullcontext,
+    /// フルコンテキストラベル文字列
+    FullcontextString,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -88,6 +92,14 @@ struct HaqumeiConfigArgs {
     /// Unicode正規化の方法を指定
     #[arg(long, value_enum, default_value_t = UnicodeNorm::None)]
     normalize_unicode: UnicodeNorm,
+
+    /// 「言う」の発音正規化方式を指定する
+    #[arg(long, value_enum)]
+    normalize_iu: Option<IuPronMode>,
+
+    /// プロソディ抽出時、無声母音 (A, E, I, O, U) を有声母音 (a, e, i, o, u) として扱う
+    #[arg(long)]
+    drop_unvoiced_vowels: bool,
 
     /// 読み (read) を発音 (pron) の代わりに使用し、長音の自動変換などを無効化する
     #[arg(long)]
@@ -143,6 +155,25 @@ impl From<UnicodeNorm> for UnicodeNormalization {
     }
 }
 
+#[derive(ValueEnum, Clone, Copy, Debug)]
+enum IuPronMode {
+    Iu,
+    Yuu,
+    KanjiIu,
+    KanjiYuu,
+}
+
+impl From<IuPronMode> for IuPronunciation {
+    fn from(mode: IuPronMode) -> Self {
+        match mode {
+            IuPronMode::Iu => IuPronunciation::Iu,
+            IuPronMode::Yuu => IuPronunciation::Yuu,
+            IuPronMode::KanjiIu => IuPronunciation::KanjiIu,
+            IuPronMode::KanjiYuu => IuPronunciation::KanjiYuu,
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -154,6 +185,8 @@ fn main() -> Result<()> {
 
     let haqumei_options = HaqumeiOptions {
         normalize_unicode: cli.options.normalize_unicode.into(),
+        normalize_iu: cli.options.normalize_iu.map(Into::into),
+        drop_unvoiced_vowels: cli.options.drop_unvoiced_vowels,
         use_read_as_pron: cli.options.use_read_as_pron,
         revert_long_vowels: cli.options.revert_long_vowels,
         revert_yotsugana: cli.options.revert_yotsugana,
@@ -265,6 +298,13 @@ fn process_line(
                 OutputFormat::Json => write_json(writer, &res)?,
             }
         }
+        OutputMode::Prosody => {
+            let res = haqumei.g2p_prosody(text)?;
+            match format {
+                OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
+                OutputFormat::Json => write_json(writer, &res)?,
+            }
+        }
         OutputMode::G2pDetailed => {
             let res = haqumei.g2p_detailed(text)?;
             match format {
@@ -367,6 +407,17 @@ fn process_line(
         }
         OutputMode::Fullcontext => {
             let res = haqumei.extract_fullcontext(text)?;
+            match format {
+                OutputFormat::Text => {
+                    for label in res {
+                        writeln!(writer, "{}", label)?;
+                    }
+                }
+                OutputFormat::Json => write_json(writer, &res)?,
+            }
+        }
+        OutputMode::FullcontextString => {
+            let res = haqumei.extract_fullcontext_string(text)?;
             match format {
                 OutputFormat::Text => {
                     for label in res {
