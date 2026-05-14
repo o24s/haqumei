@@ -314,6 +314,13 @@ impl OpenJTalk {
             }
 
             let size = phonemes.len() as isize;
+
+            if size == 0 {
+                ffi::JPCommon_refresh(jp);
+                ffi::NJD_refresh(self.njd.inner.as_mut());
+                return Ok(Vec::new());
+            }
+
             let mut labels = Vec::with_capacity((size + 2) as usize);
 
             let get_ph = |idx: isize| -> Option<String> {

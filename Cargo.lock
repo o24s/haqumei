@@ -947,6 +947,8 @@ dependencies = [
 [[package]]
 name = "haqumei"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28d6a3f71a747c35be07b64a320c9228e03a3c13c5d2cab6152ba8f92e042bf5"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -979,9 +981,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d6a3f71a747c35be07b64a320c9228e03a3c13c5d2cab6152ba8f92e042bf5"
+version = "0.4.1"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -1017,7 +1017,7 @@ name = "haqumei-bench"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "haqumei 0.4.0",
+ "haqumei 0.4.1",
 ]
 
 [[package]]
@@ -1027,7 +1027,7 @@ dependencies = [
  "anyhow",
  "clap",
  "env_logger",
- "haqumei 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "haqumei 0.4.0",
  "log",
  "serde",
  "serde_json",
@@ -1039,7 +1039,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "glob",
- "haqumei 0.4.0",
+ "haqumei 0.4.1",
  "thiserror 2.0.18",
 ]
 
@@ -1049,7 +1049,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "digest-io",
- "haqumei 0.4.0",
+ "haqumei 0.4.1",
  "hex",
  "rayon",
  "regex",
@@ -1081,7 +1081,7 @@ dependencies = [
 name = "haqumei-python"
 version = "0.1.0"
 dependencies = [
- "haqumei 0.4.0",
+ "haqumei 0.4.1",
  "pyo3",
 ]
 
