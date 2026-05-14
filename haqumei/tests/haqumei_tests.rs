@@ -246,6 +246,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_extract_fullcontext() {
+        let waganeko = fs::read_to_string(WAGANEKO_PATH.as_path()).unwrap();
+        let waganeko: Vec<&str> = waganeko.lines().collect();
+
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let haqumei_jlabel = haqumei
+            .extract_fullcontext_batch(&waganeko)
+            .unwrap()
+            .into_iter()
+            .map(|labels| {
+                labels
+                    .into_iter()
+                    .map(|l| l.to_string())
+                    .collect()
+            })
+            .collect::<Vec<Vec<String>>>();
+
+        let expected = haqumei.extract_fullcontext_string_batch(&waganeko).unwrap();
+
+        assert_eq!(haqumei_jlabel, expected);
+    }
+
     const NIGHTMARE_TEXT: &str = "\
 つまみ出されようとしたが、「「八十五歳」」にもなる 長老ー ー に助けられた。\
 わーいです。そこで、𰻞𰻞麺とお冷を飲み食いしたです。\

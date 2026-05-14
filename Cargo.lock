@@ -946,9 +946,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d6a3f71a747c35be07b64a320c9228e03a3c13c5d2cab6152ba8f92e042bf5"
+version = "0.4.1"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -982,6 +980,8 @@ dependencies = [
 [[package]]
 name = "haqumei"
 version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e66eeae42ed54fd3e4fe7d4c1b66574c423e5372e55b26f72eccd5588b5d769a"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -1022,12 +1022,12 @@ dependencies = [
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "clap",
  "env_logger",
- "haqumei 0.4.0",
+ "haqumei 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "serde",
  "serde_json",
