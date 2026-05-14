@@ -251,9 +251,9 @@ mod tests {
         let waganeko = fs::read_to_string(WAGANEKO_PATH.as_path()).unwrap();
         let waganeko: Vec<&str> = waganeko.lines().collect();
 
-        let mut haqumei = Haqumei::new().unwrap();
+        let mut open_jtalk = OpenJTalk::new().unwrap();
 
-        let haqumei_jlabel = haqumei
+        let haqumei_jlabels = open_jtalk
             .extract_fullcontext_batch(&waganeko)
             .unwrap()
             .into_iter()
@@ -265,9 +265,14 @@ mod tests {
             })
             .collect::<Vec<Vec<String>>>();
 
-        let expected = haqumei.extract_fullcontext_string_batch(&waganeko).unwrap();
+        for (line, haqumei_jlabel) in waganeko.iter().zip(haqumei_jlabels) {
+            let expected = {
+                let njd_features = open_jtalk.run_frontend(line.as_ref()).unwrap();
+                open_jtalk.make_label(&njd_features)
+            }.unwrap();
 
-        assert_eq!(haqumei_jlabel, expected);
+            assert_eq!(haqumei_jlabel, expected);
+        }
     }
 
     const NIGHTMARE_TEXT: &str = "\
