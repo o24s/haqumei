@@ -85,6 +85,7 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[repr(u8)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
         pub enum Phoneme {
             #( #names ),*
         }
