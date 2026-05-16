@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -956,43 +956,8 @@ dependencies = [
  "dirs",
  "fs4",
  "glob",
- "haqumei-jlabel 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "haqumei-jlabel",
  "haqumei-macros",
- "hex",
- "libc",
- "log",
- "moka",
- "ndarray",
- "ort",
- "phf",
- "rayon",
- "reqwest",
- "serde",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "unicode-normalization",
- "vibrato-rkyv",
- "walkdir",
- "zstd",
-]
-
-[[package]]
-name = "haqumei"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e66eeae42ed54fd3e4fe7d4c1b66574c423e5372e55b26f72eccd5588b5d769a"
-dependencies = [
- "arc-swap",
- "bindgen",
- "cc",
- "crossbeam-channel",
- "digest-io",
- "dirs",
- "fs4",
- "glob",
- "haqumei-jlabel 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "libc",
  "log",
@@ -1018,17 +983,17 @@ name = "haqumei-bench"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "haqumei 0.4.1",
+ "haqumei",
 ]
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
  "env_logger",
- "haqumei 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "haqumei",
  "log",
  "serde",
  "serde_json",
@@ -1040,7 +1005,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "glob",
- "haqumei 0.4.1",
+ "haqumei",
  "thiserror 2.0.18",
 ]
 
@@ -1050,7 +1015,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "digest-io",
- "haqumei 0.4.1",
+ "haqumei",
  "hex",
  "rayon",
  "regex",
@@ -1069,21 +1034,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "haqumei-jlabel"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5394bf41d3e20ab4799932deea5e19de994779bcb385fb9b2c8aafe541cfc789"
-dependencies = [
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "haqumei-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
+ "serde",
  "syn",
 ]
 
@@ -1091,7 +1047,7 @@ dependencies = [
 name = "haqumei-python"
 version = "0.1.0"
 dependencies = [
- "haqumei 0.4.1",
+ "haqumei",
  "pyo3",
 ]
 

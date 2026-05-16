@@ -1,6 +1,6 @@
 [package]
 name = "haqumei"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 authors = ["o24s <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
@@ -38,7 +38,7 @@ default = ["embed-dictionary", "download-dictionary"]
 embed-dictionary = []
 build-dictionary = []
 download-dictionary = ["dep:reqwest", "dep:tempfile"]
-serde = ["dep:serde", "haqumei-jlabel/serde"]
+serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
 
 [dependencies]
 arc-swap.workspace = true
@@ -46,8 +46,7 @@ crossbeam-channel.workspace = true
 dirs.workspace = true
 fs4.workspace = true
 haqumei-jlabel.workspace = true
-# haqumei-macros.workspace = true
-haqumei-macros ={ path = "../haqumei-macros" }
+haqumei-macros.workspace = true
 hex.workspace = true
 libc.workspace = true
 log.workspace = true

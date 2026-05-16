@@ -30,6 +30,9 @@ static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let is_docs_rs = env::var_os("DOCS_RS").is_some();
+    #[allow(unused)]
+    let is_ci = env::var_os("CI").is_some();
+
     let out_dir = env::var("OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
 
@@ -96,10 +99,21 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     #[cfg(feature = "download-dictionary")]
     if has_download && !is_docs_rs {
-        let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
+        let cached_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
+        let compressed_dict_path = out_dir.join(DICTIONARY_NAME);
         let mut need_download = true;
 
-        if compressed_dict_path.exists() {
+        if cached_dict_path.exists() {
+            let mut hasher = IoWrapper(Sha256::new());
+            let mut file = File::open(&cached_dict_path)?;
+            io::copy(&mut file, &mut hasher)?;
+            if hex::encode(hasher.0.finalize()) == COMPRESSED_DICTIONARY_HASH {
+                fs::copy(&cached_dict_path, &compressed_dict_path)?;
+                need_download = false;
+            }
+        }
+
+        if is_ci && need_download && compressed_dict_path.exists() {
             let mut hasher = IoWrapper(Sha256::new());
             let mut file = File::open(&compressed_dict_path)?;
             io::copy(&mut file, &mut hasher)?;
@@ -128,8 +142,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
                 panic!("Downloaded file checksum mismatch. It may be corrupted.")
             }
 
-            temp_file.persist(&compressed_dict_path)?;
+            temp_file.persist(&cached_dict_path)?;
+            fs::copy(&cached_dict_path, &compressed_dict_path)?;
         }
+
 
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
@@ -374,7 +390,8 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         dict_src_raw
     };
 
-    let compressed_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
+    let cached_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
+    let compressed_dict_path = out_dir.join(DICTIONARY_NAME);
     let dict_out_dir = out_dir.join("dictionary_out");
     let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
     let dict_hash_path = CACHE_DIR.join("dictionary.sha256");
@@ -391,15 +408,16 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     if dict_hash_path.exists()
         && dict_src_dir.exists()
-        && compressed_dict_path.exists()
+        && cached_dict_path.exists()
         && compressed_dict_hash_path.exists()
-        && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&compressed_dict_path)
+        && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&cached_dict_path)
         && let Ok(dict_hash) = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])
         && let Ok(saved_dict_hash) = fs::read_to_string(&dict_hash_path)
         && let Ok(saved_compressed_dict_hash) = fs::read_to_string(&compressed_dict_hash_path)
         && saved_dict_hash == dict_hash
         && saved_compressed_dict_hash == compressed_dict_hash
     {
+        fs::copy(&cached_dict_path, &compressed_dict_path)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             &compressed_dict_path.display()
@@ -412,7 +430,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     run_dict_indexer(&dict_indexer_path, &dict_src_dir, &dict_out_dir)?;
 
-    let tar_file = File::create(&compressed_dict_path)?;
+    let tar_file = File::create(&cached_dict_path)?;
 
     {
         let zstd_writer = zstd::Encoder::new(tar_file, 22)?.auto_finish();
@@ -421,6 +439,8 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         tar_builder.append_dir_all(".", &dict_out_dir)?;
         tar_builder.finish()?;
     }
+
+    fs::copy(&cached_dict_path, &compressed_dict_path)?;
 
     let dict_hash = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])?;
     let compressed_dict_hash = calculate_compressed_dict_hash(&compressed_dict_path)?;
