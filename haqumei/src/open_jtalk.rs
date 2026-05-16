@@ -16,6 +16,7 @@ use crate::open_jtalk::{
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
+use crate::phoneme::Phoneme;
 use crate::prosody::extract_prosody_from_labels;
 use crate::utils::default_is_non_pause_symbol;
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
@@ -383,7 +384,7 @@ impl OpenJTalk {
     /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a"])
     /// println!("{:?}", open_jtalk.g2p("こんにちは"));
     /// ```
-    pub fn g2p(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2p(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
@@ -416,7 +417,7 @@ impl OpenJTalk {
     /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"])
     /// println!("{:?}", open_jtalk.g2p_detailed("こんにちは 𰻞𰻞麺"));
     /// ```
-    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         let detailed_mapping = self.g2p_mapping(text)?;
 
         let mut result_phonemes = Vec::new();
@@ -539,7 +540,7 @@ impl OpenJTalk {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
-    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
+    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<Phoneme>>, HaqumeiError> {
         let mapping = self.g2p_pairs(text)?;
 
         Ok(mapping.into_iter().map(|m| m.phonemes).collect())
@@ -1046,12 +1047,12 @@ impl OpenJTalk {
     pub fn extract_phonemes(
         &mut self,
         features: &[NjdFeature],
-    ) -> Result<Vec<String>, HaqumeiError> {
+    ) -> Result<Vec<Phoneme>, HaqumeiError> {
         if features.is_empty() {
             return Ok(Vec::new());
         }
 
-        let result = unsafe {
+        unsafe {
             Self::features_to_njd(features, &mut self.njd)?;
 
             let jp = self.jp_common.inner.as_mut();
@@ -1087,14 +1088,13 @@ impl OpenJTalk {
                 node = (*node).next;
             }
 
-            let mut result_vec = Vec::with_capacity(features.len() * 3);
+            let mut result_vec = Vec::new();
 
             let mut p = (*jp.label).phoneme_head;
             while !p.is_null() {
                 let s_ptr = (*p).phoneme;
                 if !s_ptr.is_null() {
-                    let s = CStr::from_ptr(s_ptr).to_string_lossy().into_owned();
-                    result_vec.push(s);
+                    result_vec.push(Phoneme::from(s_ptr));
                 }
                 p = (*p).next;
             }
@@ -1102,10 +1102,8 @@ impl OpenJTalk {
             ffi::JPCommon_refresh(jp);
             ffi::NJD_refresh(self.njd.inner.as_mut());
 
-            result_vec
-        };
-
-        Ok(result)
+            Ok(result_vec)
+        }
     }
 
     pub(crate) fn features_to_njd(
@@ -1177,7 +1175,7 @@ impl OpenJTalk {
 
     impl_batch_method_openjtalk!(
         /// 複数のテキストに対して `g2p` を実行します。
-        g2p_batch => g2p -> Vec<String>
+        g2p_batch => g2p -> Vec<Phoneme>
     );
 
     impl_batch_method_openjtalk!(
@@ -1186,7 +1184,7 @@ impl OpenJTalk {
         /// - 既知語: 通常の音素列 (読点などは `pau`)
         /// - 未知語: `unk`
         /// - 空白等: `sp` (Space)
-        g2p_detailed_batch => g2p_detailed -> Vec<String>
+        g2p_detailed_batch => g2p_detailed -> Vec<Phoneme>
     );
 
     impl_batch_method_openjtalk!(
@@ -1207,7 +1205,7 @@ impl OpenJTalk {
 
     impl_batch_method_openjtalk!(
         /// 単語ごとに分割された音素リストのバッチ処理。
-        g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
+        g2p_per_word_batch => g2p_per_word -> Vec<Vec<Phoneme>>
     );
 
     impl_batch_method_openjtalk!(

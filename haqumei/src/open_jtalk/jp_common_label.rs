@@ -14,7 +14,7 @@ const MAX_M: i32 = 49;
 const MAX_L: i32 = 99;
 const MAX_LL: i32 = 199;
 
-#[inline]
+#[inline(always)]
 fn limit(val: i32, min: i32, max: i32) -> i32 {
     val.clamp(min, max)
 }
@@ -43,6 +43,7 @@ macro_rules! get_ptr {
     };
 }
 
+#[inline(always)]
 unsafe fn parse_u8(ptr: *const c_char) -> Option<u8> {
     if ptr.is_null() {
         return None;
@@ -55,6 +56,7 @@ unsafe fn parse_u8(ptr: *const c_char) -> Option<u8> {
     }
 }
 
+#[inline(always)]
 unsafe fn parse_bool(ptr: *const c_char) -> bool {
     if ptr.is_null() {
         return false;
@@ -63,6 +65,7 @@ unsafe fn parse_bool(ptr: *const c_char) -> bool {
     s != "0" && s != "xx" && s != "*" && !s.is_empty()
 }
 
+#[inline(always)]
 unsafe fn is_pau(ptr: *mut ffi::JPCommonLabelPhoneme) -> bool {
     if ptr.is_null() {
         return false;
@@ -74,6 +77,7 @@ unsafe fn is_pau(ptr: *mut ffi::JPCommonLabelPhoneme) -> bool {
     unsafe { CStr::from_ptr(s_ptr) }.to_bytes() == b"pau"
 }
 
+#[inline(always)]
 unsafe fn get_phoneme_str(ptr: *mut ffi::JPCommonLabelPhoneme) -> Option<String> {
     if ptr.is_null() {
         return None;
@@ -90,6 +94,7 @@ unsafe fn get_phoneme_str(ptr: *mut ffi::JPCommonLabelPhoneme) -> Option<String>
     }
 }
 
+#[inline(always)]
 unsafe fn index_mora_in_accent_phrase(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         let mut i = 0;
@@ -105,6 +110,7 @@ unsafe fn index_mora_in_accent_phrase(m: *mut ffi::JPCommonLabelMora) -> i32 {
     }
 }
 
+#[inline(always)]
 unsafe fn count_mora_in_accent_phrase(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         let mut i = 0;
@@ -121,6 +127,7 @@ unsafe fn count_mora_in_accent_phrase(m: *mut ffi::JPCommonLabelMora) -> i32 {
     }
 }
 
+#[inline(always)]
 unsafe fn index_accent_phrase_in_breath_group(a: *mut ffi::JPCommonLabelAccentPhrase) -> i32 {
     unsafe {
         let mut i = 0;
@@ -136,6 +143,7 @@ unsafe fn index_accent_phrase_in_breath_group(a: *mut ffi::JPCommonLabelAccentPh
     }
 }
 
+#[inline(always)]
 unsafe fn count_accent_phrase_in_breath_group(a: *mut ffi::JPCommonLabelAccentPhrase) -> i32 {
     unsafe {
         let mut i = 0;
@@ -152,6 +160,7 @@ unsafe fn count_accent_phrase_in_breath_group(a: *mut ffi::JPCommonLabelAccentPh
     }
 }
 
+#[inline(always)]
 unsafe fn index_mora_in_breath_group(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         let mut i = 0;
@@ -167,6 +176,7 @@ unsafe fn index_mora_in_breath_group(m: *mut ffi::JPCommonLabelMora) -> i32 {
     }
 }
 
+#[inline(always)]
 unsafe fn count_mora_in_breath_group(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         let mut i = 0;
@@ -183,6 +193,7 @@ unsafe fn count_mora_in_breath_group(m: *mut ffi::JPCommonLabelMora) -> i32 {
     }
 }
 
+#[inline(always)]
 unsafe fn index_breath_group_in_utterance(b: *mut ffi::JPCommonLabelBreathGroup) -> i32 {
     unsafe {
         let mut i = 0;
@@ -195,6 +206,7 @@ unsafe fn index_breath_group_in_utterance(b: *mut ffi::JPCommonLabelBreathGroup)
     }
 }
 
+#[inline(always)]
 unsafe fn count_breath_group_in_utterance(b: *mut ffi::JPCommonLabelBreathGroup) -> i32 {
     unsafe {
         if b.is_null() {
@@ -210,6 +222,7 @@ unsafe fn count_breath_group_in_utterance(b: *mut ffi::JPCommonLabelBreathGroup)
     }
 }
 
+#[inline(always)]
 unsafe fn index_accent_phrase_in_utterance(a: *mut ffi::JPCommonLabelAccentPhrase) -> i32 {
     unsafe {
         let mut i = 0;
@@ -222,6 +235,7 @@ unsafe fn index_accent_phrase_in_utterance(a: *mut ffi::JPCommonLabelAccentPhras
     }
 }
 
+#[inline(always)]
 unsafe fn count_accent_phrase_in_utterance(a: *mut ffi::JPCommonLabelAccentPhrase) -> i32 {
     unsafe {
         if a.is_null() {
@@ -237,6 +251,7 @@ unsafe fn count_accent_phrase_in_utterance(a: *mut ffi::JPCommonLabelAccentPhras
     }
 }
 
+#[inline(always)]
 unsafe fn index_mora_in_utterance(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         let mut i = 0;
@@ -249,6 +264,7 @@ unsafe fn index_mora_in_utterance(m: *mut ffi::JPCommonLabelMora) -> i32 {
     }
 }
 
+#[inline(always)]
 unsafe fn count_mora_in_utterance(m: *mut ffi::JPCommonLabelMora) -> i32 {
     unsafe {
         if m.is_null() {

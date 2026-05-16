@@ -1,6 +1,9 @@
 use ::haqumei::{
     Haqumei, HaqumeiOptions, NjdFeature, OpenJTalk, WordPhonemeDetail, WordPhonemeMap,
-    WordPhonemePair, open_jtalk::Dictionary, utils::default_is_non_pause_symbol,
+    WordPhonemePair,
+    open_jtalk::Dictionary,
+    phoneme::{PhonemeVecExt, PhonemeVecVecExt},
+    utils::default_is_non_pause_symbol,
 };
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Mutex};
@@ -83,14 +86,14 @@ struct PyWordPhonemePair {
     #[pyo3(get)]
     word: String,
     #[pyo3(get)]
-    phonemes: Vec<String>,
+    phonemes: Vec<&'static str>,
 }
 
 impl From<WordPhonemePair> for PyWordPhonemePair {
     fn from(pair: WordPhonemePair) -> Self {
         Self {
             word: pair.word,
-            phonemes: pair.phonemes,
+            phonemes: pair.phonemes.into_strs(),
         }
     }
 }
@@ -118,7 +121,7 @@ impl PyWordPhonemePair {
 #[derive(Clone)]
 pub struct PyWordPhonemeMap {
     pub word: String,
-    pub phonemes: Vec<String>,
+    pub phonemes: Vec<&'static str>,
     pub is_unknown: bool,
     pub is_ignored: bool,
 }
@@ -127,7 +130,7 @@ impl From<WordPhonemeMap> for PyWordPhonemeMap {
     fn from(map: WordPhonemeMap) -> Self {
         Self {
             word: map.word,
-            phonemes: map.phonemes,
+            phonemes: map.phonemes.into_strs(),
             is_unknown: map.is_unknown,
             is_ignored: map.is_ignored,
         }
@@ -155,7 +158,7 @@ impl PyWordPhonemeMap {
 #[pyclass(module = "haqumei", get_all, skip_from_py_object)]
 pub struct PyWordPhonemeDetail {
     pub word: String,
-    pub phonemes: Vec<String>,
+    pub phonemes: Vec<&'static str>,
     pub features: Vec<String>,
     pub pos: String,
     pub pos_group1: String,
@@ -177,7 +180,7 @@ impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
     fn from(detail: WordPhonemeDetail) -> Self {
         Self {
             word: detail.word,
-            phonemes: detail.phonemes,
+            phonemes: detail.phonemes.into_strs(),
             features: detail.features,
             pos: detail.pos,
             pos_group1: detail.pos_group1,
@@ -409,35 +412,47 @@ impl PyOpenJTalk {
         })
     }
 
-    fn g2p(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
+    fn g2p(&self, text: &str) -> PyResult<Vec<&'static str>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p(text)
+            .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
-    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<&'static str>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.into_strs())
         })
     }
 
-    fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
+    fn g2p_detailed(&self, text: &str) -> PyResult<Vec<&'static str>> {
         self.inner
             .lock()
             .unwrap()
             .g2p_detailed(text)
             .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
-    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<&'static str>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_detailed_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.into_strs())
         })
     }
 
@@ -473,25 +488,27 @@ impl PyOpenJTalk {
         })
     }
 
-    fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<&'static str>>> {
         self.inner
             .lock()
             .unwrap()
             .g2p_per_word(text)
             .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
     fn g2p_per_word_batch(
         &self,
         py: Python<'_>,
         texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<Vec<String>>>> {
+    ) -> PyResult<Vec<Vec<Vec<&'static str>>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_per_word_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.iter().map(|p| p.to_strs()).collect())
         })
     }
 
@@ -729,35 +746,43 @@ impl PyHaqumei {
         })
     }
 
-    fn g2p(&self, text: &str) -> PyResult<Vec<String>> {
-        self.inner.lock().unwrap().g2p(text).map_err(to_py_err)
+    fn g2p(&self, text: &str) -> PyResult<Vec<&'static str>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2p(text)
+            .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
-    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<&'static str>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.into_strs())
         })
     }
 
-    fn g2p_detailed(&self, text: &str) -> PyResult<Vec<String>> {
+    fn g2p_detailed(&self, text: &str) -> PyResult<Vec<&'static str>> {
         self.inner
             .lock()
             .unwrap()
             .g2p_detailed(text)
             .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
-    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<&'static str>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_detailed_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.into_strs())
         })
     }
 
@@ -815,25 +840,27 @@ impl PyHaqumei {
         })
     }
 
-    fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<String>>> {
+    fn g2p_per_word(&self, text: &str) -> PyResult<Vec<Vec<&'static str>>> {
         self.inner
             .lock()
             .unwrap()
             .g2p_per_word(text)
             .map_err(to_py_err)
+            .map(|p| p.into_strs())
     }
 
     fn g2p_per_word_batch(
         &self,
         py: Python<'_>,
         texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<Vec<String>>>> {
+    ) -> PyResult<Vec<Vec<Vec<&'static str>>>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
                 .g2p_per_word_batch(&texts)
                 .map_err(to_py_err)
+                .map(|p| p.iter().map(|p| p.to_strs()).collect())
         })
     }
 

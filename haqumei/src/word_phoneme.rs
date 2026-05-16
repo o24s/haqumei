@@ -1,18 +1,20 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::phoneme::Phoneme;
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemePair {
     pub word: String,
-    pub phonemes: Vec<String>,
+    pub phonemes: Vec<Phoneme>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeMap {
     pub word: String,
-    pub phonemes: Vec<String>,
+    pub phonemes: Vec<Phoneme>,
 
     /// 元となった形態素について、MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
     ///
@@ -31,7 +33,7 @@ pub struct WordPhonemeMap {
 pub struct WordPhonemeDetail {
     /// 表層形 (surface)
     pub word: String,
-    pub phonemes: Vec<String>,
+    pub phonemes: Vec<Phoneme>,
 
     /// Mecab が出力した features。
     /// 既知語は 12 列、未知語は 8 列 (read, pron, acc, chain_rule がない)

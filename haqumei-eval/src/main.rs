@@ -23,8 +23,8 @@ const ROHAN_OUT: &str = "rohan4600_kana_report.txt";
 enum EditOp {
     Equal(usize, usize),      // expected_idx, actual_idx
     Substitute(usize, usize), // expected_idx, actual_idx
-    Delete(usize, usize),     // expected_idx, actual_idx (actual_idx is the column index at that time)
-    Insert(usize, usize),     // expected_idx, actual_idx
+    Delete(usize, usize), // expected_idx, actual_idx (actual_idx is the column index at that time)
+    Insert(usize, usize), // expected_idx, actual_idx
 }
 
 /// Levenshtein DP returning counts and edit ops for token sequences (tokens are &str slices)

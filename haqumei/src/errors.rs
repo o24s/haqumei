@@ -54,6 +54,15 @@ pub enum HaqumeiError {
     #[error("Global dictionary is not initialized yet")]
     GlobalDictionaryNotInitialized,
 
+    #[error("Phoneme pointer is null")]
+    NullPhonemePtr,
+
+    #[error("Phoneme pointer contains invalid UTF-8")]
+    InvalidPhonemeUtf8,
+
+    #[error("Unknown phoneme string: {0:?}")]
+    UnknownPhoneme(String),
+
     #[error(transparent)]
     StripPrefixError(#[from] StripPrefixError),
 

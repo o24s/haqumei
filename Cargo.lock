@@ -957,6 +957,7 @@ dependencies = [
  "fs4",
  "glob",
  "haqumei-jlabel 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "haqumei-macros",
  "hex",
  "libc",
  "log",
@@ -1075,6 +1076,15 @@ checksum = "5394bf41d3e20ab4799932deea5e19de994779bcb385fb9b2c8aafe541cfc789"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "haqumei-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

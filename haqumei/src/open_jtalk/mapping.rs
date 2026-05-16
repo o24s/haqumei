@@ -1,25 +1,25 @@
 use crate::errors::HaqumeiError;
 use crate::ffi;
+use crate::phoneme::Phoneme;
 use crate::utils::has_odori_chars;
 use crate::{MecabMorph, OpenJTalk};
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use std::collections::HashMap;
-use std::ffi::CStr;
 
 pub(crate) trait WordPhonemeEntry {
-    fn phonemes_mut(&mut self) -> &mut Vec<String>;
-    fn phonemes(&self) -> &[String];
+    fn phonemes_mut(&mut self) -> &mut Vec<Phoneme>;
+    fn phonemes(&self) -> &[Phoneme];
 
     /// 他の要素が空音素としてマージされる際に、テキストや付随情報を自身に結合する
     fn merge_from(&mut self, other: &mut Self);
 }
 
 impl WordPhonemeEntry for WordPhonemePair {
-    fn phonemes_mut(&mut self) -> &mut Vec<String> {
+    fn phonemes_mut(&mut self) -> &mut Vec<Phoneme> {
         &mut self.phonemes
     }
-    fn phonemes(&self) -> &[String] {
+    fn phonemes(&self) -> &[Phoneme] {
         &self.phonemes
     }
 
@@ -30,10 +30,10 @@ impl WordPhonemeEntry for WordPhonemePair {
 }
 
 impl WordPhonemeEntry for WordPhonemeDetail {
-    fn phonemes_mut(&mut self) -> &mut Vec<String> {
+    fn phonemes_mut(&mut self) -> &mut Vec<Phoneme> {
         &mut self.phonemes
     }
-    fn phonemes(&self) -> &[String] {
+    fn phonemes(&self) -> &[Phoneme] {
         &self.phonemes
     }
 
@@ -91,7 +91,7 @@ impl IntoPhonemeMapItem for WordPhonemePair {
     fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
         WordPhonemeMap {
             word: surface,
-            phonemes: vec!["sp".to_string()],
+            phonemes: vec![Phoneme::Sp],
             is_unknown,
             is_ignored: true,
         }
@@ -114,8 +114,8 @@ impl IntoPhonemeMapItem for WordPhonemePair {
         let is_ignored = self.phonemes.is_empty();
         let mut phonemes = self.phonemes;
 
-        if morph.is_unknown && (phonemes.is_empty() || phonemes == ["pau"]) {
-            phonemes = vec!["unk".to_string()];
+        if morph.is_unknown && (phonemes.is_empty() || phonemes == [Phoneme::Pau]) {
+            phonemes = vec![Phoneme::Unk];
         }
 
         WordPhonemeMap {
@@ -131,8 +131,8 @@ impl IntoPhonemeMapItem for WordPhonemePair {
         let mut phonemes = self.phonemes;
         let is_ignored = phonemes.is_empty();
 
-        if is_unknown_word && (phonemes.is_empty() || phonemes == ["pau"]) {
-            phonemes = vec!["unk".to_string()];
+        if is_unknown_word && (phonemes.is_empty() || phonemes == [Phoneme::Pau]) {
+            phonemes = vec![Phoneme::Unk];
         }
 
         WordPhonemeMap {
@@ -167,7 +167,7 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
     fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
         WordPhonemeDetail {
             word: surface.clone(),
-            phonemes: vec!["sp".to_string()],
+            phonemes: vec![Phoneme::Sp],
             features: Vec::new(),
             pos: "記号".to_string(),
             pos_group1: "空白".to_string(),
@@ -195,8 +195,8 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
 
     #[inline]
     fn into_exact_match(mut self, morph: &MecabMorph) -> Self::Output {
-        if morph.is_unknown && (self.phonemes.is_empty() || self.phonemes == ["pau"]) {
-            self.phonemes = vec!["unk".to_string()];
+        if morph.is_unknown && (self.phonemes.is_empty() || self.phonemes == [Phoneme::Pau]) {
+            self.phonemes = vec![Phoneme::Unk];
         }
         self.is_unknown = morph.is_unknown;
 
@@ -208,8 +208,8 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
 
     #[inline]
     fn into_prefix_match(mut self, is_unknown_word: bool) -> Self::Output {
-        if is_unknown_word && (self.phonemes.is_empty() || self.phonemes == ["pau"]) {
-            self.phonemes = vec!["unk".to_string()];
+        if is_unknown_word && (self.phonemes.is_empty() || self.phonemes == [Phoneme::Pau]) {
+            self.phonemes = vec![Phoneme::Unk];
         }
         self.is_unknown = is_unknown_word;
         self.is_ignored = self.phonemes.is_empty();
@@ -347,7 +347,7 @@ impl OpenJTalk {
                 let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
 
                 if is_pause_pron && !is_non_pause_symbol(&f.string) {
-                    mapping[f_idx].phonemes_mut().push("pau".to_string());
+                    mapping[f_idx].phonemes_mut().push(Phoneme::Pau);
                 }
             }
 
@@ -355,7 +355,7 @@ impl OpenJTalk {
             while !p.is_null() {
                 let s_ptr = (*p).phoneme;
                 if !s_ptr.is_null() {
-                    let s = CStr::from_ptr(s_ptr).to_string_lossy();
+                    let s = Phoneme::from(s_ptr);
 
                     if s != "pau" {
                         let mora = (*p).up;
@@ -365,7 +365,7 @@ impl OpenJTalk {
                                 && let Some(&idx) = ptr_to_idx.get(&(word as usize))
                                 && let Some(target) = mapping.get_mut(idx)
                             {
-                                target.phonemes_mut().push(s.into_owned());
+                                target.phonemes_mut().push(s);
                             }
                         }
                     }

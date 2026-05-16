@@ -8,7 +8,7 @@ mod tests {
 
     use haqumei::{
         Haqumei, HaqumeiOptions, IuPronunciation, OpenJTalk, UnicodeNormalization,
-        errors::HaqumeiError, utils::default_is_non_pause_symbol,
+        errors::HaqumeiError, phoneme::Phoneme, utils::default_is_non_pause_symbol,
     };
     use unicode_normalization::UnicodeNormalization as _;
 
@@ -122,7 +122,7 @@ mod tests {
 
         let pauses: Vec<_> = mapping
             .iter()
-            .filter(|m| m.phonemes.contains(&"pau".to_string()))
+            .filter(|m| m.phonemes.contains(&Phoneme::Pau))
             .collect();
 
         assert!(!pauses.is_empty());
@@ -192,7 +192,7 @@ mod tests {
             for (detail_hq, detail_ojt) in details_hq.clone().into_iter().zip(details_ojt) {
                 // `is_ignored` であるとき、空白として追加された sp か、NJDが割り当てなかった場合である
                 if detail_hq.is_ignored {
-                    assert!(detail_hq.phonemes == ["sp"] || detail_hq.phonemes.is_empty());
+                    assert!(detail_hq.phonemes == [Phoneme::Sp] || detail_hq.phonemes.is_empty());
                 }
                 if detail_hq.is_unknown {
                     // 未知語の場合：
@@ -202,8 +202,9 @@ mod tests {
                     // また、先頭一致のマッピング処理において `is_unknown` と異なって `is_ignored` は伝播しない。
                     // なので、`is_unknown` かつ `is_ignored` である際に、`unk` に置き換える処理が正当化される。
                     assert!(
-                        detail_hq.phonemes == ["unk"]
-                            || (!detail_hq.phonemes.is_empty() && detail_hq.phonemes != ["pau"]),
+                        detail_hq.phonemes == [Phoneme::Unk]
+                            || (!detail_hq.phonemes.is_empty()
+                                && detail_hq.phonemes != [Phoneme::Pau]),
                         "Unknown word {:?} has unexpected phonemes: {:?}",
                         detail_hq.word,
                         detail_hq.phonemes
@@ -214,12 +215,12 @@ mod tests {
                     //
                     // (detailed API で音響モデルが未知語を pau として受け取ると精度にもよくないため)
                     if detail_hq.is_ignored {
-                        assert_eq!(detail_hq.phonemes, ["unk"]);
+                        assert_eq!(detail_hq.phonemes, [Phoneme::Unk]);
                     }
                 }
                 // is_ignored であるとき、空白として追加された sp か、NJDが割り当てなかった場合である
                 if detail_ojt.is_ignored {
-                    assert!(detail_ojt.phonemes == ["sp"] || detail_ojt.phonemes.is_empty());
+                    assert!(detail_ojt.phonemes == [Phoneme::Sp] || detail_ojt.phonemes.is_empty());
                 }
                 if detail_ojt.is_unknown {
                     // 未知語の場合：
@@ -229,8 +230,9 @@ mod tests {
                     // また、先頭一致のマッピング処理において `is_unknown` と異なって `is_ignored` は伝播しない。
                     // なので、`is_unknown` かつ `is_ignored` である際に、`unk` に置き換える処理が正当化される。
                     assert!(
-                        detail_ojt.phonemes == ["unk"]
-                            || (!detail_ojt.phonemes.is_empty() && detail_ojt.phonemes != ["pau"]),
+                        detail_ojt.phonemes == [Phoneme::Unk]
+                            || (!detail_ojt.phonemes.is_empty()
+                                && detail_ojt.phonemes != [Phoneme::Pau]),
                         "Unknown word {:?} has unexpected phonemes: {:?}",
                         detail_ojt.word,
                         detail_ojt.phonemes
@@ -239,7 +241,7 @@ mod tests {
                     // 少なくとも、`is_ignored` かつ 未知語であれば、
                     // `unk` でなければならない。
                     if detail_ojt.is_ignored {
-                        assert_eq!(detail_ojt.phonemes, ["unk"]);
+                        assert_eq!(detail_ojt.phonemes, [Phoneme::Unk]);
                     }
                 }
             }
@@ -257,19 +259,15 @@ mod tests {
             .extract_fullcontext_batch(&waganeko)
             .unwrap()
             .into_iter()
-            .map(|labels| {
-                labels
-                    .into_iter()
-                    .map(|l| l.to_string())
-                    .collect()
-            })
+            .map(|labels| labels.into_iter().map(|l| l.to_string()).collect())
             .collect::<Vec<Vec<String>>>();
 
         for (line, haqumei_jlabel) in waganeko.iter().zip(haqumei_jlabels) {
             let expected = {
                 let njd_features = open_jtalk.run_frontend(line.as_ref()).unwrap();
                 open_jtalk.make_label(&njd_features)
-            }.unwrap();
+            }
+            .unwrap();
 
             assert_eq!(haqumei_jlabel, expected);
         }
@@ -501,7 +499,7 @@ mod tests {
 
         // 括弧類はデフォルト(default_is_non_pause_symbol) では pau が割り当てられない
         assert_eq!(kagi_close_1.phonemes, &[] as &[String]);
-        assert_eq!(touten_1.phonemes, vec!["pau"]);
+        assert_eq!(touten_1.phonemes, vec![Phoneme::Pau]);
 
         let osaka_idx = mapping.iter().position(|m| m.word == "大阪").unwrap();
 
@@ -511,13 +509,13 @@ mod tests {
         // `…` は pause のように機能する記号である気がするし、
         // これをフィルタリングするのは G2P の責務ではない
         assert_eq!(mapping[osaka_idx + 2].word, "…");
-        assert_eq!(mapping[osaka_idx + 2].phonemes, &["pau"]);
+        assert_eq!(mapping[osaka_idx + 2].phonemes, &[Phoneme::Pau]);
 
         assert_eq!(mapping[osaka_idx + 3].word, "、");
-        assert_eq!(mapping[osaka_idx + 3].phonemes, &["pau"]);
+        assert_eq!(mapping[osaka_idx + 3].phonemes, &[Phoneme::Pau]);
 
         assert_eq!(mapping[osaka_idx + 4].word, "…");
-        assert_eq!(mapping[osaka_idx + 4].phonemes, &["pau"]);
+        assert_eq!(mapping[osaka_idx + 4].phonemes, &[Phoneme::Pau]);
     }
 
     #[test]
@@ -835,7 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fullcontext_consistency_nightmare_case() {
+    fn test_fullcontext_nightmare_case() {
         let mut haqumei = Haqumei::new().unwrap();
 
         let text = NIGHTMARE_TEXT;

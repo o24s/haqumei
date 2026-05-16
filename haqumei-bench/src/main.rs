@@ -1,5 +1,5 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
+use haqumei::{Haqumei, OpenJTalk};
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -16,28 +16,14 @@ fn bench_g2p(c: &mut Criterion) {
 
     group.sample_size(10);
 
-    let mut hq_default = Haqumei::new().unwrap();
+    let mut haqumei = Haqumei::new().unwrap();
     group.bench_function("MultiThread (Default)", |b| {
-        b.iter(|| black_box(hq_default.g2p_batch(black_box(&lines))))
+        b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
     });
 
-    let mut hq_nani = Haqumei::with_options(HaqumeiOptions {
-        predict_nani: true,
-        ..Default::default()
-    })
-    .unwrap();
-    group.bench_function("MultiThread (Nani Predictor)", |b| {
-        b.iter(|| black_box(hq_nani.g2p_batch(black_box(&lines))))
-    });
-
-    let mut hq_heavy = Haqumei::with_options(HaqumeiOptions {
-        predict_nani: true,
-        use_unidic_yomi: true,
-        ..Default::default()
-    })
-    .unwrap();
+    haqumei.options.use_unidic_yomi = true;
     group.bench_function("MultiThread (Heavy Options)", |b| {
-        b.iter(|| black_box(hq_heavy.g2p_batch(black_box(&lines))))
+        b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
     });
 
     let mut ojt = OpenJTalk::new().unwrap();
@@ -48,7 +34,7 @@ fn bench_g2p(c: &mut Criterion) {
     });
 
     group.bench_function("G2P Mapping", |b| {
-        b.iter(|| black_box(hq_default.g2p_mapping_batch(black_box(&lines))))
+        b.iter(|| black_box(haqumei.g2p_mapping_batch(black_box(&lines))))
     });
 
     group.finish();

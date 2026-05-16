@@ -3,6 +3,7 @@ mod ffi {
     #![allow(non_camel_case_types)]
     #![allow(non_snake_case)]
     #![allow(dead_code)]
+    #![allow(clippy::upper_case_acronyms)]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
@@ -43,6 +44,7 @@ pub mod features;
 mod macros;
 pub mod nani_predict;
 pub mod open_jtalk;
+pub mod phoneme;
 mod postprocess;
 pub mod prosody;
 pub mod utils;
@@ -62,6 +64,7 @@ pub use features::NjdFeature;
 pub use open_jtalk::{
     MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary, update_global_dictionary,
 };
+pub use phoneme::Phoneme;
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -401,7 +404,7 @@ impl Haqumei {
     /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a"])
     /// println!("{:?}", haqumei.g2p("こんにちは"));
     /// ```
-    pub fn g2p(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2p(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
@@ -432,7 +435,7 @@ impl Haqumei {
     /// // Ok(["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"])
     /// println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺"));
     /// ```
-    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
@@ -555,7 +558,7 @@ impl Haqumei {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
-    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<String>>, HaqumeiError> {
+    pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<Phoneme>>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
@@ -946,7 +949,7 @@ impl Haqumei {
 
     impl_batch_method_haqumei!(
         /// 複数のテキストに対して `g2p` を実行します。
-        g2p_batch => g2p -> Vec<String>
+        g2p_batch => g2p -> Vec<Phoneme>
     );
 
     impl_batch_method_haqumei!(
@@ -955,7 +958,7 @@ impl Haqumei {
         /// - 既知語: 通常の音素列 (読点などは `pau`)
         /// - 未知語: `unk`
         /// - 空白等: `sp` (Space)
-        g2p_detailed_batch => g2p_detailed -> Vec<String>
+        g2p_detailed_batch => g2p_detailed -> Vec<Phoneme>
     );
 
     impl_batch_method_haqumei!(
@@ -976,7 +979,7 @@ impl Haqumei {
 
     impl_batch_method_haqumei!(
         /// 単語ごとに分割された音素リストのバッチ処理。
-        g2p_per_word_batch => g2p_per_word -> Vec<Vec<String>>
+        g2p_per_word_batch => g2p_per_word -> Vec<Vec<Phoneme>>
     );
 
     impl_batch_method_haqumei!(

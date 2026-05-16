@@ -5,6 +5,7 @@
 mod tests {
     use haqumei::{
         Haqumei, HaqumeiOptions, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair,
+        phoneme::Phoneme,
     };
 
     #[test]
@@ -435,20 +436,20 @@ mod tests {
     ];
 
     trait PhonemesExtractor {
-        fn get_phonemes(&self) -> &[String];
+        fn get_phonemes(&self) -> &[Phoneme];
     }
     impl PhonemesExtractor for WordPhonemePair {
-        fn get_phonemes(&self) -> &[String] {
+        fn get_phonemes(&self) -> &[Phoneme] {
             &self.phonemes
         }
     }
     impl PhonemesExtractor for WordPhonemeMap {
-        fn get_phonemes(&self) -> &[String] {
+        fn get_phonemes(&self) -> &[Phoneme] {
             &self.phonemes
         }
     }
     impl PhonemesExtractor for WordPhonemeDetail {
-        fn get_phonemes(&self) -> &[String] {
+        fn get_phonemes(&self) -> &[Phoneme] {
             &self.phonemes
         }
     }
@@ -456,14 +457,14 @@ mod tests {
     fn flatten_mapping_phonemes<T: PhonemesExtractor>(
         mapping: &[T],
         keep_pause: bool,
-    ) -> Vec<String> {
+    ) -> Vec<Phoneme> {
         let mut phonemes = Vec::new();
         for entry in mapping {
             let p = entry.get_phonemes();
-            if !keep_pause && (p == ["pau"] || p == ["sp"]) {
+            if !keep_pause && (p == [Phoneme::Pau] || p == [Phoneme::Sp]) {
                 continue;
             }
-            if p == ["unk"] {
+            if p == [Phoneme::Unk] {
                 continue;
             }
             phonemes.extend(p.iter().cloned());
@@ -631,7 +632,7 @@ mod tests {
     fn test_make_phoneme_mapping_with_punctuation() {
         let mut ojt = OpenJTalk::new().unwrap();
         let mapping = ojt.g2p_pairs("東京、大阪").unwrap();
-        assert!(mapping.iter().any(|e| e.phonemes == ["pau"]));
+        assert!(mapping.iter().any(|e| e.phonemes == [Phoneme::Pau]));
     }
 
     #[test]
@@ -641,7 +642,7 @@ mod tests {
         assert_eq!(mapping[0].word, "あ");
         assert_eq!(mapping[0].phonemes, ["a"]);
         assert_eq!(mapping[1].word, "。");
-        assert_eq!(mapping[1].phonemes, ["pau"]);
+        assert_eq!(mapping[1].phonemes, [Phoneme::Pau]);
     }
 
     #[test]
@@ -804,7 +805,7 @@ mod tests {
         let mut ojt = OpenJTalk::new().unwrap();
         let mapping = ojt.g2p_mapping("𰻞𰻞麺").unwrap();
         assert_eq!(mapping[0].word, "𰻞𰻞");
-        assert_eq!(mapping[0].phonemes, ["unk"]);
+        assert_eq!(mapping[0].phonemes, [Phoneme::Unk]);
         assert!(mapping[0].is_unknown);
 
         assert_eq!(mapping[1].word, "麺");
