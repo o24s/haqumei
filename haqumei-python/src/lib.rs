@@ -606,7 +606,6 @@ impl PyHaqumei {
         retreat_acc_nuc = true,
         modify_acc_after_chaining = true,
         process_odoriji = true,
-        drop_unvoiced_vowels = false,
     ))]
     fn new(
         normalize_unicode: UnicodeNormalization,
@@ -620,7 +619,6 @@ impl PyHaqumei {
         retreat_acc_nuc: bool,
         modify_acc_after_chaining: bool,
         process_odoriji: bool,
-        drop_unvoiced_vowels: bool,
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             normalize_unicode: match normalize_unicode {
@@ -645,7 +643,6 @@ impl PyHaqumei {
             modify_acc_after_chaining,
             process_odoriji,
             is_non_pause_symbol: default_is_non_pause_symbol,
-            drop_unvoiced_vowels,
         };
 
         let inner = Haqumei::with_options(options).map_err(to_py_err)?;
@@ -775,7 +772,11 @@ impl PyHaqumei {
             .map(|p| p.into_strs())
     }
 
-    fn g2p_detailed_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<&'static str>>> {
+    fn g2p_detailed_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<&'static str>>> {
         py.detach(|| {
             self.inner
                 .lock()

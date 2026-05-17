@@ -22,8 +22,8 @@
 ## Features
 
 - **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
-  This capability is not available in Open JTalk or pyopenjtalk. (See [Advanced Features](#advanced-features))
-- **Prosody-annotated phonemes:** Provides phoneme sequences enriched with prosodic symbols (`g2p_prosody`), offering a richer representation than ESPnet2's `pyopenjtalk_prosody`. (See [Specification of `g2p_prosody`](#specification-of-g2p_prosody))
+  This capability is not available in Open JTalk (`pyopenjtalk`). (See [Advanced Features](#advanced-features))
+- **Prosody Information Retrieval:** Provides phoneme sequences enriched with prosodic symbols as well as lossless mapping to surface forms (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
 - **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
 - **Accuracy:** Improves accuracy by incorporating many techniques implemented in [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`) and a detailed list including unknown word information (`g2p_detailed`).
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   // Get phoneme list with prosodic symbols
   let phones = haqumei.g2p_prosody(text)?.join(" ");
-  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i !");
+  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   // Convert to katakana reading
   let kana = haqumei.g2p_kana(text)?;
@@ -103,7 +103,7 @@ print(f"Phonemes: {phonemes}")
 # Get phoneme list with prosodic symbols
 phones = " ".join(haqumei.g2p_prosody(text))
 print(f"Prosody-annotated phonemes: {phones}")
-# -> Prosody-annotated phonemes: ^ k o [ N n i ch i w a _ s e ] k a i !
+# -> Prosody-annotated phonemes: ^ k o [ N n i ch i w a _ s e ] k a i ! $
 
 # Convert to katakana reading
 kana = haqumei.g2p_kana(text)
@@ -138,6 +138,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"]
   // }, ... ]
+
+  Ok(())
 }
 ```
 
@@ -225,6 +227,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    is_unknown: false,
   //    is_ignored: false,
   // }]
+
+  Ok(())
 }
 ```
 
@@ -252,35 +256,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   println!("{:?}", haqumei.g2p_detailed_batch(text)?);
   // Output: [["g", "a"], ["p", "a"], ["g", "o"]]
+
+  Ok(())
 }
 ```
 
-## Specification of `g2p_prosody`
+## Prosody Features (`g2p_prosody` / `g2p_mapping_prosody`)
 
-`g2p_prosody` converts the input text into a phoneme list annotated with prosodic symbols.
+### Specification of `g2p_prosody_with_options`
 
-In addition to standard phonemes, the output includes the following symbols:
+Converts the input text into a phoneme list annotated with prosodic symbols based on the `ProsodyFormat` setting.
+(The `g2p_prosody` method behaves identically to specifying `ProsodyFormat::Default`.)
+
+The output commonly includes the following prosodic symbols:
 
 | Symbol | Meaning | Position |
 | :--- | :--- | :--- |
 | `^` | Beginning of utterance (BOS) | Sentence-initial |
 | `$` | End of utterance (EOS) | Sentence-final |
-| `?` | End of interrogative (？) | Sentence-final / Sentence-medial |
-| `!` | End of exclamation (Custom extension) | Sentence-final / Sentence-medial |
-| `!?` | End of exclamatory-interrogative (Custom extension) | Sentence-final / Sentence-medial |
+| `?` | End of interrogative (？) | Sentence-medial / Sentence-final |
+| `!` | End of exclamation (Custom extension) | Sentence-medial / Sentence-final |
 | `_` | Pause / Comma (、) | Sentence-medial |
 | `#` | Accent phrase boundary | Sentence-medial |
+| `{...}` | Unknown word | Sentence-medial |
+
+For more information on Japanese accents, please refer to the [tdmelodic User Manual / Preliminary Knowledge](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html) (Japanese).
+
+#### ProsodyFormat::Default
+
+In addition to the above, the output includes the following prosodic symbols:
+
+| Symbol | Meaning | Position |
+| :--- | :--- | :--- |
 | `[` | Pitch rise (Phrase head) | Near the beginning of a phrase |
 | `]` | Pitch fall (Accent nucleus) | Right after the nuclear mora |
 
 The symbols `[` and `]` are based on the accent notation commonly used in tdmelodic and similar tools.
 They correspond to `^` and `!` in the algorithm described by Kurihara et al. (2021) in *"Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"*.
 
-For more information on Japanese accents, please refer to the [tdmelodic User Manual / Preliminary Knowledge](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html) (Japanese).
+#### ProsodyFormat::Prefix
 
-By setting `drop_unvoiced_vowels` to `true` in `HaqumeiOptions`, you can collapse unvoiced vowels (A, E, I, O, U) into regular voiced vowels (a, e, i, o, u) similarly to ESPnet2, though this is generally not recommended.
+Instead of using pitch rise/fall symbols (`[` and `]`), pitch high/low is attached as a prefix to each phoneme:
+ - `H_` : High pitch
+ - `L_` : Low pitch
 
-### Example
+The pitch is explicitly indicated for each phoneme.
+Example: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+#### ProsodyFormat::Numeric
+
+Pitch high/low is attached as a suffix to each phoneme as a numeric value:
+ - `:1` : High pitch
+ - `:0` : Low pitch
+
+Example: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
+
+#### Example
 
 ```rust
 use haqumei::Haqumei;
@@ -289,10 +320,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
   let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
-  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   let phones = haqumei.g2p_prosody("青い空、広がる。")?;
   assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+
+  Ok(())
+}
+```
+
+### Specification of `g2p_mapping_prosody`
+
+On the other hand, `g2p_mapping_prosody` analyzes the input text and retrieves an alignment between detailed linguistic information for each morpheme (word) and phonemes with prosodic symbols.
+
+While [`Haqumei::g2p_prosody`] and [`Haqumei::g2p_prosody_with_options`] return a flat list of strings (`Vec<String>`), this function returns structured data (`Vec<WordPhonemeProsody>`) annotated with part-of-speech, accent type, reading, and pitch information.
+
+This is suitable for speech synthesis frontend processing when you want to maintain the correspondence between morphemes and phonemes, individually retrieve and manipulate pitch high/low ([`PitchAccent`]), or handle unknown words.
+
+#### Information included in `WordPhonemeProsody`
+
+The following information is included as data for each morpheme:
+
+| Field | Description | Example |
+| :--- | :--- | :--- |
+| `word` | Surface form of the morpheme | `"空"` |
+| `pos`, `pos_group1`~`3` | Part-of-speech and its subdivisions | `"名詞"`, `"一般"` |
+| `orig`, `read`, `pron` | Original form, reading, pronunciation form | `"空"`, `"ソラ"`, `"ソラ"` |
+| `accent_nucleus` | Accent nucleus position (0: Heiban type, 1~: n-th mora) | `1` |
+| `mora_count` | Number of moras | `2` |
+| `is_unknown` | Whether it was judged as an unknown word by MeCab | `false` |
+| `is_ignored` | Whether no phoneme was assigned | `false` |
+
+#### Prosodic Phoneme (`ProsodicPhoneme`)
+
+The `phonemes` field contains a list of the following elements:
+
+| Variant | Meaning | Output symbol in `g2p_prosody`, etc. |
+| :--- | :--- | :--- |
+| `Phoneme` | The phoneme itself and its pitch (`High` / `Low`) | `a`, `a:0`, `H_a`, etc. |
+| `AccentPhraseBoundary` | Accent phrase boundary | `#` |
+| `Pause` | Regular pause / comma | `_` |
+| `Interrogative` | End of interrogative / Pause | `?` |
+| `Exclamatory` | End of exclamation / Pause | `!` |
+
+#### Example
+
+```rust
+use haqumei::{Haqumei, PitchAccent, ProsodicPhoneme};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+
+  // Retrieve text as structured data per morpheme
+  let mapping = haqumei.g2p_mapping_prosody("青い空が、好きだ！")?;
+
+  // Morpheme information for "青い"
+  let aoi = &mapping[0];
+  assert_eq!(aoi.word, "青い");
+  assert_eq!(aoi.pos, "形容詞");
+  assert_eq!(aoi.read, "アオイ");
+  assert_eq!(aoi.accent_nucleus, 2); // 中高型
+
+  // Phoneme and pitch information for "青い" (a: Low, o: High, i: Low)
+  assert!(matches!(
+      aoi.phonemes[0],
+      ProsodicPhoneme::Phoneme { pitch: Some(PitchAccent::Low), .. }
+  ));
+
+  let da = mapping.last().unwrap();
+  assert_eq!(da.word, "！");
+  assert!(da.phonemes.contains(&ProsodicPhoneme::Exclamatory));
 
   Ok(())
 }

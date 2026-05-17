@@ -146,7 +146,6 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             fs::copy(&cached_dict_path, &compressed_dict_path)?;
         }
 
-
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             &compressed_dict_path.display()

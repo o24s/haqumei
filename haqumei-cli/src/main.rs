@@ -186,7 +186,6 @@ fn main() -> Result<()> {
     let haqumei_options = HaqumeiOptions {
         normalize_unicode: cli.options.normalize_unicode.into(),
         normalize_iu: cli.options.normalize_iu.map(Into::into),
-        drop_unvoiced_vowels: cli.options.drop_unvoiced_vowels,
         use_read_as_pron: cli.options.use_read_as_pron,
         revert_long_vowels: cli.options.revert_long_vowels,
         revert_yotsugana: cli.options.revert_yotsugana,

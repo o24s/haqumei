@@ -22,7 +22,7 @@
 ## 特徴 (Features)
 
 - Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
-- プロソディ記号付き音素列: ESPnet2 の `pyopenjtalk_prosody` より、さらにリッチな表現をもつプロソディ記号付き音素列 (`g2p_prosody`) を得ることができます。  (`g2p_prosody` の詳細については、[ここ](#g2p_prosody-の仕様) を参照してください。)
+- プロソディ情報の取得: プロソディ記号付き音素列および、表層形に対してロスレスなマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
 - パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
 - 精度: [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`) など、多様な形式で結果を取得できます。
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   // プロソディ記号付きの音素リストを得る
   let phones = haqumei.g2p_prosody(text)?.join(" ");
-  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i !");
+  assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   // カタカナ読みに変換
   let kana = haqumei.g2p_kana(text)?;
@@ -102,7 +102,7 @@ print(f"音素列: {phonemes}")
 # pyopenjtalk風のスペース区切り文字列に変換
 phones = " ".join(haqumei.g2p_prosody(text))
 print(f"プロソディ付き音素列: {phones}")
-# -> プロソディ付き音素列: ^ k o [ N n i ch i w a _ s e ] k a i !
+# -> プロソディ付き音素列: ^ k o [ N n i ch i w a _ s e ] k a i ! $
 
 # カタカナ読みに変換
 kana = haqumei.g2p_kana(text)
@@ -137,6 +137,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"]
   // }, ...
+
+  Ok(())
 }
 ```
 
@@ -222,6 +224,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    is_unknown: false,
   //    is_ignored: false,
   // }]
+
+  Ok(())
 }
 ```
 
@@ -249,24 +253,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   println!("{:?}", haqumei.g2p_detailed_batch(text)?);
   // 出力: [["g", "a"], ["p", "a"], ["g", "o"]]
+
+  Ok(())
 }
 ```
 
-## `g2p_prosody` の仕様
+## プロソディ機能 (`g2p_prosody` / `g2p_mapping_prosody`)
 
-`g2p_prosody` は、入力テキストをプロソディ記号付き音素リストに変換します。
+### `g2p_prosody_with_options` の仕様
 
-出力には通常の音素に加えて、以下の記号が含まれます：
+入力テキストを `ProsodyFormat` の設定をもとにプロソディ記号付き音素リストに変換します。
+(`g2p_prosody` メソッドは、`ProsodyFormat::Default` を指定したときの動作と同じです。)
+
+出力には、共通して以下のプロソディ記号が含まれます。
 
 | 記号 | 意味 | 出現位置 |
 | :--- | :--- | :--- |
 | `^` | 発話の開始 (BOS) | 文頭 |
 | `$` | 発話の終結 (EOS) | 文末 |
-| `?` | 疑問文の終結 (？) | 文末・文中 |
-| `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-| `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+| `?` | 疑問文の終結 (？) | 文中 |
+| `!` | 感嘆の終結 (独自拡張) | 文中 |
 | `_` | ポーズ・読点 (、) | 文中 |
 | `#` | アクセント句境界 | 文中 |
+| `{...}` | 未知語 | 文中 |
+
+日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+#### ProsodyFormat::Default
+
+出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+
+| 記号 | 意味 | 出現位置 |
+| :--- | :--- | :--- |
 | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
 | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
 
@@ -274,11 +292,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
 (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
 
-日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+#### ProsodyFormat::Prefix
 
-`HaqumeiOptions` の `drop_unvoiced_vowels` を `true` に設定することで、ESPnet2 のように 無声母音 (A, E, I, O, U) を 通常の有声母音 (a, e, i, o, u) に潰すことができますが、あまり推奨されません。
+ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+ - `H_` : ピッチが高い (High)
+ - `L_` : ピッチが低い (Low)
 
-### 例
+音素ごとにピッチが明示されます。
+例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+#### ProsodyFormat::Numeric
+
+各音素のサフィックスとして、ピッチの高低を数値で付与します。
+ - `:1` : ピッチが高い (High)
+ - `:0` : ピッチが低い (Low)
+
+例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
+
+#### 例
 
 ```rust
 use haqumei::Haqumei;
@@ -287,10 +318,77 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
 
   let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
-  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+  assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   let phones = haqumei.g2p_prosody("青い空、広がる。")?;
   assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+
+  Ok(())
+}
+```
+
+### `g2p_mapping_prosody` の仕様
+
+一方で、`g2p_mapping_prosody` は入力テキストを解析し、形態素 (単語) ごとの詳細な言語情報と、プロソディ (韻律) 記号付き音素をマッピングして取得します。
+
+[`Haqumei::g2p_prosody`] や [`Haqumei::g2p_prosody_with_options`] がフラットな文字列リスト (`Vec<String>`) を返すのに対し、
+この関数は品詞、アクセント型、読み、およびピッチ情報が付与された構造化データ (`Vec<WordPhonemeProsody>`) を返します。
+
+音声合成のフロントエンド処理において、形態素と音素の対応関係を維持したい場合や、ピッチの高低 ([`PitchAccent`]) を個別に取得・操作したい場合、あるいは未知語のハンドリングを行いたい場合に適しています。
+
+#### `WordPhonemeProsody` に含まれる主な情報
+
+形態素ごとのデータとして、以下の情報が含まれます。
+
+| フィールド | 説明 | 例 |
+| :--- | :--- | :--- |
+| `word` | 形態素の表層形 | `"空"` |
+| `pos`, `pos_group1`~`3` | 品詞およびその細分類 | `"名詞"`, `"一般"` |
+| `orig`, `read`, `pron` | 原形、読み、発音形式 | `"空"`, `"ソラ"`, `"ソラ"` |
+| `accent_nucleus` | アクセント核位置 (0: 平板型, 1~: n番目のモーラ) | `1` |
+| `mora_count` | モーラ数 | `2` |
+| `is_unknown` | MeCabによって未知語判定されたかどうか | `false` |
+| `is_ignored` | 音素が割り当てられなかったか | `false` |
+
+#### プロソディ音素 (`ProsodicPhoneme`)
+
+`phonemes` フィールドには、以下の要素からなるリストが格納されます。
+
+| 列挙子 | 意味 | `g2p_prosody` 等での出力記号 |
+| :--- | :--- | :--- |
+| `Phoneme` | 音素本体と、そのピッチの高低 (`High` / `Low`) | `a`, `a:0`, `H_a` など |
+| `AccentPhraseBoundary` | アクセント句境界 | `#` |
+| `Pause` | 通常のポーズ・読点 | `_` |
+| `Interrogative` | 疑問文の終結・ポーズ | `?` |
+| `Exclamatory` | 感嘆の終結・ポーズ | `!` |
+
+#### 例
+
+```rust
+use haqumei::{Haqumei, PitchAccent, ProsodicPhoneme};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+
+  // テキストを形態素ごとの構造化データとして取得
+  let mapping = haqumei.g2p_mapping_prosody("青い空が、好きだ！")?;
+
+  // 「青い」の形態素情報
+  let aoi = &mapping[0];
+  assert_eq!(aoi.word, "青い");
+  assert_eq!(aoi.pos, "形容詞");
+  assert_eq!(aoi.read, "アオイ");
+  assert_eq!(aoi.accent_nucleus, 2); // 中高型
+
+  // 「青い」の音素とピッチ情報 (a: Low, o: High, i: Low)
+  assert!(matches!(
+      aoi.phonemes[0],
+      ProsodicPhoneme::Phoneme { pitch: Some(PitchAccent::Low), .. }
+  ));
+
+  let da = mapping.last().unwrap();
+  assert_eq!(da.word, "！");
+  assert!(da.phonemes.contains(&ProsodicPhoneme::Exclamatory));
 
   Ok(())
 }

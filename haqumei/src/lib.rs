@@ -65,6 +65,7 @@ pub use open_jtalk::{
     MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary, update_global_dictionary,
 };
 pub use phoneme::Phoneme;
+pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -79,8 +80,8 @@ use crate::{
         modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
         vibrato_analysis,
     },
-    prosody::extract_prosody_from_labels,
     utils::default_is_non_pause_symbol,
+    word_phoneme::WordPhonemeProsody,
 };
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> =
@@ -160,7 +161,7 @@ pub struct HaqumeiOptions {
     /// デフォルトで無効になっています。
     pub revert_long_vowels: bool,
 
-    /// 現代仮名遣いにおいて発音上統合される四つ仮名（ヅ・ヂ）を、
+    /// 現代仮名遣いにおいて発音上統合される四つ仮名 (ヅ・ヂ) を、
     /// 元のテキスト通りの表記に復元するかどうか。
     ///
     /// `true` に設定すると、発音 (`pron`) において「ズ」「ジ」に変換されたものを、
@@ -222,7 +223,7 @@ pub struct HaqumeiOptions {
     /// 閉じ括弧に `pau` を割り当てたくないようなケースに使ってください。
     ///
     /// デフォルトでは、以下の表層系に `pau` が割り当てられません。
-    /// `「` , `」` , `『` , `』` , `（` , `）` , `(` , `)` ,
+    /// `「` , `」` , `『` , `』` , ` (` , `) ` , `(` , `)` ,
     /// `【` , `】` , `［` , `］` , `[` , `]` , `〈` , `〉` ,
     /// `《` , `》` , `〔` , `〕` , `｛` , `｝` , `{` , `}` ,
     /// `"` , `'` , `”` , `“` , `’` , `‘`
@@ -241,13 +242,6 @@ pub struct HaqumeiOptions {
     /// }
     /// ```
     pub is_non_pause_symbol: fn(&str) -> bool,
-
-    /// `g2p_prosody` を実行する際に、無声母音 (A, E, I, O, U) を
-    /// 通常の有声母音 (a, e, i, o, u) として扱うかどうか。
-    /// ESPnet2 互換の出力を得る場合は `true` に設定します。
-    ///
-    /// デフォルトで無効になっています。
-    pub drop_unvoiced_vowels: bool,
 }
 
 impl Default for HaqumeiOptions {
@@ -265,7 +259,6 @@ impl Default for HaqumeiOptions {
             modify_acc_after_chaining: true,
             process_odoriji: true,
             is_non_pause_symbol: default_is_non_pause_symbol,
-            drop_unvoiced_vowels: false,
         }
     }
 }
@@ -477,7 +470,7 @@ impl Haqumei {
         Ok(kana_string)
     }
 
-    /// 入力テキストを単語（形態素）ごとのカタカナリストに変換します。
+    /// 入力テキストを単語 (形態素) ごとのカタカナリストに変換します。
     pub fn g2p_kana_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
@@ -503,19 +496,22 @@ impl Haqumei {
 
     /// 入力テキストをプロソディ記号付き音素リストに変換します。
     ///
-    /// 出力には通常の音素に加えて、以下の制御記号が含まれます：
+    /// 音素ごとにピッチ情報が欲しい場合は、[Haqumei::g2p_prosody_with_options] を使用してください。
+    /// この関数は、[Haqumei::g2p_prosody_with_options] で [ProsodyFormat::Default] を選択したときの動作に相当します。
+    ///
+    /// 出力には通常の音素に加えて、以下の制御記号が含まれます:
     ///
     /// | 記号 | 意味 | 出現位置 |
     /// | :--- | :--- | :--- |
     /// | `^` | 発話の開始 (BOS) | 文頭 |
     /// | `$` | 発話の終結 (EOS) | 文末 |
-    /// | `?` | 疑問文の終結 (？) | 文末・文中 |
-    /// | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-    /// | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+    /// | `?` | 疑問文の終結 (？) | 文中 |
+    /// | `!` | 感嘆の終結 (独自拡張) | 文中 |
     /// | `_` | ポーズ・読点 (、) | 文中 |
     /// | `#` | アクセント句境界 | 文中 |
     /// | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
     /// | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+    /// | `{...}` | 未知語 | 文中 |
     ///
     /// 記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
     /// "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
@@ -531,27 +527,88 @@ impl Haqumei {
     /// let mut haqumei = Haqumei::new()?;
     ///
     /// let phones = haqumei.g2p_prosody("こんにちは、世界！")?;
-    /// assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i !");
+    /// assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i ! $");
     ///
-    /// let phones = haqumei.g2p_prosody("青い空、広がる。")?;
-    /// assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+    /// let phones = haqumei.g2p_prosody("青い空が、好きだ。")?;
+    /// assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a g a _ s U [ k i ] d a _ $");
     ///
     /// # Ok(())
     /// # }
     /// ```
     pub fn g2p_prosody(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
-        let njd_features = self.run_frontend(text)?;
-
-        let labels = self.open_jtalk.extract_fullcontext_labels(&njd_features)?;
-        if labels.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let phones = extract_prosody_from_labels(&labels, self.options.drop_unvoiced_vowels);
-        Ok(phones)
+        self.g2p_prosody_with_options(text, ProsodyFormat::Default)
     }
 
-    /// 単語（形態素）単位に分割された音素リストを返します。
+    /// 入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストに変換します。
+    ///
+    /// 出力には、共通して以下のプロソディ記号が含まれます。
+    ///
+    /// | 記号 | 意味 | 出現位置 |
+    /// | :--- | :--- | :--- |
+    /// | `^` | 発話の開始 (BOS) | 文頭 |
+    /// | `$` | 発話の終結 (EOS) | 文末 |
+    /// | `?` | 疑問文の終結 (？) | 文中 |
+    /// | `!` | 感嘆の終結 (独自拡張) | 文中 |
+    /// | `_` | ポーズ・読点 (、) | 文中 |
+    /// | `#` | アクセント句境界 | 文中 |
+    /// | `{...}` | 未知語 | 文中 |
+    ///
+    /// 日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+    ///
+    /// ## [ProsodyFormat::Default]
+    ///
+    /// 出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+    ///
+    /// | 記号 | 意味 | 出現位置 |
+    /// | :--- | :--- | :--- |
+    /// | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
+    /// | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
+    ///
+    /// 記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
+    /// "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
+    /// (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
+    ///
+    /// ## [ProsodyFormat::Prefix]
+    ///
+    /// ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+    /// - `H_` : ピッチが高い (High)
+    /// - `L_` : ピッチが低い (Low)
+    ///
+    /// 音素ごとにピッチが明示されます。
+    /// 例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+    ///
+    /// ## [ProsodyFormat::Numeric]
+    ///
+    /// 各音素のサフィックスとして、ピッチの高低を数値で付与します。
+    /// - `:1` : ピッチが高い (High)
+    /// - `:0` : ピッチが低い (Low)
+    ///
+    /// 例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
+    pub fn g2p_prosody_with_options(
+        &mut self,
+        text: &str,
+        format: ProsodyFormat,
+    ) -> Result<Vec<String>, HaqumeiError> {
+        let mapping = self.g2p_mapping_prosody(text)?;
+
+        let mut output = Vec::new();
+
+        // BOS
+        output.push("^".to_string());
+
+        let mut prev_pitch: Option<PitchAccent> = None;
+
+        for word_prosody in mapping {
+            output.extend(word_prosody.to_formatted_strings(format, &mut prev_pitch));
+        }
+
+        // EOS
+        output.push("$".to_string());
+
+        Ok(output)
+    }
+
+    /// 単語 (形態素) 単位に分割された音素リストを返します。
     ///
     /// # Returns
     ///
@@ -686,35 +743,11 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        let text = &self.normalize_unicode_if_needed(text);
-        let text = text.as_ref();
-
-        self.rx = if let Some(tokenizer) =
-            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
-        {
-            init_vibrato_workers_if_needed(&tokenizer);
-            let (tx, rx) = bounded(1);
-            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
-                let _ = task_tx.send((text.to_string(), tx));
-            }
-            Some(rx)
-        } else {
-            None
-        };
-
-        let morphs = self.open_jtalk.run_mecab_detailed(text)?;
-        let njd_features = self.open_jtalk.run_njd_from_mecab(
-            morphs
-                .iter()
-                .filter(|m| !m.is_ignored)
-                .map(|morph| morph.feature.as_str()),
-        )?;
+        let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
         }
-
-        let njd_features = self.apply_postprocessing(text, njd_features)?;
 
         let mapping = self
             .open_jtalk
@@ -795,6 +828,89 @@ impl Haqumei {
         let mapping = self
             .open_jtalk
             .g2p_mapping_inner(&njd_features, self.options.is_non_pause_symbol)?;
+
+        self.open_jtalk.make_phoneme_mapping(morphs, mapping)
+    }
+
+    /// 入力テキストを解析し、形態素 (単語) ごとの詳細な言語情報と、プロソディ (韻律) 記号付き音素をマッピングして取得します。
+    ///
+    /// [`Haqumei::g2p_prosody`] や [`Haqumei::g2p_prosody_with_options`] がフラットな文字列リスト (`Vec<String>`) を返すのに対し、
+    /// この関数は品詞、アクセント型、読み、およびピッチ情報が付与された構造化データ (`Vec<WordPhonemeProsody>`) を返します。
+    ///
+    /// 音声合成のフロントエンド処理において、形態素と音素の対応関係を維持したい場合や、ピッチの高低 ([`PitchAccent`]) を
+    /// 個別に取得・操作したい場合、あるいは未知語のハンドリングを行いたい場合に適しています。
+    ///
+    /// ## `WordPhonemeProsody` に含まれる主な情報
+    ///
+    /// 形態素ごとのデータとして、以下の情報が含まれます。
+    ///
+    /// | フィールド | 説明 | 例 |
+    /// | :--- | :--- | :--- |
+    /// | `word` | 形態素の表層形 | `"空"` |
+    /// | `pos`, `pos_group1`~`3` | 品詞およびその細分類 | `"名詞"`, `"一般"` |
+    /// | `orig`, `read`, `pron` | 原形、読み、発音形式 | `"空"`, `"ソラ"`, `"ソラ"` |
+    /// | `accent_nucleus` | アクセント核位置 (0: 平板型, 1~: n番目のモーラ) | `1` |
+    /// | `mora_count` | モーラ数 | `2` |
+    /// | `is_unknown` | MeCabによって未知語判定されたかどうか | `false` |
+    /// | `is_ignored` | 音素が割り当てられなかったか | `false` |
+    ///
+    /// ## プロソディ音素 (`ProsodicPhoneme`)
+    ///
+    /// `phonemes` フィールドには、以下の要素からなるリストが格納されます。
+    ///
+    /// | 列挙子 | 意味 | `g2p_prosody` 等での出力記号 |
+    /// | :--- | :--- | :--- |
+    /// | `Phoneme` | 音素本体と、そのピッチの高低 (`High` / `Low`) | `a`, `a:0`, `H_a` など |
+    /// | `AccentPhraseBoundary` | アクセント句境界 | `#` |
+    /// | `Pause` | 通常のポーズ・読点 | `_` |
+    /// | `Interrogative` | 疑問文の終結・ポーズ | `?` |
+    /// | `Exclamatory` | 感嘆の終結・ポーズ | `!` |
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use haqumei::{Haqumei, PitchAccent, ProsodicPhoneme};
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut haqumei = Haqumei::new()?;
+    ///
+    /// // テキストを形態素ごとの構造化データとして取得
+    /// let mapping = haqumei.g2p_mapping_prosody("青い空が、好きだ！")?;
+    ///
+    /// // 1単語目「青い」の形態素情報
+    /// let aoi = &mapping[0];
+    /// assert_eq!(aoi.word, "青い");
+    /// assert_eq!(aoi.pos, "形容詞");
+    /// assert_eq!(aoi.read, "アオイ");
+    /// assert_eq!(aoi.accent_nucleus, 2); // 中高型
+    ///
+    /// // 「青い」の音素とピッチ情報 (a: Low, o: High, i: Low)
+    /// assert!(matches!(
+    ///     aoi.phonemes[0],
+    ///     ProsodicPhoneme::Phoneme { pitch: Some(PitchAccent::Low), .. }
+    /// ));
+    ///
+    /// let da = mapping.last().unwrap();
+    /// assert_eq!(da.word, "！");
+    /// assert!(da.phonemes.contains(&ProsodicPhoneme::Exclamatory));
+    ///
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn g2p_mapping_prosody(
+        &mut self,
+        text: &str,
+    ) -> Result<Vec<WordPhonemeProsody>, HaqumeiError> {
+        if text.is_empty() {
+            self.open_jtalk.ensure_dictionary_is_latest()?;
+            return Ok(Vec::new());
+        }
+
+        // normalize_unicode_if_needed, revert_pron_to_read はここで実行される
+        let (njd_features, morphs) = self.run_frontend_detailed(text)?;
+
+        let mapping = self
+            .open_jtalk
+            .g2p_mapping_prosody_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
         self.open_jtalk.make_phoneme_mapping(morphs, mapping)
     }

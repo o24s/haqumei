@@ -664,7 +664,6 @@ class Haqumei:
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,
-        drop_unvoiced_vowels: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。"""
         ...

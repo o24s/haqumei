@@ -10,7 +10,7 @@ keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
-haqumei = { version = "0.5.0", path = "../haqumei", features = ["serde"] }
+haqumei = { version = "0.6.0", path = "../haqumei", features = ["serde"] }
 clap.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true

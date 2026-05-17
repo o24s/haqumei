@@ -1,135 +1,159 @@
-use haqumei_jlabel::Label;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
-/// `haqumei_jlabel::Label` のスライスから、tdmelodic, ESPnet2 like なプロソディ記号付き音素列を抽出します。
-///
-/// 出力には通常の音素に加えて、以下の制御記号が含まれます：
-///
-/// | 記号 | 意味 | 出現位置 |
-/// | :--- | :--- | :--- |
-/// | `^` | 発話の開始 (BOS) | 文頭 |
-/// | `$` | 発話の終結 (EOS) | 文末 |
-/// | `?` | 疑問文の終結 (？) | 文末・文中 |
-/// | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-/// | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
-/// | `_` | ポーズ・読点 (、) | 文中 |
-/// | `#` | アクセント句境界 | 文中 |
-/// | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
-/// | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
-///
-/// 記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
-/// "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
-/// (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
-///
-/// 日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
-///
-/// # Arguments
-/// - `labels` - 抽出元のフルコンテキストラベル構造体のスライス
-/// - `drop_unvoiced_vowels` - 無声母音 (A, E, I, O, U) を有声母音として扱うかどうか
-///
-/// # Examples
-///
-/// ```rust
-/// # use haqumei::{prosody::extract_prosody_from_labels, Haqumei};
-/// # use haqumei_jlabel::Label;
-/// # let mut haqumei = Haqumei::new().unwrap();
-/// let labels = haqumei.extract_fullcontext("青い空、広がる。").unwrap();
-/// let phones = extract_prosody_from_labels(&labels, false);
-/// ```
-pub fn extract_prosody_from_labels(labels: &[Label], drop_unvoiced_vowels: bool) -> Vec<String> {
-    let num_labels = labels.len();
-    if num_labels == 0 {
-        return Vec::new();
+use crate::{Phoneme, word_phoneme::WordPhonemeProsody};
+
+/// 音素ごとのピッチアクセント (高低) を表す enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum PitchAccent {
+    Low,
+    High,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProsodicPhoneme {
+    Phoneme {
+        phoneme: Phoneme,
+        pitch: Option<PitchAccent>,
+    },
+    /// アクセント句境界 (`#`)
+    AccentPhraseBoundary,
+    /// 通常のポーズ・読点 (`_`)
+    Pause,
+    /// 疑問の終結・ポーズ (`?`)
+    Interrogative,
+    /// 感嘆の終結・ポーズ (`!`)
+    Exclamatory,
+}
+
+impl ProsodicPhoneme {
+    pub(crate) fn pau() -> Self {
+        Self::Phoneme {
+            phoneme: Phoneme::Pau,
+            pitch: None,
+        }
     }
 
-    let mut phones = Vec::with_capacity(num_labels * 2);
+    pub(crate) fn unk() -> Self {
+        Self::Phoneme {
+            phoneme: Phoneme::Unk,
+            pitch: None,
+        }
+    }
 
-    for (n, label) in labels.iter().enumerate() {
-        let p3 = label.phoneme.c.as_deref().unwrap_or("");
+    pub(crate) fn sp() -> Self {
+        Self::Phoneme {
+            phoneme: Phoneme::Sp,
+            pitch: None,
+        }
+    }
+}
 
-        if p3 == "sil" {
-            if n == 0 {
-                phones.push("^".to_string());
-            } else if n == num_labels - 1 {
-                let (is_inter, is_excl) = label
-                    .accent_phrase_prev
-                    .as_ref()
-                    .map(|a| (a.is_interrogative, a.is_exclamatory))
-                    .unwrap_or((false, false));
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProsodyFormat {
+    /// tdmelodic 風 (`a [ o ] i #`) の記法
+    #[default]
+    Default,
+    /// `L_a`, `H_o` のようなプレフィックス表現
+    Prefix,
+    /// `a:0`, `o:1` のような数値サフィックス表現
+    Numeric,
+}
 
-                match (is_inter, is_excl) {
-                    (true, true) => phones.push("!?".to_string()),
-                    (true, false) => phones.push("?".to_string()),
-                    (false, true) => phones.push("!".to_string()),
-                    (false, false) => phones.push("$".to_string()),
+impl WordPhonemeProsody {
+    /// 単語のプロソディ情報を、指定されたフォーマットで文字列配列に変換する。
+    ///
+    /// # Arguments
+    /// * `format` - 出力するプロソディ表現のフォーマット
+    /// * `prev_pitch` - 直前の音素のピッチ状態。`Default` における `[` `]` 挿入の判定に使用する。
+    ///   イテレーション間で状態を保持するため可変参照を渡す。
+    pub fn to_formatted_strings(
+        &self,
+        format: ProsodyFormat,
+        prev_pitch: &mut Option<PitchAccent>,
+    ) -> Vec<String> {
+        let mut result = Vec::new();
+
+        if self.is_unknown {
+            result.push("{".to_string());
+        }
+
+        for p in &self.phonemes {
+            match p {
+                ProsodicPhoneme::Phoneme { phoneme, pitch } => {
+                    if format == ProsodyFormat::Default
+                        && let Some(curr) = pitch
+                    {
+                        match (*prev_pitch, *curr) {
+                            (Some(PitchAccent::Low), PitchAccent::High) => {
+                                result.push("[".to_string());
+                            }
+                            (Some(PitchAccent::High), PitchAccent::Low) => {
+                                result.push("]".to_string());
+                            }
+                            _ => {}
+                        }
+                        *prev_pitch = Some(*curr);
+                    }
+
+                    let phoneme_str = phoneme.as_str();
+                    match format {
+                        ProsodyFormat::Prefix => {
+                            let prefix = match pitch {
+                                Some(PitchAccent::High) => "H_",
+                                Some(PitchAccent::Low) => "L_",
+                                None => "",
+                            };
+                            result.push(format!("{}{}", prefix, phoneme_str));
+                        }
+                        ProsodyFormat::Numeric => {
+                            let suffix = match pitch {
+                                Some(PitchAccent::High) => ":1",
+                                Some(PitchAccent::Low) => ":0",
+                                None => "",
+                            };
+                            result.push(format!("{}{}", phoneme_str, suffix));
+                        }
+                        ProsodyFormat::Default => {
+                            result.push(phoneme_str.to_string());
+                        }
+                    }
+                }
+                ProsodicPhoneme::AccentPhraseBoundary => {
+                    result.push("#".to_string());
+                    // アクセント句を跨いだらピッチの追跡をリセット
+                    if format == ProsodyFormat::Default {
+                        *prev_pitch = None;
+                    }
+                }
+                ProsodicPhoneme::Pause => {
+                    result.push("_".to_string());
+                    if format == ProsodyFormat::Default {
+                        *prev_pitch = None;
+                    }
+                }
+                ProsodicPhoneme::Interrogative => {
+                    result.push("?".to_string());
+                    if format == ProsodyFormat::Default {
+                        *prev_pitch = None;
+                    }
+                }
+                ProsodicPhoneme::Exclamatory => {
+                    result.push("!".to_string());
+                    if format == ProsodyFormat::Default {
+                        *prev_pitch = None;
+                    }
                 }
             }
-            continue;
-        } else if p3 == "pau" {
-            let (is_inter, is_excl) = label
-                .accent_phrase_prev
-                .as_ref()
-                .map(|a| (a.is_interrogative, a.is_exclamatory))
-                .unwrap_or((false, false));
-
-            match (is_inter, is_excl) {
-                (true, true) => phones.push("!?".to_string()),
-                (true, false) => phones.push("?".to_string()),
-                (false, true) => phones.push("!".to_string()),
-                (false, false) => phones.push("_".to_string()),
-            }
-            continue;
         }
 
-        let p3_str = if drop_unvoiced_vowels {
-            match p3 {
-                "A" => "a",
-                "E" => "e",
-                "I" => "i",
-                "O" => "o",
-                "U" => "u",
-                _ => p3,
-            }
-        } else {
-            p3
-        };
-        phones.push(p3_str.to_string());
-
-        let (a1, a2, a3) = match &label.mora {
-            Some(m) => (
-                m.relative_accent_position as i32,
-                m.position_forward as i32,
-                m.position_backward as i32,
-            ),
-            None => (-50, -50, -50),
-        };
-        let f1 = label
-            .accent_phrase_curr
-            .as_ref()
-            .map(|a| a.mora_count as i32)
-            .unwrap_or(-50);
-        let a2_next = if n + 1 < num_labels {
-            labels[n + 1]
-                .mora
-                .as_ref()
-                .map(|m| m.position_forward as i32)
-                .unwrap_or(-50)
-        } else {
-            -50
-        };
-
-        if a3 == 1
-            && a2_next == 1
-            && matches!(
-                p3,
-                "a" | "e" | "i" | "o" | "u" | "A" | "E" | "I" | "O" | "U" | "N" | "cl"
-            )
-        {
-            phones.push("#".to_string());
-        } else if a1 == 0 && a2_next == a2 + 1 && a2 != f1 {
-            phones.push("]".to_string());
-        } else if a2 == 1 && a2_next == 2 {
-            phones.push("[".to_string());
+        if self.is_unknown {
+            result.push("}".to_string());
         }
+
+        result
     }
-    phones
 }
