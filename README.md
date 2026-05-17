@@ -301,6 +301,7 @@ Instead of using pitch rise/fall symbols (`[` and `]`), pitch high/low is attach
  - `L_` : Low pitch
 
 The pitch is explicitly indicated for each phoneme.
+
 Example: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
 
 #### ProsodyFormat::Numeric

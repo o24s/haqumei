@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Args, Parser, ValueEnum};
-use haqumei::{Haqumei, HaqumeiOptions, IuPronunciation, UnicodeNormalization};
+use haqumei::{Haqumei, HaqumeiOptions, IuPronunciation, ProsodyFormat, UnicodeNormalization};
 use std::fs::File;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
@@ -30,6 +30,10 @@ struct Cli {
     /// 出力フォーマット
     #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Text)]
     format: OutputFormat,
+
+    /// プロソディ出力フォーマット (mode が prosody または mapping-prosody の場合に有効)
+    #[arg(long, value_enum, default_value_t = CliProsodyFormat::Default)]
+    prosody_format: CliProsodyFormat,
 
     /// 詳細なログ (Unidic辞書のダウンロード状況やOpenJTalkの警告など) を表示します。
     #[arg(short, long)]
@@ -62,6 +66,8 @@ enum OutputMode {
     Mapping,
     /// 未知語情報や NJD の詳細な特徴量を含めたマッピング
     MappingDetailed,
+    /// 形態素ごとの詳細なプロソディ情報を含めたマッピング
+    MappingProsody,
     /// フルコンテキストラベル
     Fullcontext,
     /// フルコンテキストラベル文字列
@@ -74,6 +80,23 @@ enum OutputFormat {
     Text,
     /// 構造化された JSON (JSON Lines) 形式
     Json,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+enum CliProsodyFormat {
+    Default,
+    Prefix,
+    Numeric,
+}
+
+impl From<CliProsodyFormat> for ProsodyFormat {
+    fn from(format: CliProsodyFormat) -> Self {
+        match format {
+            CliProsodyFormat::Default => ProsodyFormat::Default,
+            CliProsodyFormat::Prefix => ProsodyFormat::Prefix,
+            CliProsodyFormat::Numeric => ProsodyFormat::Numeric,
+        }
+    }
 }
 
 #[derive(Args, Debug)]
@@ -96,10 +119,6 @@ struct HaqumeiConfigArgs {
     /// 「言う」の発音正規化方式を指定する
     #[arg(long, value_enum)]
     normalize_iu: Option<IuPronMode>,
-
-    /// プロソディ抽出時、無声母音 (A, E, I, O, U) を有声母音 (a, e, i, o, u) として扱う
-    #[arg(long)]
-    drop_unvoiced_vowels: bool,
 
     /// 読み (read) を発音 (pron) の代わりに使用し、長音の自動変換などを無効化する
     #[arg(long)]
@@ -219,8 +238,10 @@ fn main() -> Result<()> {
         None => Box::new(io::BufWriter::new(io::stdout())),
     };
 
+    let prosody_format: ProsodyFormat = cli.prosody_format.into();
+
     if let Some(text) = cli.text.as_deref() {
-        process_line(&mut haqumei, text, &cli.mode, &cli.format, &mut writer)?;
+        process_line(&mut haqumei, text, &cli.mode, &cli.format, prosody_format, &mut writer)?;
     } else if let Some(input_path) = cli.input {
         let file = File::open(&input_path)
             .with_context(|| format!("Failed to open input file: {:?}", input_path))?;
@@ -231,7 +252,7 @@ fn main() -> Result<()> {
                 writeln!(writer)?;
                 continue;
             }
-            process_line(&mut haqumei, &line, &cli.mode, &cli.format, &mut writer)?;
+            process_line(&mut haqumei, &line, &cli.mode, &cli.format, prosody_format, &mut writer)?;
         }
     } else {
         let stdin = io::stdin();
@@ -255,7 +276,7 @@ fn main() -> Result<()> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                process_line(&mut haqumei, trimmed, &cli.mode, &cli.format, &mut writer)?;
+                process_line(&mut haqumei, trimmed, &cli.mode, &cli.format, prosody_format, &mut writer)?;
 
                 writer.flush()?;
             }
@@ -266,7 +287,7 @@ fn main() -> Result<()> {
                     writeln!(writer)?;
                     continue;
                 }
-                process_line(&mut haqumei, &line, &cli.mode, &cli.format, &mut writer)?;
+                process_line(&mut haqumei, &line, &cli.mode, &cli.format, prosody_format, &mut writer)?;
             }
         }
     }
@@ -287,6 +308,7 @@ fn process_line(
     text: &str,
     mode: &OutputMode,
     format: &OutputFormat,
+    prosody_format: ProsodyFormat,
     writer: &mut dyn Write,
 ) -> Result<()> {
     match mode {
@@ -298,7 +320,7 @@ fn process_line(
             }
         }
         OutputMode::Prosody => {
-            let res = haqumei.g2p_prosody(text)?;
+            let res = haqumei.g2p_prosody_with_options(text, prosody_format)?;
             match format {
                 OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
                 OutputFormat::Json => write_json(writer, &res)?,
@@ -398,6 +420,42 @@ fn process_line(
                             detail.mora_count,
                             detail.chain_flag,
                             detail.chain_rule,
+                        )?;
+                    }
+                }
+                OutputFormat::Json => write_json(writer, &res)?,
+            }
+        }
+        OutputMode::MappingProsody => {
+            let res = haqumei.g2p_mapping_prosody(text)?;
+            match format {
+                OutputFormat::Text => {
+                    let mut prev_pitch = None;
+                    for detail in res {
+                        let status = if detail.is_unknown {
+                            "[UNK]"
+                        } else if detail.is_ignored {
+                            "[IGN]"
+                        } else {
+                            "[OK] "
+                        };
+
+                        let phones = detail
+                            .to_formatted_strings(prosody_format, &mut prev_pitch)
+                            .join(" ");
+
+                        writeln!(
+                            writer,
+                            "{} {}\t{}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}",
+                            status,
+                            detail.word,
+                            phones,
+                            detail.pos,
+                            detail.pos_group1,
+                            detail.pron,
+                            detail.read,
+                            detail.accent_nucleus,
+                            detail.mora_count,
                         )?;
                     }
                 }
