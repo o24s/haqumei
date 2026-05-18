@@ -1,7 +1,7 @@
 macro_rules! impl_batch_method_haqumei {
     (
         $(#[$meta:meta])*
-        $batch_method:ident => $inner_method:ident -> $ret_type:ty
+        $batch_method:ident => $inner_method:ident $(($( $arg:ident : $arg_ty:ty),* ))? -> $ret_type:ty
     ) => {
         $(#[$meta])*
         ///
@@ -10,7 +10,7 @@ macro_rules! impl_batch_method_haqumei {
             stringify!($inner_method),
             "` を実行します。"
         )]
-        pub fn $batch_method<S>(&mut self, texts: &[S]) -> Result<Vec<$ret_type>, HaqumeiError>
+        pub fn $batch_method<S>(&mut self, texts: &[S], $( $($arg : $arg_ty),* )?) -> Result<Vec<$ret_type>, HaqumeiError>
         where
             S: AsRef<str> + Sync,
         {
@@ -34,7 +34,7 @@ macro_rules! impl_batch_method_haqumei {
                             options,
                         }
                     },
-                    |haqumei, text| haqumei.$inner_method(text.as_ref()),
+                    |haqumei, text| haqumei.$inner_method(text.as_ref(), $( $($arg),* )?),
                 )
                 .collect()
         }
@@ -44,7 +44,7 @@ macro_rules! impl_batch_method_haqumei {
 macro_rules! impl_batch_method_openjtalk {
     (
         $(#[$meta:meta])*
-        $batch_method:ident => $inner_method:ident -> $ret_type:ty
+        $batch_method:ident => $inner_method:ident $(($( $arg:ident : $arg_ty:ty),* ))? -> $ret_type:ty
     ) => {
         $(#[$meta])*
         ///
@@ -53,7 +53,7 @@ macro_rules! impl_batch_method_openjtalk {
             stringify!($inner_method),
             "` を実行します。"
         )]
-        pub fn $batch_method<S>(&mut self, texts: &[S]) -> Result<Vec<$ret_type>, HaqumeiError>
+        pub fn $batch_method<S>(&mut self, texts: &[S], $( $($arg : $arg_ty),* )?) -> Result<Vec<$ret_type>, HaqumeiError>
         where
             S: AsRef<str> + Sync,
         {
@@ -69,7 +69,7 @@ macro_rules! impl_batch_method_openjtalk {
                     OpenJTalk::from_shared_dictionary(dict.clone())
                         .expect("Failed to initialize OpenJTalk worker")
                 },
-                |ojt, text| ojt.$inner_method(text.as_ref()),
+                |ojt, text| ojt.$inner_method(text.as_ref(), $( $($arg),* )?),
             )
             .collect()
         }

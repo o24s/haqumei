@@ -1088,9 +1088,13 @@ impl Haqumei {
     );
 
     impl_batch_method_haqumei!(
-        /// 入力テキストのリストから、プロソディ記号付き音素リストを一括で抽出するバッチ処理。
-        /// [Haqumei::g2p_prosody] を並列に実行します。
+        /// 入力テキストのリストから、プロソディ記号付き音素リストを抽出するバッチ処理。
         g2p_prosody_batch => g2p_prosody -> Vec<String>
+    );
+
+    impl_batch_method_haqumei!(
+        /// 入力テキストのリストから、プロソディ記号付き音素リストを抽出するバッチ処理。
+        g2p_prosody_with_options_batch => g2p_prosody_with_options(format: ProsodyFormat) -> Vec<String>
     );
 
     impl_batch_method_haqumei!(
@@ -1128,6 +1132,13 @@ impl Haqumei {
         /// - 未知語: `unk`
         /// - 空白等: `sp` (Space)
         g2p_mapping_detailed_batch => g2p_mapping_detailed -> Vec<WordPhonemeDetail>
+    );
+
+    impl_batch_method_haqumei!(
+        /// プロソディ記号付き音素マッピングのバッチ処理。
+        ///
+        /// 詳細は [Haqumei::g2p_mapping_prosody] を見てください。
+        g2p_mapping_prosody_batch => g2p_mapping_prosody -> Vec<WordPhonemeProsody>
     );
 
     impl_batch_method_haqumei!(
