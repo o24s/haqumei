@@ -12,5 +12,8 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { workspace = true, features = ["extension-module"] }
 haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
+pyo3 = { workspace = true, features = ["extension-module"] }
+
+[build-dependencies]
+openssl = { version = "0.10.80", features = ["vendored"] }

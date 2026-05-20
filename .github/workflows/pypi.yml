@@ -25,7 +25,7 @@ jobs:
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             echo 'matrix={"include":[{"os":"ubuntu-latest","target":"x86_64"}]}' >> "$GITHUB_OUTPUT"
           else
-            echo 'matrix={"include":[{"os":"ubuntu-latest","target":"x86_64"},{"os":"ubuntu-latest","target":"aarch64"},{"os":"windows-latest","target":"x64"},{"os":"macos-latest","target":"x86_64"},{"os":"macos-latest","target":"aarch64"}]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"os":"ubuntu-latest","target":"x86_64"},{"os":"ubuntu-24.04-arm","target":"aarch64"},{"os":"windows-latest","target":"x64"},{"os":"macos-latest","target":"aarch64"}]}' >> "$GITHUB_OUTPUT"
           fi
 
   build-wheels:
@@ -45,17 +45,35 @@ jobs:
       - name: Copy README
         run: cp README.md haqumei-python/README.md
 
+      - name: Set LIBCLANG_PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $llvmPath = (Get-Command clang).Source | Split-Path -Parent
+          echo "LIBCLANG_PATH=$llvmPath" >> $env:GITHUB_ENV
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out ../dist
-          sccache: 'true'
-          manylinux: auto
+          sccache: 'false'
+          manylinux: 2_28
+          before-script-linux: |
+            if command -v yum &> /dev/null; then
+              yum update -y && yum install -y perl-core perl-IPC-Cmd perl-Time-Piece clang
+            elif command -v apt-get &> /dev/null; then
+              apt-get update && apt-get install -y perl make
+            fi
           working-directory: haqumei-python
+        env:
+          CC_x86_64_unknown_linux_gnu: gcc
+          CXX_x86_64_unknown_linux_gnu: g++
+          TARGET_CC_x86_64_unknown_linux_gnu: gcc
+          TARGET_CXX_x86_64_unknown_linux_gnu: g++
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
@@ -77,7 +95,7 @@ jobs:
           working-directory: haqumei-python
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -92,7 +110,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
