@@ -911,7 +911,7 @@ impl OpenJTalk {
 
         let result = unsafe {
             ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut i8,
+                buffer.as_mut_ptr() as *mut _,
                 Self::BUFFER_SIZE,
                 c_text.as_ptr(),
             )
@@ -938,7 +938,7 @@ impl OpenJTalk {
         }
 
         let result =
-            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const i8) };
+            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const _) };
 
         if result != 1 {
             return Err(HaqumeiError::MecabError(
@@ -996,7 +996,7 @@ impl OpenJTalk {
 
         let result = unsafe {
             ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut i8,
+                buffer.as_mut_ptr() as *mut _,
                 Self::BUFFER_SIZE,
                 c_text.as_ptr(),
             )
@@ -1024,7 +1024,7 @@ impl OpenJTalk {
 
         // MeCab Analysis
         let result =
-            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const i8) };
+            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const _) };
 
         if result != 1 {
             return Err(HaqumeiError::MecabError(
