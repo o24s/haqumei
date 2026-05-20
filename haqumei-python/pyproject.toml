@@ -4,11 +4,20 @@ build-backend = "maturin"
 
 [project]
 name = "haqumei"
-version = "0.1.0"
+version = "0.6.3"
 description = "A Japanese Grapheme-to-Phoneme (G2P) library."
-readme = "../README.md"
+readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
 dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "License :: OSI Approved :: Apache Software License",
+]
+authors = [
+  { name = "o24s" }
+]
 
 
 [dependency-groups]
@@ -16,6 +25,7 @@ dev = [
     "maturin>=1.10.2",
     "pytest>=9.0.2",
 ]
+
 
 [tool.maturin]
 include = ["haqumei.pyi"]

@@ -1,12 +1,16 @@
 [package]
 name = "haqumei-python"
-version = "0.1.0"
+version = "0.6.3"
 edition = "2024"
+description = "A Japanese Grapheme-to-Phoneme (G2P) library."
+license = "Apache-2.0"
+repository = "https://github.com/o24s/haqumei"
+homepage = "https://github.com/o24s/haqumei"
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3.workspace = true
+pyo3 = { workspace = true, features = ["extension-module"] }
 haqumei = { path = "../haqumei", features = ["embed-dictionary"] }

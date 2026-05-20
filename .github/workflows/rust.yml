@@ -46,7 +46,7 @@ jobs:
           echo "LIBCLANG_PATH=$llvmPath" >> $env:GITHUB_ENV
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose --workspace --exclude haqumei-python
 
       - name: Run tests on ${{ matrix.os }}
         run: cargo test --verbose -p haqumei

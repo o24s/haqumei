@@ -44,7 +44,7 @@ cargo add haqumei
 ### Python
 
 ```bash
-pip install "git+https://github.com/o24s/haqumei.git#subdirectory=haqumei-python"
+pip install haqumei
 ```
 
 ## CLI
