@@ -17,6 +17,20 @@
       <img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0">
     </a>
   </p>
+  <p>
+    <a href="https://pypi.org/project/haqumei/">
+      <img src="https://img.shields.io/pypi/v/haqumei.svg" alt="PyPI version">
+    </a>
+    <a href="https://pypi.org/project/haqumei/">
+      <img src="https://img.shields.io/badge/python-%3E%3D%203.10-blue" alt="Python version">
+    </a>
+    <a href="https://github.com/o24s/haqumei/actions/workflows/rust.yml">
+      <img src="https://github.com/o24s/haqumei/actions/workflows/rust.yml/badge.svg" alt="Push CI">
+    </a>
+    <a href="https://github.com/o24s/haqumei/actions/workflows/pypi.yml">
+      <img src="https://github.com/o24s/haqumei/actions/workflows/pypi.yml/badge.svg" alt="PyPI CI">
+    </a>
+  </p>
 </div>
 
 ## Features
@@ -47,6 +61,18 @@ cargo add haqumei
 ```bash
 pip install haqumei
 ```
+
+#### Supported Platforms
+
+Pre-built wheels are available for the following platforms:
+
+| OS | Architecture |
+|---|---|
+| **Linux** | `x86_64`, `aarch64` |
+| **macOS** | `aarch64` (e.g., Apple Silicon M1/M2/M3)|
+| **Windows** | `x86_64` |
+
+*Note: For other platforms (such as Intel macOS), installation will fall back to compiling from source, which requires a Rust toolchain.*
 
 ## Command-Line Tool
 

@@ -17,6 +17,21 @@
       <img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0">
     </a>
   </p>
+  </p>
+    <p>
+    <a href="https://pypi.org/project/haqumei/">
+      <img src="https://img.shields.io/pypi/v/haqumei.svg" alt="PyPI version">
+    </a>
+    <a href="https://pypi.org/project/haqumei/">
+      <img src="https://img.shields.io/badge/python-%3E%3D%203.10-blue" alt="Python version">
+    </a>
+    <a href="https://github.com/o24s/haqumei/actions/workflows/rust.yml">
+      <img src="https://github.com/o24s/haqumei/actions/workflows/rust.yml/badge.svg" alt="Push CI">
+    </a>
+    <a href="https://github.com/o24s/haqumei/actions/workflows/pypi.yml">
+      <img src="https://github.com/o24s/haqumei/actions/workflows/pypi.yml/badge.svg" alt="PyPI CI">
+    </a>
+  </p>
 </div>
 
 ## 特徴 (Features)
@@ -46,6 +61,18 @@ cargo add haqumei
 ```bash
 pip install haqumei
 ```
+
+#### 対応プラットフォーム
+
+以下のプラットフォーム向けに、ビルド済みの wheel を提供しています：
+
+| OS | アーキテクチャ |
+|---|---|
+| **Linux** | `x86_64`, `aarch64` |
+| **macOS** | `aarch64` (Apple Silicon M1/M2/M3 など) |
+| **Windows** | `x86_64` |
+
+*NOTE: その他のプラットフォームでは、ソースコードからのビルドが必要になります。その場合、ローカル環境に Rust ツールチェーンのインストールが必要です。*
 
 ## CLI
 
