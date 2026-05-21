@@ -72,7 +72,10 @@ Pre-built wheels are available for the following platforms:
 | **macOS** | `aarch64` (e.g., Apple Silicon M1/M2/M3)|
 | **Windows** | `x86_64` |
 
-*Note: For other platforms (such as Intel macOS), installation will fall back to compiling from source, which requires a Rust toolchain.*
+
+Pre-built wheels bundle the embedded dictionary and require no network access during installation.
+
+If a wheel is unavailable for your platform, installation falls back to building from source, which requires a Rust toolchain. In that case, the dictionary is downloaded and embedded during the build (same as the Rust crate build process).
 
 ## Command-Line Tool
 
@@ -350,7 +353,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   let phones = haqumei.g2p_prosody("青い空、広がる。")?;
-  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u _ $");
 
   Ok(())
 }

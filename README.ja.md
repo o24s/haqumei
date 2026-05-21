@@ -72,7 +72,10 @@ pip install haqumei
 | **macOS** | `aarch64` (Apple Silicon M1/M2/M3 など) |
 | **Windows** | `x86_64` |
 
-*NOTE: その他のプラットフォームでは、ソースコードからのビルドが必要になります。その場合、ローカル環境に Rust ツールチェーンのインストールが必要です。*
+事前ビルドされた wheel には組み込み辞書が含まれており、インストール時にネットワークアクセスを必要としません。
+
+プラットフォームに対応した wheel が利用できない場合、インストールはソースからのビルドにフォールバックします。
+この場合、Rustツールチェーンが必要であり、ビルドプロセス中に辞書がダウンロードされて組み込まれます。
 
 ## CLI
 
@@ -348,7 +351,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(phones.join(" "), "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   let phones = haqumei.g2p_prosody("青い空、広がる。")?;
-  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u $");
+  assert_eq!(phones.join(" "), "^ a [ o ] i # s o ] r a _ h i [ r o g a r u _ $");
 
   Ok(())
 }
