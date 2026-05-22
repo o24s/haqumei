@@ -1,6 +1,6 @@
 [package]
 name = "haqumei-python"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2024"
 description = "A Japanese Grapheme-to-Phoneme (G2P) library."
 license = "Apache-2.0"
@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
+haqumei-jlabel.workspace = true
 pyo3 = { workspace = true, features = ["extension-module"] }
 
 [build-dependencies]

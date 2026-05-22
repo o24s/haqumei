@@ -1,6 +1,34 @@
 from enum import IntEnum
 from typing import List, Tuple, Final, Optional
 
+class UnicodeNormalization(IntEnum):
+    """Unicode正規化の方式を指定する。"""
+    None_ = 0
+    Nfc = 1
+    Nfkc = 2
+
+class IuPronunciation(IntEnum):
+    """「言う」の発音正規化方式を指定する。"""
+    None_ = 0
+    Iu = 1
+    Yuu = 2
+    KanjiIu = 3
+    KanjiYuu = 4
+
+class PitchAccent(IntEnum):
+    """音素ごとのピッチアクセント (高低) を表す enum"""
+    Low = 0
+    High = 1
+
+class ProsodyFormat(IntEnum):
+    """出力するプロソディ表現のフォーマット"""
+    Default = 0
+    """tdmelodic 風 (`a [ o ] i #`) の記法"""
+    Prefix = 1
+    """`L_a`, `H_o` のようなプレフィックス表現"""
+    Numeric = 2
+    """`a:0`, `o:1` のような数値サフィックス表現"""
+
 class NjdFeature:
     """
     このクラスは Rust 側で生成された読み取り専用のデータ構造です。
@@ -156,19 +184,134 @@ class WordPhonemeDetail:
     def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
 
-class UnicodeNormalization(IntEnum):
-    """Unicode正規化の方式を指定する。"""
-    None_ = 0
-    Nfc = 1
-    Nfkc = 2
 
-class IuPronunciation(IntEnum):
-    """「言う」の発音正規化方式を指定する。"""
-    None_ = 0
-    Iu = 1
-    Yuu = 2
-    KanjiIu = 3
-    KanjiYuu = 4
+class ProsodicPhoneme:
+    """プロソディ（ピッチやポーズなどの韻律情報）を伴う音素構造体。"""
+
+    kind: str
+    """要素の種類 ("phoneme", "accent_phrase_boundary", "pause", "interrogative", "exclamatory")"""
+    phoneme: Optional[str]
+    """音素文字列 (kind == "phoneme" の場合のみ値を持つ)"""
+    pitch: Optional[PitchAccent]
+    """ピッチアクセントの高低 (kind == "phoneme" の場合のみ値を持つ)"""
+
+
+class WordPhonemeProsody:
+    """単語ごとのプロソディ情報とNJD特徴量を保持する構造体"""
+
+    word: str
+    """表層形 (surface)"""
+    phonemes: List[ProsodicPhoneme]
+    """プロソディ付き音素のリスト"""
+    pos: str
+    """品詞"""
+    pos_group1: str
+    """品詞細分類1"""
+    pos_group2: str
+    """品詞細分類2"""
+    pos_group3: str
+    """品詞細分類3"""
+    ctype: str
+    """活用型"""
+    cform: str
+    """活用形"""
+    orig: str
+    """原形"""
+    read: str
+    """読み"""
+    pron: str
+    """発音形式"""
+    accent_nucleus: int
+    """アクセント核位置 (0: 平板型, 1-n: n番目のモーラにアクセント核)"""
+    mora_count: int
+    """モーラ数"""
+    chain_rule: str
+    """アクセント結合規則 (C1-C5/F1-F5/P1-P2 等)"""
+    chain_flag: int
+    """アクセント句連結フラグ"""
+    is_unknown: bool
+    """MeCab が未知語と判定したかどうか"""
+    is_ignored: bool
+    """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
+
+    def __repr__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
+
+class LabelPhoneme:
+    """`Phoneme` field of full-context label."""
+    p2: Optional[str]
+    p1: Optional[str]
+    c: Optional[str]
+    n1: Optional[str]
+    n2: Optional[str]
+
+class Mora:
+    """`Mora` field of full-context label (`A` field)."""
+    relative_accent_position: int
+    position_forward: int
+    position_backward: int
+
+class Word:
+    """`Word` field of full-context label (`B`, `C`, and `D` field)."""
+    pos: Optional[int]
+    ctype: Optional[int]
+    cform: Optional[int]
+
+class AccentPhraseCurrent:
+    """`AccentPhrase` field of full-context label for current accent phrase (`F` field)."""
+    mora_count: int
+    accent_position: int
+    is_interrogative: bool
+    accent_phrase_position_forward: int
+    accent_phrase_position_backward: int
+    mora_position_forward: int
+    mora_position_backward: int
+    is_exclamatory: bool
+
+class AccentPhrasePrevNext:
+    """`AccentPhrase` field of full-context label for previous or next accent phrase (`E` and `G` field)."""
+    mora_count: int
+    accent_position: int
+    is_interrogative: bool
+    is_pause_insertion: Optional[bool]
+    is_exclamatory: bool
+
+class BreathGroupCurrent:
+    """`BreathGroup` field of full-context label for current breath group (`I` field)."""
+    accent_phrase_count: int
+    mora_count: int
+    breath_group_position_forward: int
+    breath_group_position_backward: int
+    accent_phrase_position_forward: int
+    accent_phrase_position_backward: int
+    mora_position_forward: int
+    mora_position_backward: int
+
+class BreathGroupPrevNext:
+    """`BreathGroup` field of full-context label for previous or next breath group (`H` and `J` field)."""
+    accent_phrase_count: int
+    mora_count: int
+
+class Utterance:
+    """`Utterance` field of full-context label (`K` field)."""
+    breath_group_count: int
+    accent_phrase_count: int
+    mora_count: int
+
+class Label:
+    """The structure representing a single line of HTS-style full-context label."""
+    phoneme: LabelPhoneme
+    mora: Optional[Mora]
+    word_prev: Optional[Word]
+    word_curr: Optional[Word]
+    word_next: Optional[Word]
+    accent_phrase_prev: Optional[AccentPhrasePrevNext]
+    accent_phrase_curr: Optional[AccentPhraseCurrent]
+    accent_phrase_next: Optional[AccentPhrasePrevNext]
+    breath_group_prev: Optional[BreathGroupPrevNext]
+    breath_group_curr: Optional[BreathGroupCurrent]
+    breath_group_next: Optional[BreathGroupPrevNext]
+    utterance: Utterance
 
 class Dictionary:
     """OpenJTalk用の辞書データを管理するクラス。
@@ -280,7 +423,18 @@ class OpenJTalk:
         """
         ...
 
-    def extract_fullcontext(self, text: str) -> List[str]:
+    def extract_fullcontext(self, text: str) -> List[Label]:
+        """フルコンテキストラベルを構造化データとして抽出します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[Label]: フルコンテキストラベルのリスト。
+        """
+        ...
+
+    def extract_fullcontext_string(self, text: str) -> List[str]:
         """フルコンテキストラベルを抽出します。
 
         Args:
@@ -345,34 +499,61 @@ class OpenJTalk:
             text (str): 入力テキスト。
 
         Returns:
-            str: カタカナ文字列 (例: `"コンニチワ"`)。
+            List[str]: カタカナ文字列のリスト。
         """
         ...
 
-    def g2p_prosody(self, text: str) -> List[str]:
-        """入力テキストをプロソディ記号付き音素リストに変換します。
+    def g2p_prosody(self, text: str, format: ProsodyFormat = ProsodyFormat.Default) -> List[str]:
+        """
+        入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストに変換します。
 
-        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        出力には、共通して以下のプロソディ記号が含まれます。
+
         | 記号 | 意味 | 出現位置 |
         | :--- | :--- | :--- |
         | `^` | 発話の開始 (BOS) | 文頭 |
         | `$` | 発話の終結 (EOS) | 文末 |
-        | `?` | 疑問文の終結 (？) | 文末・文中 |
-        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `?` | 疑問文の終結 (？) | 文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文中 |
         | `_` | ポーズ・読点 (、) | 文中 |
         | `#` | アクセント句境界 | 文中 |
+        | `{...}` | 未知語 | 文中 |
+
+        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+        ## [ProsodyFormat.Default]
+
+        出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
         | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
         | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
-        # 互換性について
+
         記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
         "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
         (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
 
-        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+        ## [ProsodyFormat.Prefix]
+
+        ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+        - `H_` : ピッチが高い (High)
+        - `L_` : ピッチが低い (Low)
+
+        音素ごとにピッチが明示されます。
+        例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+        ## [ProsodyFormat.Numeric]
+
+        各音素のサフィックスとして、ピッチの高低を数値で付与します。
+        - `:1` : ピッチが高い (High)
+        - `:0` : ピッチが低い (Low)
+
+        例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
 
         Args:
             text (str): 入力テキスト。
+            format (ProsodyFormat): 出力フォーマットの指定。
 
         Returns:
             List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
@@ -431,6 +612,17 @@ class OpenJTalk:
 
         Returns:
             List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
+        """
+        ...
+
+    def g2p_mapping_prosody(self, text: str) -> List[WordPhonemeProsody]:
+        """入力テキストを解析し、形態素ごとの詳細な言語情報と、プロソディ記号付き音素をマッピングして取得します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
         """
         ...
 
@@ -503,7 +695,7 @@ class OpenJTalk:
         """
         ...
 
-    def g2p_kana_per_word_batch(self, text: List[str]) -> List[List[str]]:
+    def g2p_kana_per_word_batch(self, texts: List[str]) -> List[List[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -519,29 +711,57 @@ class OpenJTalk:
         ...
 
 
-    def g2p_prosody_batch(self, text: List[str]) -> List[List[str]]:
-        """複数の入力テキストをプロソディ記号付き音素リストのリストに変換します。
+    def g2p_prosody_batch(self, texts: List[str], format: ProsodyFormat = ProsodyFormat.Default) -> List[List[str]]:
+        """
+        複数の入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストのリストに変換します。
 
-        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        出力には、共通して以下のプロソディ記号が含まれます。
+
         | 記号 | 意味 | 出現位置 |
         | :--- | :--- | :--- |
         | `^` | 発話の開始 (BOS) | 文頭 |
         | `$` | 発話の終結 (EOS) | 文末 |
-        | `?` | 疑問文の終結 (？) | 文末・文中 |
-        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `?` | 疑問文の終結 (？) | 文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文中 |
         | `_` | ポーズ・読点 (、) | 文中 |
         | `#` | アクセント句境界 | 文中 |
+        | `{...}` | 未知語 | 文中 |
+
+        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+        ## [ProsodyFormat.Default]
+
+        出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
         | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
         | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
-        # 互換性について
+
         記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
         "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
         (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
-        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        ## [ProsodyFormat.Prefix]
+
+        ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+        - `H_` : ピッチが高い (High)
+        - `L_` : ピッチが低い (Low)
+
+        音素ごとにピッチが明示されます。
+        例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+        ## [ProsodyFormat.Numeric]
+
+        各音素のサフィックスとして、ピッチの高低を数値で付与します。
+        - `:1` : ピッチが高い (High)
+        - `:0` : ピッチが低い (Low)
+
+        例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
 
         Args:
             texts (List[str]): 入力テキストのリスト。
+            format (ProsodyFormat): 出力フォーマットの指定。
 
         Returns:
             List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
@@ -613,8 +833,32 @@ class OpenJTalk:
         """
         ...
 
-    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
-        """複数のテキストからフルコンテキストラベルを抽出します。
+    def g2p_mapping_prosody_batch(self, texts: List[str]) -> List[List[WordPhonemeProsody]]:
+        """複数のテキストに対して `g2p_mapping_prosody` を並行に実行します。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeProsody]]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリストのリスト。
+        """
+        ...
+
+    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[Label]]:
+        """複数のテキストからフルコンテキストラベルを構造化データとして抽出します。
+
+        Python の GIL を解放してバッチ処理を行います。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[Label]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
+        """
+        ...
+
+    def extract_fullcontext_string_batch(self, texts: List[str]) -> List[List[str]]:
+        """複数のテキストからフルコンテキストラベル文字列を抽出します。
 
         Python の GIL を解放してバッチ処理を行います。
 
@@ -625,6 +869,7 @@ class OpenJTalk:
             List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
         ...
+
 
 class Haqumei:
     """`OpenJTalk` を拡張した G2P エンジン。
@@ -697,7 +942,18 @@ class Haqumei:
         """
         ...
 
-    def extract_fullcontext(self, text: str) -> List[str]:
+    def extract_fullcontext(self, text: str) -> List[Label]:
+        """フルコンテキストラベルを構造化データとして抽出します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[Label]: フルコンテキストラベルのリスト。
+        """
+        ...
+
+    def extract_fullcontext_string(self, text: str) -> List[str]:
         """フルコンテキストラベルを抽出します。
 
         Args:
@@ -759,7 +1015,7 @@ class Haqumei:
             text (str): 入力テキスト。
 
         Returns:
-            str: カタカナ文字列 (例: `"コンニチワ"`)。
+            List[str]: カタカナ文字列のリスト (例: `["コンニチワ"]`)。
         """
         ...
 
@@ -775,29 +1031,57 @@ class Haqumei:
         ...
 
 
-    def g2p_prosody(self, text: str) -> List[str]:
-        """入力テキストをプロソディ記号付き音素リストに変換します。
+    def g2p_prosody(self, text: str, format: ProsodyFormat = ProsodyFormat.Default) -> List[str]:
+        """
+        入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストに変換します。
 
-        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        出力には、共通して以下のプロソディ記号が含まれます。
+
         | 記号 | 意味 | 出現位置 |
         | :--- | :--- | :--- |
         | `^` | 発話の開始 (BOS) | 文頭 |
         | `$` | 発話の終結 (EOS) | 文末 |
-        | `?` | 疑問文の終結 (？) | 文末・文中 |
-        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `?` | 疑問文の終結 (？) | 文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文中 |
         | `_` | ポーズ・読点 (、) | 文中 |
         | `#` | アクセント句境界 | 文中 |
+        | `{...}` | 未知語 | 文中 |
+
+        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+        ## [ProsodyFormat.Default]
+
+        出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
         | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
         | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
-        # 互換性について
+
         記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
         "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
         (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
-        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        ## [ProsodyFormat.Prefix]
+
+        ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+        - `H_` : ピッチが高い (High)
+        - `L_` : ピッチが低い (Low)
+
+        音素ごとにピッチが明示されます。
+        例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+        ## [ProsodyFormat.Numeric]
+
+        各音素のサフィックスとして、ピッチの高低を数値で付与します。
+        - `:1` : ピッチが高い (High)
+        - `:0` : ピッチが低い (Low)
+
+        例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
 
         Args:
             text (str): 入力テキスト。
+            format (ProsodyFormat): 出力フォーマットの指定。
 
         Returns:
             List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
@@ -844,6 +1128,17 @@ class Haqumei:
 
         Returns:
             List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
+        """
+        ...
+
+    def g2p_mapping_prosody(self, text: str) -> List[WordPhonemeProsody]:
+        """入力テキストを解析し、形態素ごとの詳細な言語情報と、プロソディ記号付き音素をマッピングして取得します。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
         """
         ...
 
@@ -910,7 +1205,7 @@ class Haqumei:
         """
         ...
 
-    def g2p_kana_per_word_batch(self, text: List[str]) -> List[List[str]]:
+    def g2p_kana_per_word_batch(self, texts: List[str]) -> List[List[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -925,29 +1220,57 @@ class Haqumei:
         """
         ...
 
-    def g2p_prosody_batch(self, text: List[str]) -> List[List[str]]:
-        """複数の入力テキストをプロソディ記号付き音素リストのリストに変換します。
+    def g2p_prosody_batch(self, texts: List[str], format: ProsodyFormat = ProsodyFormat.Default) -> List[List[str]]:
+        """
+        複数の入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストのリストに変換します。
 
-        出力には通常の音素に加えて、以下の制御記号が含まれます：
+        出力には、共通して以下のプロソディ記号が含まれます。
+
         | 記号 | 意味 | 出現位置 |
         | :--- | :--- | :--- |
         | `^` | 発話の開始 (BOS) | 文頭 |
         | `$` | 発話の終結 (EOS) | 文末 |
-        | `?` | 疑問文の終結 (？) | 文末・文中 |
-        | `!` | 感嘆の終結 (独自拡張) | 文末・文中 |
-        | `!?` | 感嘆疑問の終結 (独自拡張) | 文末・文中 |
+        | `?` | 疑問文の終結 (？) | 文中 |
+        | `!` | 感嘆の終結 (独自拡張) | 文中 |
         | `_` | ポーズ・読点 (、) | 文中 |
         | `#` | アクセント句境界 | 文中 |
+        | `{...}` | 未知語 | 文中 |
+
+        日本語のアクセントについて: [tdmelodic 利用マニュアル/予備知識](https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html)
+
+        ## [ProsodyFormat.Default]
+
+        出力には上記のものに追加して、以下のプロソディ記号が含まれます。
+
+        | 記号 | 意味 | 出現位置 |
+        | :--- | :--- | :--- |
         | `[` | ピッチ上昇 (句頭) | 句の開始付近 |
         | `]` | ピッチ下降 (アクセント核) | 核モーラの直後 |
-        # 互換性について
+
         記号 `[` および `]` は、tdmelodic 等で一般的なアクセント記法に基づいています。
         "Prosodic Features Control by Symbols as Input of Sequence-to-Sequence Acoustic Modeling for Neural TTS"
         (Kurihara et al., 2021) のアルゴリズムにおける `^` および `!` に相当します。
-        参照: https://tdmelodic.readthedocs.io/ja/latest/pages/introduction.html#raise-and-lower-accent-nucleus
+
+        ## [ProsodyFormat.Prefix]
+
+        ピッチ上昇/下降記号 (`[` や `]`) を使用せず、各音素のプレフィックスとしてピッチの高低を付与します。
+        - `H_` : ピッチが高い (High)
+        - `L_` : ピッチが低い (Low)
+
+        音素ごとにピッチが明示されます。
+        例: `"青い空"` -> `["^", "L_a", "H_o", "L_i", "#", "H_s", "H_o", "L_r", "L_a", "$"]`
+
+        ## [ProsodyFormat.Numeric]
+
+        各音素のサフィックスとして、ピッチの高低を数値で付与します。
+        - `:1` : ピッチが高い (High)
+        - `:0` : ピッチが低い (Low)
+
+        例: `"青い空"` -> `["^", "a:0", "o:1", "i:0", "#", "s:1", "o:1", "r:0", "a:0", "$"]`
 
         Args:
             texts (List[str]): 入力テキストのリスト。
+            format (ProsodyFormat): 出力フォーマットの指定。
 
         Returns:
             List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
@@ -1006,14 +1329,36 @@ class Haqumei:
         """
         ...
 
-    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2p_mapping_prosody_batch(self, texts: List[str]) -> List[List[WordPhonemeProsody]]:
+        """複数のテキストに対して `g2p_mapping_prosody` を並行に実行します。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[WordPhonemeProsody]]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリストのリスト。
+        """
+        ...
+
+    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[Label]]:
         """フルコンテキストラベル抽出のバッチ処理。
 
         Args:
             texts (List[str]): 入力テキストのリスト。
 
         Returns:
-            List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
+            List[List[Label]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
+        """
+        ...
+
+    def extract_fullcontext_string_batch(self, texts: List[str]) -> List[List[str]]:
+        """フルコンテキストラベル文字列抽出のバッチ処理。
+
+        Args:
+            texts (List[str]): 入力テキストのリスト。
+
+        Returns:
+            List[List[str]]: 各テキストに対応するフルコンテキストラベル文字列のリストのリスト。
         """
         ...
 

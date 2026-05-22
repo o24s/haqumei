@@ -40,7 +40,10 @@ impl WordPhonemeEntry for WordPhonemeDetail {
     }
 
     fn merge_from(&mut self, other: &mut Self) {
-        debug_assert!(other.phonemes.is_empty(), "phonemes should be empty when merging");
+        debug_assert!(
+            other.phonemes.is_empty(),
+            "phonemes should be empty when merging"
+        );
 
         let text_to_merge = std::mem::take(&mut other.word);
         self.word.push_str(&text_to_merge);
@@ -66,7 +69,10 @@ impl WordPhonemeProsody {
     /// この関数によってマージされるとき、phonemes は空のケースである。
     /// そのため、phonemes のマージを考える必要はない。
     pub(crate) fn merge_from(&mut self, other: &mut Self) {
-        debug_assert!(other.phonemes.is_empty(), "phonemes should be empty when merging");
+        debug_assert!(
+            other.phonemes.is_empty(),
+            "phonemes should be empty when merging"
+        );
 
         let text_to_merge = std::mem::take(&mut other.word);
         self.word.push_str(&text_to_merge);

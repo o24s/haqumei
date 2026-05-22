@@ -1136,8 +1136,6 @@ impl Haqumei {
 
     impl_batch_method_haqumei!(
         /// プロソディ記号付き音素マッピングのバッチ処理。
-        ///
-        /// 詳細は [Haqumei::g2p_mapping_prosody] を見てください。
         g2p_mapping_prosody_batch => g2p_mapping_prosody -> Vec<WordPhonemeProsody>
     );
 
