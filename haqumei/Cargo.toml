@@ -13,6 +13,7 @@ categories = ["text-processing", "parsing"]
 include = [
     "src/*",
     "build.rs",
+    "compat.c",
     "redirect.c",
     "redirect_cpp.cpp",
     "redirect.h",

@@ -22,11 +22,11 @@ impl PyHaqumei {
     #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (
-        normalize_unicode = UnicodeNormalization::None,
+        normalize_unicode = UnicodeNormalization::None_,
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
-        normalize_iu = IuPronunciation::None,
+        normalize_iu = IuPronunciation::None_,
         modify_filler_accent = true,
         predict_nani = true,
         use_unidic_yomi = false,
@@ -49,7 +49,7 @@ impl PyHaqumei {
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             normalize_unicode: match normalize_unicode {
-                UnicodeNormalization::None => ::haqumei::UnicodeNormalization::None,
+                UnicodeNormalization::None_ => ::haqumei::UnicodeNormalization::None,
                 UnicodeNormalization::Nfc => ::haqumei::UnicodeNormalization::Nfc,
                 UnicodeNormalization::Nfkc => ::haqumei::UnicodeNormalization::Nfkc,
             },
@@ -61,7 +61,7 @@ impl PyHaqumei {
                 IuPronunciation::Yuu => Some(::haqumei::IuPronunciation::Yuu),
                 IuPronunciation::KanjiIu => Some(::haqumei::IuPronunciation::KanjiIu),
                 IuPronunciation::KanjiYuu => Some(::haqumei::IuPronunciation::KanjiYuu),
-                IuPronunciation::None => None,
+                IuPronunciation::None_ => None,
             },
             modify_filler_accent,
             predict_nani,

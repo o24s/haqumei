@@ -91,7 +91,7 @@ impl From<::haqumei::MecabMorph> for PyMecabMorph {
 #[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeNormalization {
-    None = 0,
+    None_ = 0,
     Nfc = 1,
     Nfkc = 2,
 }
@@ -99,7 +99,7 @@ pub enum UnicodeNormalization {
 #[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IuPronunciation {
-    None = 0,
+    None_ = 0,
     Iu = 1,
     Yuu = 2,
     KanjiIu = 3,
