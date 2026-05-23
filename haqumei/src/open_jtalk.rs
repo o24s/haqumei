@@ -16,7 +16,7 @@ use crate::open_jtalk::{
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
 use crate::phoneme::Phoneme;
-use crate::utils::default_is_non_pause_symbol;
+use crate::utils::{default_is_non_pause_symbol, get_known_symbol_feature};
 use crate::word_phoneme::WordPhonemeProsody;
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
 use crate::{PitchAccent, ProsodyFormat, ffi};
@@ -1076,21 +1076,56 @@ impl OpenJTalk {
                     //     }
                     // }
                     // ```
-                    let compatible_feature = format!("{},{}", surface, raw_feature);
 
                     let is_unknown = stat == 1;
                     let is_ignored = raw_feature.contains("記号,空白");
 
-                    results.push(MecabMorph {
-                        surface: surface.to_string(),
-                        feature: compatible_feature,
-                        left_id: (*node).lcAttr,
-                        right_id: (*node).rcAttr,
-                        pos_id: (*node).posid,
-                        word_cost: (*node).wcost,
-                        is_unknown,
-                        is_ignored,
-                    });
+                    if is_unknown
+                        && surface.chars().all(|c| !c.is_alphanumeric())
+                        && surface.chars().count() > 1
+                    {
+                        for ch in surface.chars() {
+                            let ch_str = ch.to_string();
+
+                            if let Some(known_feature) = get_known_symbol_feature(&ch_str) {
+                                let compatible_feature = format!("{},{}", ch_str, known_feature);
+                                results.push(MecabMorph {
+                                    surface: ch_str,
+                                    feature: compatible_feature,
+                                    left_id: (*node).lcAttr,
+                                    right_id: (*node).rcAttr,
+                                    pos_id: (*node).posid,
+                                    word_cost: (*node).wcost,
+                                    is_unknown: false,
+                                    is_ignored: ch.is_whitespace(),
+                                });
+                            } else {
+                                let compatible_feature = format!("{},{}", ch_str, raw_feature);
+                                results.push(MecabMorph {
+                                    surface: ch_str,
+                                    feature: compatible_feature,
+                                    left_id: (*node).lcAttr,
+                                    right_id: (*node).rcAttr,
+                                    pos_id: (*node).posid,
+                                    word_cost: (*node).wcost,
+                                    is_unknown: true,
+                                    is_ignored,
+                                });
+                            }
+                        }
+                    } else {
+                        let compatible_feature = format!("{},{}", surface, raw_feature);
+                        results.push(MecabMorph {
+                            surface: surface.to_string(),
+                            feature: compatible_feature,
+                            left_id: (*node).lcAttr,
+                            right_id: (*node).rcAttr,
+                            pos_id: (*node).posid,
+                            word_cost: (*node).wcost,
+                            is_unknown,
+                            is_ignored,
+                        });
+                    }
                 }
 
                 node = (*node).next;

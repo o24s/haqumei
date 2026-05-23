@@ -241,7 +241,14 @@ fn main() -> Result<()> {
     let prosody_format: ProsodyFormat = cli.prosody_format.into();
 
     if let Some(text) = cli.text.as_deref() {
-        process_line(&mut haqumei, text, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+        process_line(
+            &mut haqumei,
+            text,
+            &cli.mode,
+            &cli.format,
+            prosody_format,
+            &mut writer,
+        )?;
     } else if let Some(input_path) = cli.input {
         let file = File::open(&input_path)
             .with_context(|| format!("Failed to open input file: {:?}", input_path))?;
@@ -252,7 +259,14 @@ fn main() -> Result<()> {
                 writeln!(writer)?;
                 continue;
             }
-            process_line(&mut haqumei, &line, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+            process_line(
+                &mut haqumei,
+                &line,
+                &cli.mode,
+                &cli.format,
+                prosody_format,
+                &mut writer,
+            )?;
         }
     } else {
         let stdin = io::stdin();
@@ -276,7 +290,14 @@ fn main() -> Result<()> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                process_line(&mut haqumei, trimmed, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+                process_line(
+                    &mut haqumei,
+                    trimmed,
+                    &cli.mode,
+                    &cli.format,
+                    prosody_format,
+                    &mut writer,
+                )?;
 
                 writer.flush()?;
             }
@@ -287,7 +308,14 @@ fn main() -> Result<()> {
                     writeln!(writer)?;
                     continue;
                 }
-                process_line(&mut haqumei, &line, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+                process_line(
+                    &mut haqumei,
+                    &line,
+                    &cli.mode,
+                    &cli.format,
+                    prosody_format,
+                    &mut writer,
+                )?;
             }
         }
     }

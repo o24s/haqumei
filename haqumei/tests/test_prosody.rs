@@ -237,12 +237,12 @@ mod tests {
     fn test_g2p_prosody_complex_mixed() {
         let mut haqumei = Haqumei::new().unwrap();
 
-        let text = "えっ、本当！？?すごい！";
+        let text = "えっ、本当！？?!！？！？すごい！";
         let p = haqumei.g2p_prosody(text).unwrap().join(" ");
 
         assert_eq!(p.chars().next().unwrap(), '^');
 
-        assert!(p.contains(&"! ? ?".to_string()));
+        assert!(p.contains(&"! ? ? ! ! ? ! ?".to_string()));
 
         assert_eq!(p.chars().next_back().unwrap(), '$');
 
@@ -332,5 +332,66 @@ mod tests {
         let expected = "^ e:1 cl:0 ? ? ! ! $";
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_merged_symbols_decomposition_to_prosody() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let mapping1 = haqumei
+            .g2p_mapping_prosody("うおお！！！！！！！！！！！！！！！！")
+            .unwrap();
+
+        let exclamations: Vec<_> = mapping1.iter().filter(|m| m.word == "！").collect();
+        assert_eq!(exclamations.len(), 16);
+        assert!(exclamations.iter().all(|m| !m.is_unknown),);
+        assert!(
+            exclamations
+                .iter()
+                .all(|m| m.phonemes == vec![ProsodicPhoneme::Exclamatory]),
+        );
+
+        let mapping2 = haqumei
+            .g2p_mapping_prosody("マジ！？！？！？！？！？！？！？！？")
+            .unwrap();
+
+        let symbols2: Vec<_> = mapping2
+            .iter()
+            .filter(|m| m.word == "！" || m.word == "？")
+            .collect();
+        assert_eq!(symbols2.len(), 16);
+
+        for (i, sym) in symbols2.iter().enumerate() {
+            assert!(!sym.is_unknown);
+            if i % 2 == 0 {
+                assert_eq!(sym.word, "！");
+                assert_eq!(sym.phonemes, vec![ProsodicPhoneme::Exclamatory]);
+            } else {
+                assert_eq!(sym.word, "？");
+                assert_eq!(sym.phonemes, vec![ProsodicPhoneme::Interrogative]);
+            }
+        }
+
+        let prosody_str = haqumei
+            .g2p_prosody("マジ！？！？！？！？！？！？！？！？")
+            .unwrap()
+            .join(" ");
+        assert!(prosody_str.contains("! ? ! ? ! ? ! ? ! ? ! ? ! ? ! ?"));
+
+        let mapping3 = haqumei
+            .g2p_mapping_prosody("＼！－！－！？？＼！－！－！？？")
+            .unwrap();
+
+        let hyphens: Vec<_> = mapping3.iter().filter(|m| m.word == "－").collect();
+        assert_eq!(hyphens.len(), 4);
+        assert!(hyphens.iter().all(|m| m.is_unknown),);
+
+        let bangs: Vec<_> = mapping3.iter().filter(|m| m.word == "！").collect();
+        assert_eq!(bangs.len(), 6);
+        assert!(
+            bangs
+                .iter()
+                .all(|m| !m.is_unknown && m.phonemes == vec![ProsodicPhoneme::Exclamatory]),
+        );
     }
 }
