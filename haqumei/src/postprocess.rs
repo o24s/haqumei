@@ -12,7 +12,7 @@ use crate::{
     errors::HaqumeiError,
     features::UnidicFeature,
     utils::{
-        is_dakuon, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
+        is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
         split_kana_mora,
     },
 };
@@ -463,6 +463,22 @@ fn detect_odori_unit(read: &str) -> Option<usize> {
         }
     }
     None
+}
+
+#[rustfmt::skip]
+pub(crate) fn is_dakuon(c: char) -> bool {
+    matches!(
+        c,
+        'が' | 'ぎ' | 'ぐ' | 'げ' | 'ご'
+        | 'ざ' | 'じ' | 'ず' | 'ぜ' | 'ぞ'
+        | 'だ' | 'ぢ' | 'づ' | 'で' | 'ど'
+        | 'ば' | 'び' | 'ぶ' | 'べ' | 'ぼ'
+        | 'ガ' | 'ギ' | 'グ' | 'ゲ' | 'ゴ'
+        | 'ザ' | 'ジ' | 'ズ' | 'ゼ' | 'ゾ'
+        | 'ダ' | 'ヂ' | 'ヅ' | 'デ' | 'ド'
+        | 'バ' | 'ビ' | 'ブ' | 'ベ' | 'ボ'
+        | 'ヴ'
+    )
 }
 
 /// 踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを処理する後処理関数

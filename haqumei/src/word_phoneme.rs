@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{phoneme::Phoneme, prosody::ProsodicPhoneme};
 
+/// Word と `Phoneme` リストのペア。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemePair {
@@ -10,9 +11,11 @@ pub struct WordPhonemePair {
     pub phonemes: Vec<Phoneme>,
 }
 
+/// Word と `Phoneme` リストに加えて、未知語かどうか・OpenJTalk などで無視されるかどうかを表すフラグをもつ構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeMap {
+    /// Word (表層系・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<Phoneme>,
 
@@ -28,10 +31,11 @@ pub struct WordPhonemeMap {
     pub is_ignored: bool,
 }
 
+/// Word と `Phoneme` リスト、未知語・無視フラグに加えて、Mecab の解析情報をもつ構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeDetail {
-    /// 表層形 (surface)
+    /// Word (表層系・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<Phoneme>,
 
@@ -81,10 +85,11 @@ pub struct WordPhonemeDetail {
     pub is_ignored: bool,
 }
 
+/// プロソディ情報つきの [ProsodicPhoneme] のリストや表層系、未知語・無視フラグ、Mecab の解析情報を表す構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeProsody {
-    /// 表層形 (surface)
+    /// Word (表層系・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<ProsodicPhoneme>,
 

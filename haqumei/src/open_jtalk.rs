@@ -37,6 +37,8 @@ pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// `Haqumei`, `OpenJTalk` が利用するグローバル辞書。
+/// [update_global_dictionary], [unset_user_dictionary] を使って変更してください。
 pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::new(|| {
     #[cfg(feature = "embed-dictionary")]
     {
@@ -79,15 +81,15 @@ unsafe impl Send for JpCommon {}
 unsafe impl Send for MecabModel {}
 unsafe impl Sync for MecabModel {}
 
-/// `Haqumei::new()`, `OpenJTalk::new()` で使用されるグローバル辞書を更新します (設定します)。
+/// `Haqumei`, `OpenJTalk` から使用されるグローバル辞書を更新します (設定します)。
 ///
-/// この関数を呼び出した後、新たに `Haqumei::new()`, `OpenJTalk::new()` を呼び出す際には、この辞書が使用されるようになります。
+/// この関数を呼び出した後、新たに `g2p_*` や `extract_fullcontext` などを呼び出す際には、この辞書が使用されるようになります。
 /// 既存のインスタンスについては、次のメソッド呼び出し時に新しい辞書に更新されます。
 pub fn update_global_dictionary(new_dict: Dictionary) {
     GLOBAL_MECAB_DICTIONARY.store(Arc::new(new_dict));
 }
 
-/// `Haqumei::new()`, `OpenJTalk::new()` で使用されるグローバル辞書のユーザー辞書を外します。
+/// `Haqumei`, `OpenJTalk` から使用されるグローバル辞書のユーザー辞書を外します。
 pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
     GLOBAL_MECAB_DICTIONARY.store(Arc::new(Dictionary::from_path(
         &GLOBAL_MECAB_DICTIONARY.load_full().dict_dir,
@@ -99,9 +101,6 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 /// Open JTalk をバインディングしたG2Pエンジン。
 ///
 /// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
-///
-/// フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
-/// g2p を行えるものはそのように実装されているため、他の Open JTalk バインディング実装より若干高速です。
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
@@ -212,10 +211,12 @@ impl OpenJTalk {
         })
     }
 
+    /// 指定された辞書の存在するパスから、[OpenJTalk] を生成します。
     pub fn from_path<P: AsRef<Path>>(dict_dir: P) -> Result<Self, HaqumeiError> {
         Self::from_path_inner(dict_dir, None::<P>)
     }
 
+    /// 指定された辞書及びユーザー辞書のパスから、[OpenJTalk] を生成します。
     pub fn from_path_with_userdict<P: AsRef<Path>, Q: AsRef<Path>>(
         dict_dir: P,
         user_dict: Q,
@@ -902,6 +903,7 @@ impl OpenJTalk {
 
     const BUFFER_SIZE: usize = 16384;
 
+    /// MeCab解析を実行し、feature のリストを返します。
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
@@ -1190,6 +1192,7 @@ impl OpenJTalk {
         Ok(final_features)
     }
 
+    // JPCommon に features を渡し、音素ラベルのリストを取得します
     pub fn make_label(&mut self, features: &[NjdFeature]) -> Result<Vec<String>, HaqumeiError> {
         Self::features_to_njd(features, &mut self.njd)?;
 

@@ -6,6 +6,7 @@ use std::{
 
 use thiserror::Error;
 
+/// `Haqumei` が使用するエラー型。
 #[derive(Error, Debug)]
 pub enum HaqumeiError {
     #[error("Failed to allocate internal structures: {0}")]

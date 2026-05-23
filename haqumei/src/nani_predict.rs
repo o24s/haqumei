@@ -8,12 +8,14 @@ use crate::NjdFeature;
 const ENC_MODEL_BYTES: &[u8] = include_bytes!("../yomi_model/nani_enc.onnx");
 const MODEL_BYTES: &[u8] = include_bytes!("../yomi_model/nani_model.onnx");
 
+/// "何" を "なに" と読むか "なん" と読むか推論するモデル。
 pub struct NaniPredictor {
     enc_session: Session,
     model_session: Session,
 }
 
 impl NaniPredictor {
+    /// バイナリに埋め込まれた ONNX モデルから、[NaniPredictor] のセッションを作ります。
     pub fn new() -> ort::Result<Self> {
         let enc_session = Session::builder()?.commit_from_memory(ENC_MODEL_BYTES)?;
 
@@ -25,6 +27,7 @@ impl NaniPredictor {
         })
     }
 
+    /// [NjdFeature] から、"何" を "なん" と読むか判定します。
     pub fn predict_is_nan(&mut self, prev_node: Option<&NjdFeature>) -> bool {
         match self.run_inference(prev_node) {
             Ok(prediction) => prediction == 1,

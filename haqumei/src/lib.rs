@@ -115,7 +115,7 @@ pub(crate) fn init_vibrato_workers_if_needed(tokenizer: &vibrato_rkyv::Tokenizer
     });
 }
 
-/// Open JTalk をバインディングしたG2Pエンジン。
+/// Open JTalk をバインディングした G2P エンジン。
 ///
 /// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
 ///
@@ -290,6 +290,7 @@ pub enum IuPronunciation {
 }
 
 impl Haqumei {
+    /// [Haqumei] を生成します。
     pub fn new() -> Result<Self, HaqumeiError> {
         Self::from_open_jtalk(OpenJTalk::new()?, HaqumeiOptions::default())
     }
@@ -300,6 +301,7 @@ impl Haqumei {
     }
 
     #[inline]
+    /// [OpenJTalk] から [Haqumei] を生成します。
     pub fn from_open_jtalk(
         open_jtalk: OpenJTalk,
         options: HaqumeiOptions,
@@ -367,6 +369,7 @@ impl Haqumei {
         Self::from_open_jtalk(OpenJTalk::from_shared_dictionary(dict)?, options)
     }
 
+    /// 辞書パスから [Haqumei] を生成します。
     pub fn from_path<P: AsRef<Path>>(
         dict_dir: P,
         options: HaqumeiOptions,
@@ -374,6 +377,7 @@ impl Haqumei {
         Self::from_open_jtalk(OpenJTalk::from_path(dict_dir)?, options)
     }
 
+    /// システム辞書パスとユーザー辞書パスから [Haqumei] を生成します。
     pub fn from_path_with_userdict<P: AsRef<Path>, Q: AsRef<Path>>(
         dict_dir: P,
         user_dict: Q,

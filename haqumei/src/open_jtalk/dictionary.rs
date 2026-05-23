@@ -15,6 +15,7 @@ use crate::{
 
 static DICT_EXTRACT_LOCK: Mutex<()> = Mutex::new(());
 
+/// `OpenJTalk` が使用する辞書オブジェクト
 #[derive(Debug, Clone)]
 pub struct Dictionary {
     pub(crate) model: Arc<MecabModel>,
@@ -22,6 +23,7 @@ pub struct Dictionary {
 }
 
 impl Dictionary {
+    /// システム辞書パス、ユーザー辞書パスから [Dictionary] を生成します。
     pub fn from_path<P: AsRef<Path>>(
         dict_dir: P,
         user_dict: Option<P>,
@@ -44,6 +46,7 @@ impl Dictionary {
     }
 
     #[cfg(feature = "embed-dictionary")]
+    /// バイナリに埋め込まれた辞書から [Dictionary] を生成します。
     pub fn from_embedded() -> Result<Self, HaqumeiError> {
         use crate::utils::compute_metadata_key;
 
@@ -167,6 +170,7 @@ impl Dictionary {
     }
 }
 
+/// [MecabDictIndexCompiler] が使用するエラー型。
 #[derive(Debug, Error)]
 pub enum DictCompilerError {
     #[error("Path contains null byte and cannot be converted to CString: {0}")]
@@ -183,6 +187,7 @@ pub enum DictCompilerError {
     IoError(#[from] io::Error),
 }
 
+/// Mecab 辞書をビルドするコンパイラ。
 #[derive(Debug)]
 pub struct MecabDictIndexCompiler {
     dict_dir: PathBuf,
@@ -201,6 +206,7 @@ pub struct MecabDictIndexCompiler {
 }
 
 impl MecabDictIndexCompiler {
+    /// 新しい [MecabDictIndexCompiler] を生成します。
     pub fn new() -> Self {
         Self {
             dict_dir: PathBuf::from("."),
@@ -219,95 +225,94 @@ impl MecabDictIndexCompiler {
         }
     }
 
-    /// Sets the dictionary directory. Corresponds to the `-d` or `--dicdir` option.
+    /// 辞書ディレクトリを設定します。`-d` または `--dicdir` オプションに対応します。
     pub fn dict_dir<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.dict_dir = path.as_ref().to_path_buf();
         self
     }
 
-    /// Sets the output directory. Corresponds to the `-o` or `--outdir` option.
+    /// 出力ディレクトリを設定します。`-o` または `--outdir` オプションに対応します。
     pub fn out_dir<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.out_dir = path.as_ref().to_path_buf();
         self
     }
 
-    /// Sets the model file. Corresponds to the `--model` option.
+    /// モデルファイルを設定します。`--model` オプションに対応します。
     pub fn model_in<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.model_in = Some(path.as_ref().to_path_buf());
         self
     }
 
-    /// Sets the output file path for the user dictionary to be built. Corresponds to the `-u` or `--userdic` option.
+    /// 構築するユーザー辞書の出力ファイルパスを設定します。`-u` または `--userdic` オプションに対応します。
     pub fn userdict_out_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.userdict_out = Some(path.as_ref().to_path_buf());
         self
     }
 
-    /// Enables or disables building the unknown word dictionary. Corresponds to the `--build-unknown` flag.
+    /// 未知語辞書を構築するかどうかを設定します。`--build-unknown` フラグに対応します。
     pub fn build_unknown(&mut self, build: bool) -> &mut Self {
         self.build_unknown = build;
         self
     }
 
-    /// Enables or disables building the model file. Corresponds to the `--build-model` flag.
+    /// モデルファイルを構築するかどうかを設定します。`--build-model` フラグに対応します。
     pub fn build_model(&mut self, build: bool) -> &mut Self {
         self.build_model = build;
         self
     }
 
-    /// Enables or disables building the character category maps. Corresponds to the `--build-charcategory` flag.
+    /// 文字カテゴリマップを構築するかどうかを設定します。`--build-charcategory` フラグに対応します。
     pub fn build_charcategory(&mut self, build: bool) -> &mut Self {
         self.build_charcategory = build;
         self
     }
 
-    /// Enables or disables building the system dictionary. Corresponds to the `--build-sysdic` flag.
+    /// システム辞書を構築するかどうかを設定します。`--build-sysdic` フラグに対応します。
     pub fn build_sysdic(&mut self, build: bool) -> &mut Self {
         self.build_sysdic = build;
         self
     }
 
-    /// Enables or disables building the connection matrix. Corresponds to the `--build-matrix` flag.
+    /// 接続行列 (matrix) を構築するかどうかを設定します。`--build-matrix` フラグに対応します。
     pub fn build_matrix(&mut self, build: bool) -> &mut Self {
         self.build_matrix = build;
         self
     }
 
-    /// Sets the character set of the binary dictionary. Corresponds to the `-c`, `-t`, or `--charset` option.
+    /// バイナリ辞書の文字セットを設定します。`-c`、`-t`、または `--charset` オプションに対応します。
     pub fn charset(&mut self, charset: &str) -> &mut Self {
         self.charset = Some(charset.to_string());
         self
     }
 
-    /// Sets the assumed character set of the input CSVs. Corresponds to the `-f` or `--dictionary-charset` option.
+    /// 入力CSVの想定文字セットを設定します。`-f` または `--dictionary-charset` オプションに対応します。
     pub fn dictionary_charset(&mut self, charset: &str) -> &mut Self {
         self.dictionary_charset = Some(charset.to_string());
         self
     }
 
-    /// Suppresses progress messages. Corresponds to the `-q` or `--quiet` flag.
+    /// 進捗メッセージの出力を抑制します。`-q` または `--quiet` フラグに対応します。
     pub fn quiet(&mut self, quiet: bool) -> &mut Self {
         self.quiet = quiet;
         self
     }
 
-    /// Adds an input file (typically a CSV) to the list of files to be processed.
+    /// 処理対象の入力ファイルをリストに追加します。
     pub fn add_input_file<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.input_files.push(path.as_ref().to_path_buf());
         self
     }
 
-    /// Executes the dictionary compilation with the configured options.
+    /// 設定されたオプションを使用して辞書のコンパイルを実行します。
     ///
-    /// This method constructs the command-line arguments based on the builder's state,
-    /// calls the FFI function `mecab_dict_index`, and returns the result.
+    /// このメソッドは、ビルダーの状態に基づいてコマンドライン引数を構築し、
+    /// FFI関数 `mecab_dict_index` を呼び出して結果を返します。
     ///
-    /// # Default Behavior
+    /// # デフォルトの挙動
     ///
-    /// If `userdict_out` is not set and none of the `build_*` flags are explicitly
-    /// enabled, this method will automatically enable all `build_*` flags to compile
-    /// a full system dictionary. This mimics the default behavior of the
-    /// `mecab-dict-index` command-line tool.
+    /// `userdict_out` が設定されておらず、かつ `build_*` フラグがいずれも明示的に
+    /// 有効化されていない場合、このメソッドは自動的にすべての `build_*` フラグを有効にして
+    /// 完全なシステム辞書をコンパイルします。
     pub fn run(&self) -> Result<(), DictCompilerError> {
         let mut c_string_args: Vec<CString> = Vec::new();
         unsafe {

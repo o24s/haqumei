@@ -24,22 +24,6 @@ pub fn hira2kata(s: &str) -> String {
         .collect()
 }
 
-#[rustfmt::skip]
-pub fn is_dakuon(c: char) -> bool {
-    matches!(
-        c,
-        'が' | 'ぎ' | 'ぐ' | 'げ' | 'ご'
-        | 'ざ' | 'じ' | 'ず' | 'ぜ' | 'ぞ'
-        | 'だ' | 'ぢ' | 'づ' | 'で' | 'ど'
-        | 'ば' | 'び' | 'ぶ' | 'べ' | 'ぼ'
-        | 'ガ' | 'ギ' | 'グ' | 'ゲ' | 'ゴ'
-        | 'ザ' | 'ジ' | 'ズ' | 'ゼ' | 'ゾ'
-        | 'ダ' | 'ヂ' | 'ヅ' | 'デ' | 'ド'
-        | 'バ' | 'ビ' | 'ブ' | 'ベ' | 'ボ'
-        | 'ヴ'
-    )
-}
-
 /// デフォルトの「pau を割り当てない記号」の判定関数。
 /// 括弧類など、音声として休止を置くべきでなさそうな記号に対して `true` を返します。
 #[rustfmt::skip]
@@ -64,7 +48,7 @@ pub(crate) enum Dan {
 }
 
 #[inline]
-pub(crate) fn dan(c: char) -> Option<Dan> {
+pub(crate) const fn dan(c: char) -> Option<Dan> {
     match c {
         // ア段
         'ア' | 'カ' | 'サ' | 'タ' | 'ナ' | 'ハ' | 'マ' | 'ヤ' | 'ラ' | 'ワ' | 'ガ' | 'ザ'
@@ -108,7 +92,7 @@ pub(crate) fn is_single_kanji_feature(feaure: &NjdFeature) -> bool {
 }
 
 #[inline(always)]
-pub(crate) fn is_small_kana(c: char) -> bool {
+pub(crate) const fn is_small_kana(c: char) -> bool {
     matches!(c, 'ャ' | 'ュ' | 'ョ' | 'ァ' | 'ィ' | 'ゥ' | 'ェ' | 'ォ')
 }
 

@@ -11,6 +11,7 @@ pub enum PitchAccent {
     High,
 }
 
+// プロソディ情報つきの音素を表す enum
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ProsodicPhoneme {
@@ -51,6 +52,7 @@ impl ProsodicPhoneme {
     }
 }
 
+/// `g2p_prosody_with_options` のような関数で出力形式を指定する enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ProsodyFormat {
@@ -67,8 +69,8 @@ impl WordPhonemeProsody {
     /// 単語のプロソディ情報を、指定されたフォーマットで文字列配列に変換する。
     ///
     /// # Arguments
-    /// * `format` - 出力するプロソディ表現のフォーマット
-    /// * `prev_pitch` - 直前の音素のピッチ状態。`Default` における `[` `]` 挿入の判定に使用する。
+    /// - `format` - 出力するプロソディ表現のフォーマット
+    /// - `prev_pitch` - 直前の音素のピッチ状態。`Default` における `[` `]` 挿入の判定に使用する。
     ///   イテレーション間で状態を保持するため可変参照を渡す。
     pub fn to_formatted_strings(
         &self,
