@@ -11,7 +11,7 @@ pub enum PitchAccent {
     High,
 }
 
-// プロソディ情報つきの音素を表す enum
+/// プロソディ情報つきの音素を表す enum
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ProsodicPhoneme {

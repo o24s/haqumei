@@ -263,6 +263,7 @@ impl Default for HaqumeiOptions {
     }
 }
 
+/// 入力テキストをどのように正規化するかを指定します。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UnicodeNormalization {
     /// 正規化を行わない (デフォルト)
