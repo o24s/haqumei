@@ -149,7 +149,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-            &compressed_dict_path.display()
+            compressed_dict_path.display()
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
     }
@@ -421,9 +421,9 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         fs::copy(&cached_dict_path, &compressed_dict_path)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-            &compressed_dict_path.display()
+            compressed_dict_path.display()
         );
-        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", &saved_dict_hash);
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", saved_dict_hash);
         return Ok(());
     }
 
@@ -455,9 +455,9 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     println!(
         "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-        &compressed_dict_path.display()
+        compressed_dict_path.display()
     );
-    println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", &compiled_dict_hash);
+    println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", compiled_dict_hash);
 
     // println!("cargo:warning=Dictionary compressed to {}", compressed_dict_path.display());
     Ok(())
