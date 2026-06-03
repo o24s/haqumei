@@ -11,10 +11,7 @@ use crate::{
     data::MULTI_READ_KANJI_LIST,
     errors::HaqumeiError,
     features::UnidicFeature,
-    utils::{
-        is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
-        split_kana_mora,
-    },
+    utils::{is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana, split_kana_mora},
 };
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 

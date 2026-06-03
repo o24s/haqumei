@@ -6,11 +6,13 @@ on:
     paths:
       - 'haqumei/**'
       - '.github/workflows/**'
+      - 'Cargo.toml'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'haqumei/**'
       - '.github/workflows/**'
+      - 'Cargo.toml'
 
 env:
   CARGO_TERM_COLOR: always

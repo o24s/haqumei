@@ -437,9 +437,10 @@ fn process_line(
                         };
                         writeln!(
                             writer,
-                            "{} {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}\tCHAIN_FLAG: {}\tCHAIN_RULE: {}",
+                            "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}\tCHAIN_FLAG: {}\tCHAIN_RULE: {}",
                             status,
                             detail.word,
+                            detail.phonemes.join(" "),
                             detail.pos,
                             detail.pos_group1,
                             detail.pron,
@@ -474,7 +475,7 @@ fn process_line(
 
                         writeln!(
                             writer,
-                            "{} {}\t{}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}",
+                            "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}",
                             status,
                             detail.word,
                             phones,
