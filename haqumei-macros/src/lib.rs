@@ -84,8 +84,7 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[repr(u8)]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Phoneme {
             #( #names ),*
         }
@@ -134,6 +133,12 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
                 let s = unsafe { ::std::ffi::CStr::from_ptr(ptr) };
                 let s = s.to_str().map_err(|_| crate::HaqumeiError::InvalidPhonemeUtf8)?;
                 s.parse().map_err(|_| crate::HaqumeiError::UnknownPhoneme(s.to_owned()))
+            }
+        }
+
+        impl ::core::fmt::Debug for Phoneme {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.as_str())
             }
         }
 
@@ -212,7 +217,6 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
             }
         }
 
-
         impl ::core::convert::AsRef<str> for Phoneme {
             fn as_ref(&self) -> &str {
                 self.as_str()
@@ -228,6 +232,32 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
         impl ::core::borrow::Borrow<str> for &Phoneme {
             fn borrow(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl ::serde::Serialize for Phoneme {
+            fn serialize<S>(
+                &self,
+                serializer: S,
+            ) -> Result<S::Ok, S::Error>
+            where
+                S: ::serde::Serializer,
+            {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de> ::serde::Deserialize<'de> for Phoneme {
+            fn deserialize<D>(
+                deserializer: D,
+            ) -> Result<Self, D::Error>
+            where
+                D: ::serde::Deserializer<'de>,
+            {
+                let s = <&str>::deserialize(deserializer)?;
+                s.parse().map_err(::serde::de::Error::custom)
             }
         }
 

@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "clap",
@@ -1035,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
