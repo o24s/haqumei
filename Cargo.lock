@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-python"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "haqumei",
  "haqumei-jlabel",
@@ -1534,9 +1534,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.31"
+version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "113b30b4cd05f7c06868fdb2854f66a7b9fece9a48425351cd532e810d74024f"
+checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "lru-slab"

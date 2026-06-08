@@ -6,7 +6,7 @@ pub mod word_phoneme;
 
 use ::haqumei::{Haqumei, NjdFeature, OpenJTalk, open_jtalk::Dictionary};
 
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyTuple};
 use std::{path::PathBuf, sync::Mutex};
 
 use crate::{
@@ -181,5 +181,15 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(update_global_dictionary, m)?)?;
     m.add_function(wrap_pyfunction!(unset_user_dictionary, m)?)?;
+
+    m.add(
+        "ALL_PHONEMES",
+        PyTuple::new(
+            m.py(),
+            ::haqumei::Phoneme::ALL
+                .iter()
+                .map(|i| i.as_str()),
+        )?,
+    )?;
     Ok(())
 }

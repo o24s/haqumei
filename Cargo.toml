@@ -26,7 +26,7 @@ haqumei-jlabel = { version = "0.1.0", path = "haqumei-jlabel" }
 haqumei-macros = { version = "0.1.2", path = "haqumei-macros" }
 hex = "0.4.3"
 libc = "0.2.186"
-log = "0.4.31"
+log = "0.4.32"
 moka = { version = "0.12.15", features = ["sync"] }
 ndarray = "0.17.2"
 ort = "=2.0.0-rc.11"

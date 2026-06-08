@@ -1,5 +1,16 @@
 from enum import IntEnum
-from typing import List, Tuple, Final, Optional
+from typing import List, Literal, Tuple, Final, Optional
+
+Phoneme = Literal[
+    "A", "E", "I", "O", "U", "N", 
+    "a", "b", "by", "ch", "cl", "d", "dy", "e", "f", "fy", 
+    "g", "gw", "gy", "h", "hy", "i", "j", "k", "kw", "ky", 
+    "m", "my", "n", "ny", "o", "p", "py", "r", "ry", "s", 
+    "sh", "t", "ts", "ty", "u", "v", "w", "y", "z", 
+    "sp", "pau", "unk",
+]
+
+ALL_PHONEMES: Final[tuple[Phoneme, ...]]
 
 class UnicodeNormalization(IntEnum):
     """Unicode正規化の方式を指定する。"""
