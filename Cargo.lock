@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -1045,7 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-python"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "haqumei",
  "haqumei-jlabel",
