@@ -68,8 +68,8 @@ zstd.workspace = true
 serde = { workspace = true, optional = true }
 
 [build-dependencies]
-bindgen = "0.72.1"
-cc = "1.2.63"
+bindgen.workspace = true
+cc.workspace = true
 digest-io.workspace = true
 dirs.workspace = true
 glob.workspace = true

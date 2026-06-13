@@ -1,0 +1,22 @@
+[package]
+name = "haqumei-kanalizer"
+version = "0.1.0"
+edition = "2024"
+authors = ["o24s <fulmlumo@gmail.com>"]
+description = "An ONNX-based English-to-Katakana translator for the Haqumei Japanese G2P library."
+license = "Apache-2.0"
+repository = "https://github.com/o24s/haqumei"
+readme = "README.md"
+
+[dependencies]
+ndarray.workspace = true
+ort.workspace = true
+rand.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "kanalize"
+harness = false

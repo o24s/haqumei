@@ -519,7 +519,7 @@ Haqumei uses the dictionary included in [pyopenjtalk-plus](https://github.com/ts
 
 ## License
 
-The Rust code of Haqumei, excluding `haqumei-jlabel`, is distributed under the terms of the Apache License 2.0.
+Haqumei, excluding `haqumei-jlabel` and `haqumei-kanalizer`, is distributed under the terms of the Apache License 2.0.
 
 ### Licenses and Origins of Bundled Software
 
@@ -549,11 +549,17 @@ The Rust code of Haqumei, excluding `haqumei-jlabel`, is distributed under the t
     with redistribution requirements, the full text of the BSD 3-Clause License is included in
     `haqumei-jlabel/LICENSE`.
 
+- Bundled `haqumei-kanalizer` Crate
+  - Origin: The ONNX models bundled in `haqumei-kanalizer` are based on [VOICEVOX/kanalizer](https://github.com/VOICEVOX/kanalizer), with model weights from [VOICEVOX/kanalizer-model](https://huggingface.co/VOICEVOX/kanalizer-model) (converted via [o24s/kanalizer-onnx](https://github.com/o24s/kanalizer-onnx)).
+  - License: The entire `haqumei-kanalizer` crate (both the Rust code and the bundled model weights) is licensed under the MIT License.
+
 ## Acknowledgements
 
 The overall design and API of `haqumei` are inspired by `pyopenjtalk` and its highly improved fork, `pyopenjtalk-plus`.
 
 - pyopenjtalk: Copyright (c) 2018 Ryuichi Yamamoto
 - pyopenjtalk-plus: Copyright (c) 2023 tsukumijima
+- jlabel: Copyright (c) 2024 by JPreprocess Team
+- kanalizer: Copyright (c) 2025 VOICEVOX
 
 We are deeply grateful to the authors and contributors of these foundational projects.

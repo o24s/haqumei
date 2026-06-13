@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-criterion = "0.8.2"
+criterion.workspace = true
 haqumei = { path = "../haqumei", features = ["embed-dictionary"] }
 
 [[bin]]
