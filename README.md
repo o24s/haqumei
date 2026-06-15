@@ -22,7 +22,7 @@
       <img src="https://img.shields.io/pypi/v/haqumei.svg" alt="PyPI version">
     </a>
     <a href="https://pypi.org/project/haqumei/">
-      <img src="https://img.shields.io/badge/python-%3E%3D%203.10-blue" alt="Python version">
+      <img src="https://img.shields.io/badge/python-%3E%3D%203.9-blue" alt="Python version">
     </a>
     <a href="https://github.com/o24s/haqumei/actions/workflows/rust.yml">
       <img src="https://github.com/o24s/haqumei/actions/workflows/rust.yml/badge.svg" alt="Push CI">
