@@ -349,43 +349,95 @@ pub(super) fn consume_odori_morphs(
     consumed
 }
 
+#[rustfmt::skip]
 #[inline(always)]
-pub(super) fn consume_mismatched_morphs(
+pub(super) fn consume_mismatched_morphs<T: IntoPhonemeMapItem>(
     morphs: &[MecabMorph],
     morph_idx: usize,
-    bases_after_current: usize,
+    current_map_word: &str,
+    remaining_mapping: &[Option<T>],
 ) -> usize {
-    // 残りの有効な morph 数と、残りの base_mapping 数を計算
-    let non_ignored_remaining = morphs[morph_idx..].iter().filter(|m| !m.is_ignored).count();
+    let current_morph = &morphs[morph_idx];
 
-    // NJD 挿入ノード: morph を消費しない (e.g, "10" -> "十" などで桁が挿入された)
-    if non_ignored_remaining <= bases_after_current {
-        return 0;
+    // 数字関連の Mismatch かどうかを判定
+    let is_digit_mismatch = matches!(
+        current_morph.surface.as_str(),
+        "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９" |
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+    );
+
+    if !is_digit_mismatch {
+        return 1;
     }
 
-    let mut consumed = 1;
-    while let Some(ahead) = morphs.get(morph_idx + consumed) {
-        if ahead.is_ignored {
-            break;
+    // 連続する数字 morph の数を数える
+    let mut digit_morphs_count = 0;
+    for m in &morphs[morph_idx..] {
+        if m.is_ignored {
+            continue;
         }
-        if !matches!(
-            ahead.surface.as_str(),
-            "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９"
+        if matches!(
+            m.surface.as_str(),
+            "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９" |
+            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
         ) {
-            break;
-        }
-
-        let non_ign = morphs[(morph_idx + consumed)..]
-            .iter()
-            .filter(|m| !m.is_ignored)
-            .count();
-
-        if non_ign > bases_after_current {
-            consumed += 1;
+            digit_morphs_count += 1;
         } else {
             break;
         }
     }
+
+    // 連続する漢数字 mapping の数を数える (現在の単語も含める)
+    let mut digit_maps_count: i32 = 0;
+    if matches!(
+        current_map_word,
+        "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" |"九" |
+        "十" | "百" | "千" | "万" | "億" | "兆" | "〇" | "零"
+    ) {
+        digit_maps_count += 1;
+    }
+    
+    for map in remaining_mapping.iter().flatten() {
+        let w = map.word();
+        if matches!(
+            w,
+            "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" | "九" |
+            "十" | "百" | "千" | "万" | "億" | "兆" | "〇" | "零"
+        ) {
+            digit_maps_count += 1;
+        } else {
+            break;
+        }
+    }
+
+    let target_remaining_morphs = digit_maps_count.saturating_sub(1);
+
+    if digit_morphs_count <= target_remaining_morphs {
+        return 0; // 挿入ノードとして morph を消費しない
+    }
+
+    let needed_non_ignored = digit_morphs_count - target_remaining_morphs;
+    let mut consumed = 0;
+    let mut counted_non_ignored = 0;
+
+    while let Some(m) = morphs.get(morph_idx + consumed) {
+        if !m.is_ignored {
+            if !matches!(
+                m.surface.as_str(),
+                "０" | "１" | "２" | "３" | "４" | "５" | "６" | "７" | "８" | "９" |
+                "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+            ) {
+                break;
+            }
+            counted_non_ignored += 1;
+        }
+        consumed += 1;
+
+        if counted_non_ignored >= needed_non_ignored {
+            break;
+        }
+    }
+
     consumed
 }
 
@@ -820,9 +872,11 @@ impl OpenJTalk {
     ) -> Result<Vec<T::Output>, HaqumeiError> {
         let mut result = Vec::with_capacity(morphs.len());
         let mut morph_idx = 0;
-        let mapping_len = mapping.len();
 
-        for (idx, map) in mapping.into_iter().enumerate() {
+        // 所有権を保持しつつ後方の要素を参照できるようにするため Option でラップする
+        let mut mapping_options: Vec<Option<T>> = mapping.into_iter().map(Some).collect();
+
+        for idx in 0..mapping_options.len() {
             // is_ignored な Morph を先に進めておく
             while let Some(m) = morphs.get(morph_idx) {
                 if m.is_ignored {
@@ -832,6 +886,8 @@ impl OpenJTalk {
                     break;
                 }
             }
+
+            let map = mapping_options[idx].take().unwrap();
 
             // morphs が尽きた場合
             if morph_idx >= morphs.len() {
@@ -846,17 +902,26 @@ impl OpenJTalk {
                 result.push(map.into_exact_match(morph));
                 morph_idx += 1;
             } else if map.word().starts_with(&morph.surface) {
-                // 先頭一致
+                // 先頭一致 (マージ)
                 let mut is_unknown_word = false;
                 let mut matched_len = 0;
+                let mut pre_ignored = Vec::new();
                 let mut internal_ignored = Vec::new();
 
                 while let Some(inner_morph) = morphs.get(morph_idx) {
                     if inner_morph.is_ignored {
-                        internal_ignored.push(T::new_ignored(
-                            inner_morph.surface.clone(),
-                            inner_morph.is_unknown,
-                        ));
+                        // 文字列構成が始まる「前」のスペースは単語の前に出す
+                        if matched_len == 0 {
+                            pre_ignored.push(T::new_ignored(
+                                inner_morph.surface.clone(),
+                                inner_morph.is_unknown,
+                            ));
+                        } else {
+                            internal_ignored.push(T::new_ignored(
+                                inner_morph.surface.clone(),
+                                inner_morph.is_unknown,
+                            ));
+                        }
                         morph_idx += 1;
                         continue;
                     }
@@ -876,16 +941,20 @@ impl OpenJTalk {
                     }
                 }
 
+                result.extend(pre_ignored);
                 result.push(map.into_prefix_match(is_unknown_word));
                 result.extend(internal_ignored);
             } else {
-                // 不一致 (踊り字展開など)
-                // map を into_mismatch で消費する前に、借用して文字列を参照する
+                // 不一致 (踊り字展開や数字展開など)
                 if has_odori_chars(&morph.surface) {
                     morph_idx += consume_odori_morphs(&morphs, morph_idx, map.word());
                 } else {
-                    morph_idx +=
-                        consume_mismatched_morphs(&morphs, morph_idx, mapping_len - idx - 1);
+                    morph_idx += consume_mismatched_morphs(
+                        &morphs,
+                        morph_idx,
+                        map.word(),
+                        &mapping_options[idx + 1..],
+                    );
                 }
 
                 result.push(map.into_mismatch());

@@ -969,6 +969,7 @@ dependencies = [
  "fs4",
  "glob",
  "haqumei-jlabel",
+ "haqumei-kanalizer",
  "haqumei-macros",
  "hex",
  "libc",

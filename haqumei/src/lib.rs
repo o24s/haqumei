@@ -59,6 +59,7 @@ use std::{
 
 use crossbeam_channel::{Sender, bounded};
 use haqumei_jlabel::Label;
+use haqumei_kanalizer::Kanalizer;
 use moka::sync::Cache;
 
 pub use features::NjdFeature;
@@ -78,8 +79,8 @@ use crate::{
     nani_predict::NaniPredictor,
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     postprocess::{
-        modify_acc_after_chaining, modify_filler_accent, process_odori_features, retreat_acc_nuc,
-        vibrato_analysis,
+        modify_acc_after_chaining, modify_filler_accent, predict_kana_english,
+        process_odori_features, retreat_acc_nuc, vibrato_analysis,
     },
     utils::default_is_non_pause_symbol,
     word_phoneme::WordPhonemeProsody,
@@ -91,6 +92,9 @@ static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|
 static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
+static KANALIZER_CACHE: LazyLock<Cache<String, String>> = LazyLock::new(|| Cache::new(1000));
+static KANALIZER: LazyLock<Mutex<Kanalizer>> =
+    LazyLock::new(|| Mutex::new(Kanalizer::new().expect("Failed to initialize Kanalizer models")));
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 type VibratoTask = (String, Sender<Vec<UnidicFeature>>);
@@ -193,6 +197,11 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub predict_nani: bool,
 
+    /// Kanalizer を使って、英語の読みを予測する。
+    ///
+    /// デフォルトで有効になっています。
+    pub predict_kana_english: bool,
+
     /// Unidic を使って、漢字の読みを修正する。
     /// 有効にした初回実行時には、辞書のダウンロードが発生します。
     ///
@@ -255,6 +264,7 @@ impl Default for HaqumeiOptions {
             normalize_iu: None,
             modify_filler_accent: true,
             predict_nani: true,
+            predict_kana_english: true,
             use_unidic_yomi: false,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
@@ -1022,6 +1032,9 @@ impl Haqumei {
         }
         if options.predict_nani {
             self.predict_nani_reading(&mut njd_features);
+        }
+        if options.predict_kana_english {
+            predict_kana_english(&mut njd_features);
         }
         if options.use_unidic_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);

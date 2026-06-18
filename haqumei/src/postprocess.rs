@@ -3,15 +3,20 @@ mod utils;
 use std::borrow::Cow;
 use std::ops::Range;
 
+use haqumei_kanalizer::{ConvertOptions, MaxLength};
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
-    Haqumei, IuPronunciation, NjdFeature, OpenJTalk, UnicodeNormalization, VIBRATO_CACHE,
+    Haqumei, IuPronunciation, KANALIZER, KANALIZER_CACHE, NjdFeature, OpenJTalk,
+    UnicodeNormalization, VIBRATO_CACHE,
     data::MULTI_READ_KANJI_LIST,
     errors::HaqumeiError,
     features::UnidicFeature,
-    utils::{is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana, split_kana_mora},
+    utils::{
+        count_mora, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
+        split_kana_mora,
+    },
 };
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 
@@ -239,6 +244,275 @@ pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFea
             })
             .collect()
     })
+}
+
+mod english {
+    #[inline(always)]
+    pub const fn is_vowel_fullwidth(c: char) -> bool {
+        matches!(
+            c,
+            'Ａ' | 'Ｅ' | 'Ｉ' | 'Ｏ' | 'Ｕ' | 'Ｙ' | 'ａ' | 'ｅ' | 'ｉ' | 'ｏ' | 'ｕ' | 'ｙ'
+        )
+    }
+
+    #[inline(always)]
+    pub const fn is_aeiou_fullwidth(c: char) -> bool {
+        matches!(
+            c,
+            'Ａ' | 'Ｅ' | 'Ｉ' | 'Ｏ' | 'Ｕ' | 'ａ' | 'ｅ' | 'ｉ' | 'ｏ' | 'ｕ'
+        )
+    }
+
+    #[inline(always)]
+    pub const fn is_consonant_fullwidth(c: char) -> bool {
+        matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ') && !is_vowel_fullwidth(c)
+    }
+
+    /// 持続可能そうな子音 (摩擦音・鼻音・流音など、母音なしで引き伸ばして発音できる子音)
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub const fn is_continuant_fullwidth(c: char) -> bool {
+        matches!(
+            c,
+            'Ｓ' | 'Ｚ' | 'Ｆ' | 'Ｖ' | 'Ｈ' | 'Ｍ' | 'Ｎ' | 'Ｌ' | 'Ｒ' | 'Ｗ'
+            | 'ｓ' | 'ｚ' | 'ｆ' | 'ｖ' | 'ｈ' | 'ｍ' | 'ｎ' | 'ｌ' | 'ｒ' | 'ｗ'
+        )
+    }
+
+    /// 2文字の母音が許容される二重母音かどうか
+    /// 入力は全角小文字である必要があります
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn is_allowed_nucleus2(a: char, b: char) -> bool {
+        matches!(
+            (a, b),
+            ('ａ', 'ｉ') | ('ａ', 'ｙ') | ('ａ', 'ｕ') | ('ａ', 'ｗ') | ('ｅ', 'ａ') |
+            ('ｅ', 'ｅ') | ('ｅ', 'ｉ') | ('ｅ', 'ｙ') | ('ｅ', 'ｕ') | ('ｉ', 'ｅ') |
+            ('ｏ', 'ａ') | ('ｏ', 'ｉ') | ('ｏ', 'ｏ') | ('ｏ', 'ｕ') | ('ｏ', 'ｗ') |
+            ('ｏ', 'ｙ') | ('ｕ', 'ｅ') | ('ｕ', 'ｙ')
+        )
+    }
+
+    /// 2文字の子音が英語のオンセットとして許容されるかどうか
+    /// 入力は全角小文字である必要があります
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn is_allowed_onset2(a: char, b: char) -> bool {
+        matches!(
+            (a, b),
+            ('ｂ', 'ｌ') | ('ｂ', 'ｒ') | ('ｃ', 'ｌ') | ('ｃ', 'ｒ') | ('ｄ', 'ｒ') |
+            ('ｆ', 'ｌ') | ('ｆ', 'ｒ') | ('ｇ', 'ｌ') | ('ｇ', 'ｒ') | ('ｐ', 'ｌ') |
+            ('ｐ', 'ｒ') | ('ｓ', 'ｃ') | ('ｓ', 'ｋ') | ('ｓ', 'ｌ') | ('ｓ', 'ｍ') |
+            ('ｓ', 'ｎ') | ('ｓ', 'ｐ') | ('ｓ', 'ｔ') | ('ｓ', 'ｗ') | ('ｔ', 'ｒ') |
+            ('ｔ', 'ｗ') | ('ｓ', 'ｈ') | ('ｃ', 'ｈ') | ('ｔ', 'ｈ') | ('ｗ', 'ｈ') |
+            ('ｐ', 'ｈ') | ('ｗ', 'ｒ') | ('ｋ', 'ｎ') | ('ｑ', 'ｕ')
+        )
+    }
+
+    /// 2文字の子音が英語の Rime として許容されるかどうか
+    /// 入力は全角小文字である必要があります
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn is_allowed_rime2(a: char, b: char) -> bool {
+        matches!(
+            (a, b),
+            ('ｃ', 'ｋ') | ('ｃ', 'ｔ') | ('ｆ', 'ｔ') | ('ｌ', 'ｄ') | ('ｌ', 'ｆ') |
+            ('ｌ', 'ｋ') | ('ｌ', 'ｍ') | ('ｌ', 'ｎ') | ('ｌ', 'ｐ') | ('ｌ', 'ｔ') |
+            ('ｍ', 'ｐ') | ('ｎ', 'ｄ') | ('ｎ', 'ｇ') | ('ｎ', 'ｋ') | ('ｎ', 'ｔ') |
+            ('ｐ', 'ｔ') | ('ｒ', 'ｂ') | ('ｒ', 'ｄ') | ('ｒ', 'ｆ') | ('ｒ', 'ｇ') |
+            ('ｒ', 'ｋ') | ('ｒ', 'ｌ') | ('ｒ', 'ｍ') | ('ｒ', 'ｎ') | ('ｒ', 'ｐ') |
+            ('ｒ', 'ｔ') | ('ｓ', 'ｋ') | ('ｗ', 'ｌ')
+        )
+    }
+
+    /// 全角英字の3文字が英語の一音節として一息で発音可能な
+    /// 構成かどうかを判定する。
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn is_pronounceable(chars: [char; 3]) -> bool {
+        let c0 = fullwidth_lower(chars[0]);
+        let c1 = fullwidth_lower(chars[1]);
+        let c2 = fullwidth_lower(chars[2]);
+
+        let is_v0 = is_vowel_fullwidth(c0);
+        let is_v1 = is_vowel_fullwidth(c1);
+        let is_v2 = is_vowel_fullwidth(c2);
+
+        match (is_v0, is_v1, is_v2) {
+            (false, false, false) => false, // ccc
+            (true, false, false) => {
+                (
+                    c1 == c2 &&
+                        // V_0 c_1 c_1 となったとき、 c_1 にくると嬉しそうな子音たち
+                        matches!(c1,
+                            'ｂ' | 'ｄ' | 'ｆ' | 'ｇ' | 'ｈ' | 'ｌ' | 'ｍ' | 'ｎ' | 'ｐ' | 'ｒ' | 'ｓ'
+                       )
+                )   || is_allowed_rime2(c1, c2) // Vcc
+            }
+            (false, true, false) => true,   // cVc: 常に許容する (e.g., cat)
+            (false, false, true) => is_allowed_onset2(c0, c1), // ccV
+            (true, true, false) => is_allowed_nucleus2(c0, c1), // VVc
+            (false, true, true) => is_allowed_nucleus2(c1, c2), // cVV
+            (true, false, true) => true,    // VcV (e.g., use, are, ate, ice, one)
+            (true, true, true) => false,    // VVV: 処理しないものとしておく
+        }
+    }
+
+    /// 全角アルファベットの大文字を全角小文字に変換する
+    #[inline(always)]
+    const fn fullwidth_lower(c: char) -> char {
+        match c {
+            'Ａ'..='Ｚ' => char::from_u32(c as u32 + 0x20).unwrap(),
+            _ => c,
+        }
+    }
+
+    #[inline(always)]
+    pub fn fullwidth_to_halfwidth(chars: Vec<char>) -> String {
+        chars
+            .into_iter()
+            .map(|c| match c {
+                '\u{FF21}'..='\u{FF3A}' | '\u{FF41}'..='\u{FF5A}' => {
+                    char::from_u32(c as u32 - 0xFEE0).unwrap()
+                }
+                _ => c,
+            })
+            .collect()
+    }
+}
+
+/// 1字アルファベット: 処理しない
+/// 2字アルファベット: 子音 + A E I O U Y または A I O U + 子音 または A I O U + A I O U
+///                 のときだけ処理、それ以外はアクロニムとみなしておく
+/// 3字アルファベット: 発音可能かどうかをもとに、処理するかどうかを決定する
+/// n字アルファベット: A E I O U Y を含まない文字のとき、処理しない
+#[rustfmt::skip]
+#[inline(always)]
+fn should_use_kanalizer(chars: &[char]) -> bool {
+    if chars.len() == 1 {
+        return false;
+    } else if chars.len() == 2 {
+        return (
+            english::is_consonant_fullwidth(chars[0])
+                && english::is_vowel_fullwidth(chars[1])
+        ) || (
+            english::is_aeiou_fullwidth(chars[0])
+            && english::is_consonant_fullwidth(chars[1])
+        ) || (
+            english::is_aeiou_fullwidth(chars[0]) && english::is_aeiou_fullwidth(chars[1])
+        );
+    } else if chars.len() == 3 {
+        let has_vowel = chars.iter().any(|&c| english::is_vowel_fullwidth(c));
+
+        if !has_vowel {
+            return (chars[1] == chars[2]) && english::is_continuant_fullwidth(chars[1]);
+        }
+
+        return english::is_pronounceable([chars[0], chars[1], chars[2]]);
+    }
+
+    chars.iter().any(|c| english::is_vowel_fullwidth(*c))
+}
+
+/// 自動的に `read`, `pron` がアルファベット読みになってしまう英語のカタカナ読みを推定する。
+///
+/// "IT" は辞書に拾われ、pos == "名詞" になる一方で、"it" は "i" と "t" と分かれた
+/// pos_group1 == "アルファベット" の `NjdFeature` になってしまう。
+/// そこで、連続するアルファベットを結合し、条件を満たすものを `Kanalizer` に通している。
+pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
+    let mut i = 0;
+    while i < njd_features.len() {
+        if njd_features[i].pos != "フィラー" && njd_features[i].pos_group1 != "アルファベット"
+        {
+            i += 1;
+            continue;
+        }
+
+        if njd_features[i]
+            .string
+            .chars()
+            .any(|c| !matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
+        {
+            i += 1;
+            continue;
+        }
+
+        if njd_features[i].pos_group1 == "アルファベット"
+            && njd_features
+                .get(i + 1)
+                .is_some_and(|f| f.pos_group1 != "アルファベット")
+        {
+            i += 1;
+            continue;
+        }
+
+        let mut end = i + 1;
+        while end < njd_features.len() && njd_features[end].pos_group1 == "アルファベット" {
+            end += 1;
+        }
+
+        if end - i > 1 {
+            let mut string = String::new();
+            let mut orig = String::new();
+            let mut read = String::new();
+            let mut pron = String::new();
+            let mut mora_size = 0;
+
+            for f in &njd_features[i..end] {
+                string.push_str(&f.string);
+                orig.push_str(&f.orig);
+                read.push_str(&f.read);
+                pron.push_str(&f.pron);
+                mora_size += f.mora_size;
+            }
+
+            njd_features[i].string = string;
+            njd_features[i].orig = orig;
+            njd_features[i].read = read;
+            njd_features[i].pron = pron;
+            njd_features[i].mora_size = mora_size;
+
+            njd_features.drain(i + 1..end);
+        }
+
+        let f = &mut njd_features[i];
+
+        if let Some(kana) = KANALIZER_CACHE.get(&f.string) {
+            f.read = kana.clone();
+            f.pron = kana;
+            f.acc = 0;
+
+            i += 1;
+            continue;
+        }
+
+        let chars: Vec<char> = f.string.chars().collect();
+
+        if should_use_kanalizer(&chars) {
+            let mut kanalizer = KANALIZER.lock().unwrap();
+
+            let options = ConvertOptions {
+                max_length: MaxLength::Fixed(
+                    std::num::NonZeroUsize::new(f.string.len() * 2).unwrap(),
+                ),
+                error_on_incomplete: false,
+                ..Default::default()
+            };
+
+            if let Ok(kana) =
+                kanalizer.convert_with_options(&english::fullwidth_to_halfwidth(chars), &options)
+            {
+                KANALIZER_CACHE.insert(f.string.clone(), kana.clone());
+
+                f.read = kana.clone();
+                f.mora_size = count_mora(&kana) as i32;
+                f.pron = kana;
+                f.acc = 0;
+            }
+        }
+
+        i += 1;
+    }
 }
 
 impl Haqumei {
@@ -735,8 +1009,8 @@ fn apply_odoriji_logic(
     }
 
     let mora_val = prev_mora_size / prev_read_mora.len() as i32;
-    let target_read = prev_read_mora.last().unwrap().clone();
-    let target_pron = prev_pron_mora.last().unwrap_or(&target_read).clone();
+    let target_read = prev_read_mora.last().unwrap();
+    let target_pron = prev_pron_mora.last().unwrap_or(target_read);
 
     let mut is_forced_voiced = false;
     for c in odori_feature.orig.chars().peekable() {
@@ -774,28 +1048,28 @@ fn apply_odoriji_logic(
     if is_forced_voiced {
         // 濁音の踊り字 (ゞ, ヾ) -> 強制的に濁音化
         odori_feature.read = TO_DAKUON
-            .get(&target_read)
+            .get(target_read)
             .copied()
-            .unwrap_or(&target_read)
+            .unwrap_or(target_read)
             .to_string();
         odori_feature.pron = TO_DAKUON
-            .get(&target_pron)
+            .get(target_pron)
             .copied()
-            .unwrap_or(&target_pron)
+            .unwrap_or(target_pron)
             .to_string();
     } else {
         // 清音の踊り字 (ゝ, ヽ)
         if is_single_grapheme_mora {
             // 対象が単一文字の場合 -> 清音化
             odori_feature.read = TO_SEION
-                .get(&target_read)
+                .get(target_read)
                 .copied()
-                .unwrap_or(&target_read)
+                .unwrap_or(target_read)
                 .to_string();
             odori_feature.pron = TO_SEION
-                .get(&target_pron)
+                .get(target_pron)
                 .copied()
-                .unwrap_or(&target_pron)
+                .unwrap_or(target_pron)
                 .to_string();
         } else {
             // 対象が拗音などの複数文字の場合 -> 濁点を維持する

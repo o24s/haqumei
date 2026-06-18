@@ -47,6 +47,7 @@ crossbeam-channel.workspace = true
 dirs.workspace = true
 fs4.workspace = true
 haqumei-jlabel.workspace = true
+haqumei-kanalizer.workspace = true
 haqumei-macros.workspace = true
 hex.workspace = true
 libc.workspace = true

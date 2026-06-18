@@ -97,22 +97,41 @@ pub(crate) const fn is_small_kana(c: char) -> bool {
 }
 
 /// 文字列をモーラ単位 (小書き文字を前の文字に結合) で分割する
-#[inline(always)]
-pub(crate) fn split_kana_mora(text: &str) -> Vec<String> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut result = Vec::new();
+#[inline]
+pub(crate) fn split_kana_mora(text: &str) -> Vec<&str> {
+    let indices: Vec<(usize, char)> = text.char_indices().collect();
+    let mut result = Vec::with_capacity(indices.len());
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if i + 1 < chars.len() && is_small_kana(chars[i + 1]) {
-            result.push(format!("{}{}", c, chars[i + 1]));
+    while i < indices.len() {
+        let (start, c) = indices[i];
+        if i + 1 < indices.len() && is_small_kana(indices[i + 1].1) {
+            let end = indices
+                .get(i + 2)
+                .map(|&(idx, _)| idx)
+                .unwrap_or(text.len());
+            result.push(&text[start..end]);
             i += 2;
         } else {
-            result.push(c.to_string());
+            let end = start + c.len_utf8();
+            result.push(&text[start..end]);
             i += 1;
         }
     }
     result
+}
+
+/// 文字列のモーラ数を数える。
+#[inline]
+pub(crate) fn count_mora(text: &str) -> usize {
+    let mut count = 0;
+    let mut chars = text.chars().peekable();
+    while chars.next().is_some() {
+        if chars.peek().is_some_and(|&next| is_small_kana(next)) {
+            chars.next();
+        }
+        count += 1;
+    }
+    count
 }
 
 /// 文字列の中に踊り字が含まれているかどうか
