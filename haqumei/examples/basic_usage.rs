@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}\n", phoneme_str);
 
     // Convert to Katakana reading
-    let kana = haqumei.g2p_kana(text)?;
+    let kana = haqumei.g2k(text)?;
     println!("Katakana reading:");
     println!("{}\n", kana);
 
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let phonemes2 = haqumei.g2p(text2)?;
     println!("Phonemes: {}", phonemes2.join(" "));
 
-    let kana2 = haqumei.g2p_kana(text2)?;
+    let kana2 = haqumei.g2k(text2)?;
     println!("Katakana: {}", kana2);
 
     Ok(())

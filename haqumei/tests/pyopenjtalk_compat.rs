@@ -50,7 +50,7 @@ mod tests {
     }
 
     #[test]
-    fn test_g2p_kana() {
+    fn test_g2k() {
         let mut haqumei = Haqumei::new().unwrap();
         let cases = vec![
             ("", ""),
@@ -63,7 +63,7 @@ mod tests {
         ];
 
         for (text, expected) in cases {
-            let p = haqumei.g2p_kana(text).unwrap();
+            let p = haqumei.g2k(text).unwrap();
             assert_eq!(p, expected, "Failed for text: {}", text);
         }
     }
@@ -121,7 +121,7 @@ mod tests {
         ];
 
         for (text, expected) in cases {
-            let p = haqumei.g2p_kana(text).unwrap();
+            let p = haqumei.g2k(text).unwrap();
             assert_eq!(p, expected, "Nani model check failed for: {}", text);
         }
     }
@@ -785,10 +785,10 @@ mod tests {
     #[test]
     fn test_odoriji_voiced_and_voiceless_conversion() {
         let mut haqumei = Haqumei::new().unwrap();
-        assert_eq!(haqumei.g2p_kana("がゝ").unwrap(), "ガカ");
-        assert_eq!(haqumei.g2p_kana("バヽ").unwrap(), "バハ");
-        assert_eq!(haqumei.g2p_kana("かゞ").unwrap(), "カガ");
-        assert_eq!(haqumei.g2p_kana("ハヾ").unwrap(), "ハバ");
+        assert_eq!(haqumei.g2k("がゝ").unwrap(), "ガカ");
+        assert_eq!(haqumei.g2k("バヽ").unwrap(), "バハ");
+        assert_eq!(haqumei.g2k("かゞ").unwrap(), "カガ");
+        assert_eq!(haqumei.g2k("ハヾ").unwrap(), "ハバ");
     }
 
     #[test]

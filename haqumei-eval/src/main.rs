@@ -327,7 +327,7 @@ fn evaluate_kana_dataset(
     for (i, &text) in texts.iter().enumerate() {
         let gold = gold_kanas.get(i).ok_or("gold kana missing")?;
 
-        let pred_per_word = haqumei.g2p_kana_per_word(text)?;
+        let pred_per_word = haqumei.g2k_per_word(text)?;
         let mut pred = String::new();
         for part in pred_per_word {
             pred.push_str(&part);

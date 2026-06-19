@@ -362,14 +362,14 @@ fn process_line(
             }
         }
         OutputMode::Kana => {
-            let res = haqumei.g2p_kana(text)?;
+            let res = haqumei.g2k(text)?;
             match format {
                 OutputFormat::Text => writeln!(writer, "{}", res)?,
                 OutputFormat::Json => write_json(writer, &res)?,
             }
         }
         OutputMode::KanaPerWord => {
-            let res = haqumei.g2p_kana_per_word(text)?;
+            let res = haqumei.g2k_per_word(text)?;
             match format {
                 OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
                 OutputFormat::Json => write_json(writer, &res)?,

@@ -432,7 +432,7 @@ impl OpenJTalk {
     /// 入力テキストをカタカナに変換します。
     ///
     /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
-    pub fn g2p_kana(&mut self, text: &str) -> Result<String, HaqumeiError> {
+    pub fn g2k(&mut self, text: &str) -> Result<String, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
@@ -462,7 +462,7 @@ impl OpenJTalk {
     }
 
     /// 入力テキストを単語（形態素）ごとのカタカナリストに変換します。
-    pub fn g2p_kana_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+    pub fn g2k_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         if text.is_empty() {
             return Ok(Vec::new());
         }
@@ -1381,12 +1381,12 @@ impl OpenJTalk {
 
     impl_batch_method_openjtalk!(
         /// カタカナ変換のバッチ処理。
-        g2p_kana_batch => g2p_kana -> String
+        g2k_batch => g2k -> String
     );
 
     impl_batch_method_openjtalk!(
         /// 単語ごとに分割されたカタカナ変換のバッチ処理。
-        g2p_kana_per_word_batch => g2p_kana_per_word -> Vec<String>
+        g2k_per_word_batch => g2k_per_word -> Vec<String>
     );
 
     impl_batch_method_openjtalk!(

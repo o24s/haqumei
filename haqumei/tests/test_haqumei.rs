@@ -243,17 +243,17 @@ mod tests {
     }
 
     #[test]
-    fn test_g2p_kana_revert_long_vowels() {
+    fn test_g2k_revert_long_vowels() {
         let text = "人生は効果的。";
 
         let mut haqumei = Haqumei::new().unwrap();
-        let kana_default = haqumei.g2p_kana(text).unwrap();
+        let kana_default = haqumei.g2k(text).unwrap();
         assert!(kana_default.contains("セー"));
         assert!(kana_default.contains("コーカ"));
         assert!(kana_default.contains("ワ")); // 助詞は「ワ」
 
         haqumei.options.revert_long_vowels = true;
-        let kana_revert = haqumei.g2p_kana(text).unwrap();
+        let kana_revert = haqumei.g2k(text).unwrap();
 
         assert!(kana_revert.contains("セイ"));
         assert!(kana_revert.contains("コウカ"));
@@ -261,39 +261,39 @@ mod tests {
     }
 
     #[test]
-    fn test_g2p_kana_revert_yotsugana() {
+    fn test_g2k_revert_yotsugana() {
         let text = "鼻血に気づかず。";
 
         let mut haqumei = Haqumei::new().unwrap();
-        let kana_default = haqumei.g2p_kana(text).unwrap();
+        let kana_default = haqumei.g2k(text).unwrap();
         assert!(kana_default.contains("ハナジ"));
         assert!(kana_default.contains("キズカズ"));
 
         haqumei.options.revert_yotsugana = true;
-        let kana_revert = haqumei.g2p_kana(text).unwrap();
+        let kana_revert = haqumei.g2k(text).unwrap();
 
         assert!(kana_revert.contains("ハナヂ"));
         assert!(kana_revert.contains("キヅカズ"));
     }
 
     #[test]
-    fn test_g2p_kana_use_read_as_pron() {
+    fn test_g2k_use_read_as_pron() {
         let text = "こんにちは、人生。";
 
         let mut haqumei = Haqumei::new().unwrap();
-        let kana_default = haqumei.g2p_kana(text).unwrap();
+        let kana_default = haqumei.g2k(text).unwrap();
         assert!(kana_default.contains("コンニチワ")); // 助詞は「ワ」
         assert!(kana_default.contains("ジンセー")); // 長音化
 
         haqumei.options.use_read_as_pron = true;
-        let kana_read = haqumei.g2p_kana(text).unwrap();
+        let kana_read = haqumei.g2k(text).unwrap();
 
         assert!(kana_read.contains("コンニチハ")); // 助詞が「ハ」のまま
         assert!(kana_read.contains("ジンセイ")); // 長音が「セイ」のまま
     }
 
     #[test]
-    fn test_g2p_kana_combined_selective() {
+    fn test_g2k_combined_selective() {
         let text = "人生は、鼻血に気づかず。";
 
         // 全てを組み合わせて、助詞の「は」だけは「ワ」のままで、
@@ -304,7 +304,7 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        let kana = haqumei.g2p_kana(text).unwrap();
+        let kana = haqumei.g2k(text).unwrap();
 
         assert!(kana.contains("ジンセイ")); // 復元
         assert!(kana.contains("ワ")); // 助詞維持
@@ -316,13 +316,13 @@ mod tests {
     fn test_odoriji_basic_expansion() {
         let mut haqumei = Haqumei::new().unwrap();
 
-        assert_eq!(haqumei.g2p_kana("さゝみ").unwrap(), "ササミ");
+        assert_eq!(haqumei.g2k("さゝみ").unwrap(), "ササミ");
 
-        assert_eq!(haqumei.g2p_kana("いすゞ").unwrap(), "イスズ");
+        assert_eq!(haqumei.g2k("いすゞ").unwrap(), "イスズ");
 
-        assert_eq!(haqumei.g2p_kana("カヽ").unwrap(), "カカ");
+        assert_eq!(haqumei.g2k("カヽ").unwrap(), "カカ");
 
-        assert_eq!(haqumei.g2p_kana("ガヾ").unwrap(), "ガガ");
+        assert_eq!(haqumei.g2k("ガヾ").unwrap(), "ガガ");
     }
 
     #[test]
@@ -331,8 +331,8 @@ mod tests {
 
         // 濁音の後に清音の踊り字が来た場合、清音化されるべき
         // 「がゝ」 -> 「ガカ」
-        assert_eq!(haqumei.g2p_kana("がゝ").unwrap(), "ガカ");
-        assert_eq!(haqumei.g2p_kana("バヽ").unwrap(), "バハ");
+        assert_eq!(haqumei.g2k("がゝ").unwrap(), "ガカ");
+        assert_eq!(haqumei.g2k("バヽ").unwrap(), "バハ");
     }
 
     #[test]
@@ -341,8 +341,8 @@ mod tests {
 
         // 清音の後に濁音の踊り字が来た場合、濁音化されるべき
         // 「かゞ」 -> 「カガ」
-        assert_eq!(haqumei.g2p_kana("かゞ").unwrap(), "カガ");
-        assert_eq!(haqumei.g2p_kana("ハヾ").unwrap(), "ハバ");
+        assert_eq!(haqumei.g2k("かゞ").unwrap(), "カガ");
+        assert_eq!(haqumei.g2k("ハヾ").unwrap(), "ハバ");
     }
 
     #[test]
@@ -351,10 +351,10 @@ mod tests {
 
         // モーラを伴う繰り返し (本来拗音を含むモーラに一の字点がくることは望まれないが)
         // 「じょゝ」 -> 「ジョジョ」
-        assert_eq!(haqumei.g2p_kana("じょゝ").unwrap(), "ジョジョ");
+        assert_eq!(haqumei.g2k("じょゝ").unwrap(), "ジョジョ");
 
         // 「ちゅゞ」 -> 「チュヂュ」 (チ+濁点+ュ)
-        let result = haqumei.g2p_kana("ちゅゞ").unwrap();
+        let result = haqumei.g2k("ちゅゞ").unwrap();
         assert_eq!(result, "チュヂュ");
     }
 
@@ -376,12 +376,12 @@ mod tests {
     fn test_odoriji_invalid_cases() {
         let mut haqumei = Haqumei::new().unwrap();
 
-        let result = haqumei.g2p_kana("ゝ").unwrap();
+        let result = haqumei.g2k("ゝ").unwrap();
         assert_eq!(result, "ゝ");
 
         // 半濁点がついた不正な踊り字（ゝ+゜）
         // 濁音とはみなされず、清音として処理されること
-        assert_eq!(haqumei.g2p_kana("かゝ゜").unwrap(), "カカ゜");
+        assert_eq!(haqumei.g2k("かゝ゜").unwrap(), "カカ゜");
     }
 
     #[test]
@@ -473,20 +473,20 @@ mod tests {
         })
         .unwrap();
 
-        assert!(haqumei.g2p_kana("言う").unwrap().contains("イウ"));
-        assert!(haqumei.g2p_kana("言って").unwrap().contains("イッテ"));
-        assert!(haqumei.g2p_kana("言えば").unwrap().contains("イエバ"));
-        assert!(haqumei.g2p_kana("言おう").unwrap().contains("イオー"));
-        assert!(haqumei.g2p_kana("言わない").unwrap().contains("イワナイ"));
+        assert!(haqumei.g2k("言う").unwrap().contains("イウ"));
+        assert!(haqumei.g2k("言って").unwrap().contains("イッテ"));
+        assert!(haqumei.g2k("言えば").unwrap().contains("イエバ"));
+        assert!(haqumei.g2k("言おう").unwrap().contains("イオー"));
+        assert!(haqumei.g2k("言わない").unwrap().contains("イワナイ"));
 
-        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーイウ"));
+        assert!(haqumei.g2k("こういう事").unwrap().contains("コーイウ"));
         assert!(
             haqumei
-                .g2p_kana("あっという間に")
+                .g2k("あっという間に")
                 .unwrap()
                 .contains("アットイウ")
         );
-        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノイウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノイウ"));
     }
 
     #[test]
@@ -497,20 +497,20 @@ mod tests {
         })
         .unwrap();
 
-        assert!(haqumei.g2p_kana("言う").unwrap().contains("ユウ"));
-        assert!(haqumei.g2p_kana("言って").unwrap().contains("ユッテ"));
-        assert!(haqumei.g2p_kana("言えば").unwrap().contains("ユエバ"));
-        assert!(haqumei.g2p_kana("言おう").unwrap().contains("ユオー"));
-        assert!(haqumei.g2p_kana("言わない").unwrap().contains("ユワナイ"));
+        assert!(haqumei.g2k("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("言って").unwrap().contains("ユッテ"));
+        assert!(haqumei.g2k("言えば").unwrap().contains("ユエバ"));
+        assert!(haqumei.g2k("言おう").unwrap().contains("ユオー"));
+        assert!(haqumei.g2k("言わない").unwrap().contains("ユワナイ"));
 
-        assert!(haqumei.g2p_kana("そういう事").unwrap().contains("ソーユウ"));
+        assert!(haqumei.g2k("そういう事").unwrap().contains("ソーユウ"));
         assert!(
             haqumei
-                .g2p_kana("アッと言う間に")
+                .g2k("アッと言う間に")
                 .unwrap()
                 .contains("アットユウ")
         );
-        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノユウ"));
     }
 
     #[test]
@@ -518,19 +518,19 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
 
         haqumei.options.normalize_iu = Some(IuPronunciation::Iu);
-        assert!(haqumei.g2p_kana("正当な理由").unwrap().contains("リユー"));
-        assert!(haqumei.g2p_kana("髪を結う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("正当な理由").unwrap().contains("リユー"));
+        assert!(haqumei.g2k("髪を結う").unwrap().contains("ユウ"));
 
         haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
-        assert!(haqumei.g2p_kana("正当な理由").unwrap().contains("リユー"));
-        assert!(haqumei.g2p_kana("髪を結う").unwrap().contains("ユウ"));
-        assert!(haqumei.g2p_kana("言い争う").unwrap().contains("イー"));
+        assert!(haqumei.g2k("正当な理由").unwrap().contains("リユー"));
+        assert!(haqumei.g2k("髪を結う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("言い争う").unwrap().contains("イー"));
 
         haqumei.options.normalize_iu = None;
-        let default_kana = haqumei.g2p_kana("というのも").unwrap();
+        let default_kana = haqumei.g2k("というのも").unwrap();
 
         haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
-        let yuu_kana = haqumei.g2p_kana("というのも").unwrap();
+        let yuu_kana = haqumei.g2k("というのも").unwrap();
 
         assert_eq!(default_kana, yuu_kana);
     }
@@ -543,99 +543,69 @@ mod tests {
         })
         .unwrap();
 
-        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーイウ"));
-        assert!(haqumei.g2p_kana("ああいう事").unwrap().contains("アアイウ"));
+        assert!(haqumei.g2k("こういう事").unwrap().contains("コーイウ"));
+        assert!(haqumei.g2k("ああいう事").unwrap().contains("アアイウ"));
 
         assert!(
             haqumei
-                .g2p_kana("あっという間に")
+                .g2k("あっという間に")
                 .unwrap()
                 .contains("アットイウ")
         );
         assert!(
             haqumei
-                .g2p_kana("アッと言う間に")
+                .g2k("アッと言う間に")
                 .unwrap()
                 .contains("アットイウ")
         );
 
-        assert!(haqumei.g2p_kana("君ていう人は").unwrap().contains("テイウ"));
-        assert!(haqumei.g2p_kana("彼という人は").unwrap().contains("トイウ"));
-        assert!(
-            haqumei
-                .g2p_kana("というのも")
-                .unwrap()
-                .contains("トイウノモ")
-        );
+        assert!(haqumei.g2k("君ていう人は").unwrap().contains("テイウ"));
+        assert!(haqumei.g2k("彼という人は").unwrap().contains("トイウ"));
+        assert!(haqumei.g2k("というのも").unwrap().contains("トイウノモ"));
 
-        assert!(
-            haqumei
-                .g2p_kana("誰っていうの")
-                .unwrap()
-                .contains("ッテイウ")
-        );
-        assert!(haqumei.g2p_kana("誰とかいう").unwrap().contains("トカイウ"));
+        assert!(haqumei.g2k("誰っていうの").unwrap().contains("ッテイウ"));
+        assert!(haqumei.g2k("誰とかいう").unwrap().contains("トカイウ"));
 
+        assert!(haqumei.g2k("いうなれば").unwrap().contains("イウナレバ"));
         assert!(
             haqumei
-                .g2p_kana("いうなれば")
-                .unwrap()
-                .contains("イウナレバ")
-        );
-        assert!(
-            haqumei
-                .g2p_kana("言うまでもない")
+                .g2k("言うまでもない")
                 .unwrap()
                 .contains("イウマデモナイ")
         );
 
-        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノイウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノイウ"));
 
         haqumei.options.normalize_iu = Some(IuPronunciation::Yuu);
 
-        assert!(haqumei.g2p_kana("こういう事").unwrap().contains("コーユウ"));
-        assert!(haqumei.g2p_kana("ああいう事").unwrap().contains("アアユウ"));
+        assert!(haqumei.g2k("こういう事").unwrap().contains("コーユウ"));
+        assert!(haqumei.g2k("ああいう事").unwrap().contains("アアユウ"));
         assert!(
             haqumei
-                .g2p_kana("あっという間に")
+                .g2k("あっという間に")
                 .unwrap()
                 .contains("アットユウ")
         );
         assert!(
             haqumei
-                .g2p_kana("アッと言う間に")
+                .g2k("アッと言う間に")
                 .unwrap()
                 .contains("アットユウ")
         );
         dbg!(haqumei.g2p_mapping_detailed("君ていう人は").unwrap());
-        assert!(haqumei.g2p_kana("君ていう人は").unwrap().contains("テユウ"));
-        assert!(haqumei.g2p_kana("彼という人は").unwrap().contains("トユウ"));
+        assert!(haqumei.g2k("君ていう人は").unwrap().contains("テユウ"));
+        assert!(haqumei.g2k("彼という人は").unwrap().contains("トユウ"));
+        assert!(haqumei.g2k("というのも").unwrap().contains("トユウノモ"));
+        assert!(haqumei.g2k("誰っていうの").unwrap().contains("ッテユウ"));
+        assert!(haqumei.g2k("誰とかいう").unwrap().contains("トカユウ"));
+        assert!(haqumei.g2k("いうなれば").unwrap().contains("ユウナレバ"));
         assert!(
             haqumei
-                .g2p_kana("というのも")
-                .unwrap()
-                .contains("トユウノモ")
-        );
-        assert!(
-            haqumei
-                .g2p_kana("誰っていうの")
-                .unwrap()
-                .contains("ッテユウ")
-        );
-        assert!(haqumei.g2p_kana("誰とかいう").unwrap().contains("トカユウ"));
-        assert!(
-            haqumei
-                .g2p_kana("いうなれば")
-                .unwrap()
-                .contains("ユウナレバ")
-        );
-        assert!(
-            haqumei
-                .g2p_kana("言うまでもない")
+                .g2k("言うまでもない")
                 .unwrap()
                 .contains("ユウマデモナイ")
         );
-        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノユウ"));
     }
 
     #[test]
@@ -643,38 +613,32 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
 
         haqumei.options.normalize_iu = None;
-        let default_hiragana_iu = haqumei.g2p_kana("そういう事").unwrap();
-        let default_hiragana_teiu = haqumei.g2p_kana("君ていう人は").unwrap();
-        let default_hiragana_mono = haqumei.g2p_kana("ものいう株主").unwrap();
+        let default_hiragana_iu = haqumei.g2k("そういう事").unwrap();
+        let default_hiragana_teiu = haqumei.g2k("君ていう人は").unwrap();
+        let default_hiragana_mono = haqumei.g2k("ものいう株主").unwrap();
 
         haqumei.options.normalize_iu = Some(IuPronunciation::KanjiYuu);
 
-        assert!(haqumei.g2p_kana("言う").unwrap().contains("ユウ"));
-        assert!(haqumei.g2p_kana("言って").unwrap().contains("ユッテ"));
+        assert!(haqumei.g2k("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("言って").unwrap().contains("ユッテ"));
         assert!(
             haqumei
-                .g2p_kana("アッと言う間に")
+                .g2k("アッと言う間に")
                 .unwrap()
                 .contains("アットユウ")
         );
-        assert!(haqumei.g2p_kana("物言う株主").unwrap().contains("モノユウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノユウ"));
 
-        assert_eq!(haqumei.g2p_kana("そういう事").unwrap(), default_hiragana_iu);
-        assert_eq!(
-            haqumei.g2p_kana("君ていう人は").unwrap(),
-            default_hiragana_teiu
-        );
-        assert_eq!(
-            haqumei.g2p_kana("ものいう株主").unwrap(),
-            default_hiragana_mono
-        );
+        assert_eq!(haqumei.g2k("そういう事").unwrap(), default_hiragana_iu);
+        assert_eq!(haqumei.g2k("君ていう人は").unwrap(), default_hiragana_teiu);
+        assert_eq!(haqumei.g2k("ものいう株主").unwrap(), default_hiragana_mono);
         let default_hiragana_atto = {
             haqumei.options.normalize_iu = None;
-            haqumei.g2p_kana("あっという間に").unwrap()
+            haqumei.g2k("あっという間に").unwrap()
         };
         haqumei.options.normalize_iu = Some(IuPronunciation::KanjiYuu);
         assert_eq!(
-            haqumei.g2p_kana("あっという間に").unwrap(),
+            haqumei.g2k("あっという間に").unwrap(),
             default_hiragana_atto
         );
     }

@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   // カタカナ読みに変換
-  let kana = haqumei.g2p_kana(text)?;
+  let kana = haqumei.g2k(text)?;
   assert_eq!(kana, "コンニチワ、セカイ！");
 
   Ok(())
@@ -135,7 +135,7 @@ print(f"プロソディ付き音素列: {phones}")
 # -> プロソディ付き音素列: ^ k o [ N n i ch i w a _ s e ] k a i ! $
 
 # カタカナ読みに変換
-kana = haqumei.g2p_kana(text)
+kana = haqumei.g2k(text)
 print(f"カタカナ読み: {kana}")
 # -> カタカナ読み: コンニチワ、セカイ！
 ```

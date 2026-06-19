@@ -201,16 +201,16 @@ impl PyOpenJTalk {
         })
     }
 
-    fn g2p_kana(&self, text: &str) -> PyResult<String> {
-        self.inner.lock().unwrap().g2p_kana(text).map_err(to_py_err)
+    fn g2k(&self, text: &str) -> PyResult<String> {
+        self.inner.lock().unwrap().g2k(text).map_err(to_py_err)
     }
 
-    fn g2p_kana_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<String>> {
+    fn g2k_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<String>> {
         py.detach(|| {
             self.inner
                 .lock()
                 .unwrap()
-                .g2p_kana_batch(&texts)
+                .g2k_batch(&texts)
                 .map_err(to_py_err)
         })
     }

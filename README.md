@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(phones, "^ k o [ N n i ch i w a _ s e ] k a i ! $");
 
   // Convert to katakana reading
-  let kana = haqumei.g2p_kana(text)?;
+  let kana = haqumei.g2k(text)?;
   assert_eq!(kana, "コンニチワ、セカイ！");
 
   Ok(())
@@ -135,7 +135,7 @@ print(f"Prosody-annotated phonemes: {phones}")
 # -> Prosody-annotated phonemes: ^ k o [ N n i ch i w a _ s e ] k a i ! $
 
 # Convert to katakana reading
-kana = haqumei.g2p_kana(text)
+kana = haqumei.g2k(text)
 print(f"Katakana reading: {kana}")
 # -> Katakana reading: コンニチワ、セカイ！
 ```
@@ -303,8 +303,8 @@ The output commonly includes the following prosodic symbols:
 | :--- | :--- | :--- |
 | `^` | Beginning of utterance (BOS) | Sentence-initial |
 | `$` | End of utterance (EOS) | Sentence-final |
-| `?` | End of interrogative (？) | Sentence-medial / Sentence-final |
-| `!` | End of exclamation (Custom extension) | Sentence-medial / Sentence-final |
+| `?` | End of interrogative (？) | Sentence-medial |
+| `!` | End of exclamation (Custom extension) | Sentence-medial |
 | `_` | Pause / Comma (、) | Sentence-medial |
 | `#` | Accent phrase boundary | Sentence-medial |
 | `{...}` | Unknown word | Sentence-medial |

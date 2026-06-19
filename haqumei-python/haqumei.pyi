@@ -488,7 +488,7 @@ class OpenJTalk:
         ...
 
 
-    def g2p_kana(self, text: str) -> str:
+    def g2k(self, text: str) -> str:
         """テキストをカタカナ読みに変換します。
 
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
@@ -501,7 +501,7 @@ class OpenJTalk:
         """
         ...
 
-    def g2p_kana_per_word(self, text: str) -> List[str]:
+    def g2k_per_word(self, text: str) -> List[str]:
         """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
@@ -693,7 +693,7 @@ class OpenJTalk:
         """
         ...
 
-    def g2p_kana_batch(self, texts: List[str]) -> List[str]:
+    def g2k_batch(self, texts: List[str]) -> List[str]:
         """複数のテキストをカタカナ読みに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -706,7 +706,7 @@ class OpenJTalk:
         """
         ...
 
-    def g2p_kana_per_word_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2k_per_word_batch(self, texts: List[str]) -> List[List[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -903,7 +903,7 @@ class Haqumei:
     Examples:
 
     >>> haqumei = Haqumei()
-    >>> haqumei.g2p_kana("何を言っても何の問題もありません。")
+    >>> haqumei.g2k("何を言っても何の問題もありません。")
     'ナニヲイッテモナンノモンダイモアリマセン。'
     """
 
@@ -1006,7 +1006,7 @@ class Haqumei:
         """
         ...
 
-    def g2p_kana(self, text: str) -> str:
+    def g2k(self, text: str) -> str:
         """テキストをカタカナ読みに変換します。
 
         Args:
@@ -1017,7 +1017,7 @@ class Haqumei:
         """
         ...
 
-    def g2p_kana_per_word(self, text: str) -> List[str]:
+    def g2k_per_word(self, text: str) -> List[str]:
         """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
@@ -1205,7 +1205,7 @@ class Haqumei:
         """
         ...
 
-    def g2p_kana_batch(self, texts: List[str]) -> List[str]:
+    def g2k_batch(self, texts: List[str]) -> List[str]:
         """カタカナ変換のバッチ処理。
 
         Args:
@@ -1216,7 +1216,7 @@ class Haqumei:
         """
         ...
 
-    def g2p_kana_per_word_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2k_per_word_batch(self, texts: List[str]) -> List[List[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
