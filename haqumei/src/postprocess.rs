@@ -379,6 +379,18 @@ mod english {
             })
             .collect()
     }
+
+    pub fn to_halfwidth_lower_string(s: &str) -> String {
+        s.chars()
+            .map(|c| match c {
+                'Ａ'..='Ｚ' => char::from_u32(c as u32 - 0xFEE0 + 0x20).unwrap(),
+                'ａ'..='ｚ' => char::from_u32(c as u32 - 0xFEE0).unwrap(),
+                'A'..='Z' => c.to_ascii_lowercase(),
+                '０'..='９' => char::from_u32(c as u32 - 0xFEE0).unwrap(),
+                _ => c,
+            })
+            .collect()
+    }
 }
 
 /// 1字アルファベット: 処理しない
@@ -422,8 +434,10 @@ fn should_use_kanalizer(chars: &[char]) -> bool {
 pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
     let mut i = 0;
     while i < njd_features.len() {
-        if njd_features[i].pos != "フィラー" && njd_features[i].pos_group1 != "アルファベット"
-        {
+        let is_filler = njd_features[i].pos == "フィラー";
+        let is_alphabet = njd_features[i].pos_group1 == "アルファベット";
+
+        if !is_filler && !is_alphabet {
             i += 1;
             continue;
         }
@@ -437,18 +451,19 @@ pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
             continue;
         }
 
-        if njd_features[i].pos_group1 == "アルファベット"
-            && njd_features
-                .get(i + 1)
-                .is_some_and(|f| f.pos_group1 != "アルファベット")
-        {
-            i += 1;
-            continue;
-        }
-
         let mut end = i + 1;
-        while end < njd_features.len() && njd_features[end].pos_group1 == "アルファベット" {
-            end += 1;
+
+        // "アルファベット" (バラバラの文字) の場合のみ、後続のアルファベットをマージする。
+        // "フィラー" (未知英単語) の場合は既に1つの単語としてまとまっているのでマージしない。
+        if is_alphabet {
+            while end < njd_features.len() && njd_features[end].pos_group1 == "アルファベット"
+            {
+                end += 1;
+            }
+            if end - i == 1 {
+                i += 1;
+                continue;
+            }
         }
 
         if end - i > 1 {
@@ -580,6 +595,68 @@ impl Haqumei {
             }
 
             current_char_pos += node_char_len;
+        }
+    }
+}
+
+pub(crate) fn modify_english_two_english(text: &str, njd_features: &mut [NjdFeature]) {
+    if njd_features.len() < 3 {
+        return;
+    }
+
+    #[inline(always)]
+    fn is_all_alphabet(s: &str) -> bool {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'A'..='Z' | 'a'..='z'))
+    }
+
+    let mut text_lower_cache: Option<String> = None;
+
+    for i in 1..njd_features.len() - 1 {
+        let curr = &njd_features[i];
+
+        let is_two = curr.pos_group1 == "数"
+            && curr.pos == "名詞"
+            && (curr.orig == "二" || curr.orig == "２");
+
+        if !is_two {
+            continue;
+        }
+
+        let prev_orig = &njd_features[i - 1].orig;
+        let next_orig = &njd_features[i + 1].orig;
+
+        if !is_all_alphabet(prev_orig) || !is_all_alphabet(next_orig) {
+            continue;
+        }
+
+        let text_lower =
+            text_lower_cache.get_or_insert_with(|| english::to_halfwidth_lower_string(text));
+
+        let prev_half = english::to_halfwidth_lower_string(prev_orig);
+        let next_half = english::to_halfwidth_lower_string(next_orig);
+
+        let pattern = format!("{}2{}", prev_half, next_half);
+
+        if text_lower.contains(&pattern) {
+            let is_single_both = prev_orig.chars().count() == 1 && next_orig.chars().count() == 1;
+
+            let curr_mut = &mut njd_features[i];
+
+            curr_mut.string = "２".to_string();
+            curr_mut.orig = "２".to_string();
+
+            if is_single_both {
+                curr_mut.read = "ツー".to_string();
+                curr_mut.pron = "ツー".to_string();
+            } else {
+                curr_mut.read = "トゥー".to_string();
+                curr_mut.pron = "トゥー".to_string();
+            }
+
+            curr_mut.mora_size = 2;
+            curr_mut.acc = 1; // 頭高型
         }
     }
 }

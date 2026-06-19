@@ -18,7 +18,7 @@ mod tests {
 叙々々々々々々苑々々様々々要所々々々々々槇野々々々散々々\
 ２0１８ Oｐeｎ ＪTaｌｋ　１．１１\
 ！？！？！？！？ー！￥／？ー！？！？\
-CPU it It IT ああ aaー allあ\
+CPU it It IT ああ aaー allあ haqumei g2ｐ\
 ";
 
     #[test]
@@ -148,6 +148,12 @@ CPU it It IT ああ aaー allあ\
             ("\u{3000}", vec!["sp"]),
             ("ａｌｌ", vec!["o", "o", "r", "u"]),
             ("あ", vec!["a"]),
+            ("\u{3000}", vec!["sp"]),
+            ("ｈａｑｕｍｅｉ", vec!["h", "a", "k", "u", "m", "e", "i"]),
+            ("\u{3000}", vec!["sp"]),
+            ("ｇ", vec!["j", "i", "i"]),
+            ("２", vec!["ts", "u", "u"]),
+            ("ｐ", vec!["p", "i", "i"]),
         ];
 
         let result = haqumei.g2p_mapping(text).unwrap();
@@ -448,6 +454,81 @@ CPU it It IT ああ aaー allあ\
         ];
 
         assert_eq!(result, expected);
+    }
+
+    // thanks と g が結合しないことを確認する
+    #[test]
+    fn test_mapping_thanks_g2p() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "thanks g2p";
+
+        let result = haqumei.g2p_mapping(text).unwrap();
+        let result: Vec<(&str, Vec<&str>)> = result
+            .iter()
+            .map(|d| {
+                (
+                    d.word.as_str(),
+                    d.phonemes.iter().map(|s| s.as_str()).collect(),
+                )
+            })
+            .collect();
+
+        let expected = vec![
+            ("ｔｈａｎｋｓ", vec!["s", "a", "N", "k", "u", "s", "u"]),
+            ("\u{3000}", vec!["sp"]),
+            ("ｇ", vec!["j", "i", "i"]),
+            ("２", vec!["ts", "u", "u"]),
+            ("ｐ", vec!["p", "i", "i"]),
+        ];
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_mapping_english_two_english() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        let text1 = "g2p";
+        let result1 = haqumei.g2p_mapping(text1).unwrap();
+        let mapped1: Vec<(&str, Vec<&str>)> = result1
+            .iter()
+            .map(|d| {
+                (
+                    d.word.as_str(),
+                    d.phonemes.iter().map(|s| s.as_str()).collect(),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            mapped1,
+            vec![
+                ("ｇ", vec!["j", "i", "i"]),
+                ("２", vec!["ts", "u", "u"]),
+                ("ｐ", vec!["p", "i", "i"]),
+            ]
+        );
+
+        let text2 = "text2video";
+        let result2 = haqumei.g2p_mapping(text2).unwrap();
+        let mapped2: Vec<(&str, Vec<&str>)> = result2
+            .iter()
+            .map(|d| {
+                (
+                    d.word.as_str(),
+                    d.phonemes.iter().map(|s| s.as_str()).collect(),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            mapped2,
+            vec![
+                ("ｔｅｘｔ", vec!["t", "e", "k", "I", "s", "u", "t", "o"]),
+                ("２", vec!["t", "u", "u"]),
+                ("ｖｉｄｅｏ", vec!["b", "i", "d", "e", "o"]),
+            ]
+        );
     }
 
     #[test]
