@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! Structures, parser, and serializer for extended HTS-style full-context labels
 //!
