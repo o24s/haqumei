@@ -35,11 +35,10 @@
 
 ## Features
 
-- **Phoneme <-> Word mapping:** Provides phoneme-to-word alignment by linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`).  
-  This capability is not available in Open JTalk (`pyopenjtalk`). (See [Advanced Features](#advanced-features))
-- **Prosody Information Retrieval:** Provides phoneme sequences enriched with prosodic symbols as well as lossless mapping to surface forms (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
+- **Phoneme <-> Word mapping:** Provides detailed mappings linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`), which were previously unavailable. (See [Advanced Features](#advanced-features))
+- **Prosody Information Retrieval:** Provides phoneme sequences enriched with prosodic symbols as well as near-lossless mappings to surface forms (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
 - **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
-- **Accuracy:** Improves accuracy by incorporating many techniques implemented in [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
+- **Accuracy:** Improves accuracy by incorporating English pronunciation estimation via `haqumei-kanalizer` and other corrections, alongside various techniques from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
 - **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`) and a detailed list including unknown word information (`g2p_detailed`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
 
@@ -555,11 +554,12 @@ Haqumei, excluding `haqumei-jlabel` and `haqumei-kanalizer`, is distributed unde
 
 ## Acknowledgements
 
-The overall design and API of `haqumei` are inspired by `pyopenjtalk` and its highly improved fork, `pyopenjtalk-plus`.
+The fundamental design and API of `haqumei` are inspired by `pyopenjtalk` and its highly improved fork, `pyopenjtalk-plus`.
+In addition, some implementations are based on `jlabel` and `kanalizer` to improve usability and accuracy.
 
 - pyopenjtalk: Copyright (c) 2018 Ryuichi Yamamoto
 - pyopenjtalk-plus: Copyright (c) 2023 tsukumijima
-- jlabel: Copyright (c) 2024 by JPreprocess Team
+- jlabel: Copyright (c) 2024 JPreprocess Team
 - kanalizer: Copyright (c) 2025 VOICEVOX
 
 We are deeply grateful to the authors and contributors of these foundational projects.

@@ -36,10 +36,10 @@
 
 ## 特徴 (Features)
 
-- Phoneme <-> Word mapping: Open JTalk (`pyopenjtalk`) に実装されていない、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
-- プロソディ情報の取得: プロソディ記号付き音素列および、表層形に対してロスレスなマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
+- Phoneme <-> Word mapping: 従来は取得できなかった、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
+- プロソディ情報の取得: プロソディ記号付き音素列および、表層形に対してロスの少ないマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
 - パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
-- 精度: [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
+- 精度: `haqumei-kanalizer` による英単語読み推定やその他の補正に加えて、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
 - 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
 
@@ -571,9 +571,12 @@ Haqumei は、G2P を提供するために、改変された Open JTalk の C/C+
 
 ## 謝辞
 
-`haqumei` の全体的な設計とAPIは、`pyopenjtalk` とその大幅に改善されたフォークである `pyopenjtalk-plus` に触発されています。
+`haqumei` の基礎的な設計とAPIは、`pyopenjtalk` とその大幅に改善されたフォークである `pyopenjtalk-plus` に触発されています。
+また、利便性や精度のために、`jlabel` や `kanalizer` をもとにした実装を行いました。
 
 - pyopenjtalk: Copyright (c) 2018 Ryuichi Yamamoto
 - pyopenjtalk-plus: Copyright (c) 2023 tsukumijima
+- jlabel: Copyright (c) 2024 JPreprocess Team
+- kanalizer: Copyright (c) 2025 VOICEVOX
 
 これらの基礎となるプロジェクトの著者および貢献者の皆様に深く感謝いたします。
