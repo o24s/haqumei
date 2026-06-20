@@ -642,4 +642,117 @@ mod tests {
             default_hiragana_atto
         );
     }
+
+    /// 半角・全角、大文字・小文字を無視してアルファベット比較するヘルパー関数
+    fn match_word(surface: &str, target: &str) -> bool {
+        let normalize = |s: &str| -> String {
+            s.chars()
+                .map(|c| match c {
+                    'Ａ'..='Ｚ' => char::from_u32(c as u32 - 0xFEE0 + 0x20).unwrap(),
+                    'ａ'..='ｚ' => char::from_u32(c as u32 - 0xFEE0).unwrap(),
+                    'A'..='Z' => c.to_ascii_lowercase(),
+                    _ => c,
+                })
+                .collect()
+        };
+        normalize(surface) == normalize(target)
+    }
+
+    #[test]
+    fn test_modify_english_words_a_he_she_positive() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // 補正が適用されるケース
+        // (入力テキスト, 対象単語, 期待される読み)
+        let positive_cases = [
+            ("This is a pen.", "a", "ア"),
+            ("A boy is here.", "A", "ア"),
+            ("It is ａ　ｃａｒ", "ａ", "ア"), // 全角 + 全角スペース
+            ("he is a doctor", "he", "ヒー"),
+            ("He was", "He", "ヒー"),
+            ("ＨＥ　ｗａｓ", "ＨＥ", "ヒー"), // 全角大文字 + 全角スペース
+            ("she is a nurse", "she", "シー"),
+            ("She smiles", "She", "シー"),
+            ("ｓｈｅ　ｉｓ", "ｓｈｅ", "シー"), // 全角小文字 + 全角スペース
+        ];
+
+        for (text, target, expected_read) in positive_cases {
+            let details = haqumei.g2p_mapping_detailed(text).unwrap();
+
+            let matched = details.into_iter().find(|d| match_word(&d.word, target));
+            assert!(
+                matched.is_some(),
+                "Word '{}' not found in text: {}",
+                target,
+                text
+            );
+
+            let detail = matched.unwrap();
+            assert_eq!(
+                detail.read, expected_read,
+                "Positive case failed on text: '{}', word: '{}'",
+                text, target
+            );
+        }
+    }
+
+    #[test]
+    fn test_modify_english_words_a_he_she_negative() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // 補正されないケース
+        // (入力テキスト, 対象単語, 期待されるデフォルトの読み)
+        let negative_cases = [
+            ("aペン", "a", "エイ"),    // 後続が日本語、スペースなし
+            ("a ペン", "a", "エイ"),   // 後続が日本語、スペースあり
+            ("heは", "he", "ヘ"),      // Kanalizer による処理で「ヘ」
+            ("he は", "he", "ヘ"),     // 同上
+            ("sheが", "she", "シェ"),  // Kanalizer による処理で「シェ」
+            ("she が", "she", "シェ"), // 同上
+            ("a, b", "a", "エイ"),     // 後続が記号 (アルファベット以外)
+            ("He.", "He", "ヘ"),       // 文末
+        ];
+
+        for (text, target, expected_read) in negative_cases {
+            let details = haqumei.g2p_mapping_detailed(text).unwrap();
+
+            let matched = details.into_iter().find(|d| match_word(&d.word, target));
+            assert!(
+                matched.is_some(),
+                "Word '{}' not found in text: {}",
+                target,
+                text
+            );
+
+            let detail = matched.unwrap();
+            assert_eq!(
+                detail.read, expected_read,
+                "Negative case failed on text: '{}', word: '{}'",
+                text, target
+            );
+        }
+    }
+
+    #[test]
+    fn test_modify_english_words_multiple_in_sentence() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let text = "he is a boy and she is a girl";
+        let details = haqumei.g2p_mapping_detailed(text).unwrap();
+
+        let he = details.iter().find(|d| match_word(&d.word, "he")).unwrap();
+        assert_eq!(he.read, "ヒー", "Failed on 'he'");
+
+        // 'a' が2回出現するので、両方「ア」になっているか
+        let a_list: Vec<_> = details
+            .iter()
+            .filter(|d| match_word(&d.word, "a"))
+            .collect();
+        assert_eq!(a_list.len(), 2, "Expected exactly two 'a's");
+        for (i, a) in a_list.into_iter().enumerate() {
+            assert_eq!(a.read, "ア", "Failed on 'a' at index {}", i);
+        }
+
+        let she = details.iter().find(|d| match_word(&d.word, "she")).unwrap();
+        assert_eq!(she.read, "シー", "Failed on 'she'");
+    }
 }

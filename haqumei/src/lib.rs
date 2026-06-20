@@ -79,7 +79,7 @@ use crate::{
     nani_predict::NaniPredictor,
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     postprocess::{
-        modify_acc_after_chaining, modify_english_two_english, modify_filler_accent,
+        modify_acc_after_chaining, modify_english_words, modify_filler_accent,
         predict_kana_english, process_odori_features, retreat_acc_nuc, vibrato_analysis,
     },
     utils::default_is_non_pause_symbol,
@@ -1034,8 +1034,8 @@ impl Haqumei {
             self.predict_nani_reading(&mut njd_features);
         }
         if options.predict_kana_english {
-            modify_english_two_english(text, &mut njd_features);
             predict_kana_english(&mut njd_features);
+            modify_english_words(text, &mut njd_features);
         }
         if options.use_unidic_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);

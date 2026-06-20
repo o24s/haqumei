@@ -509,7 +509,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ]
         );
 
-        let text2 = "text2video";
+        let text2 = "text2video image2 text";
         let result2 = haqumei.g2p_mapping(text2).unwrap();
         let mapped2: Vec<(&str, Vec<&str>)> = result2
             .iter()
@@ -527,6 +527,11 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
                 ("ｔｅｘｔ", vec!["t", "e", "k", "I", "s", "u", "t", "o"]),
                 ("２", vec!["t", "u", "u"]),
                 ("ｖｉｄｅｏ", vec!["b", "i", "d", "e", "o"]),
+                ("\u{3000}", vec!["sp"]),
+                ("ｉｍａｇｅ", vec!["i", "m", "a", "a", "j", "u"]),
+                ("二", vec!["n", "i"]),
+                ("\u{3000}", vec!["sp"]),
+                ("ｔｅｘｔ", vec!["t", "e", "k", "I", "s", "u", "t", "o"]),
             ]
         );
     }

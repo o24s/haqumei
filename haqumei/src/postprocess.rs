@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod tests;
 mod utils;
 
 use std::borrow::Cow;
@@ -246,7 +248,7 @@ pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFea
     })
 }
 
-mod english {
+pub(crate) mod english {
     #[inline(always)]
     pub const fn is_vowel_fullwidth(c: char) -> bool {
         matches!(
@@ -269,13 +271,14 @@ mod english {
     }
 
     /// 持続可能そうな子音 (摩擦音・鼻音・流音など、母音なしで引き伸ばして発音できる子音)
+    /// n は外した方がメリットが大きそうなので、加えていない
     #[rustfmt::skip]
     #[inline(always)]
     pub const fn is_continuant_fullwidth(c: char) -> bool {
         matches!(
             c,
-            'Ｓ' | 'Ｚ' | 'Ｆ' | 'Ｖ' | 'Ｈ' | 'Ｍ' | 'Ｎ' | 'Ｌ' | 'Ｒ' | 'Ｗ'
-            | 'ｓ' | 'ｚ' | 'ｆ' | 'ｖ' | 'ｈ' | 'ｍ' | 'ｎ' | 'ｌ' | 'ｒ' | 'ｗ'
+            'Ｓ' | 'Ｚ' | 'Ｆ' | 'Ｖ' | 'Ｈ' | 'Ｍ' | 'Ｌ' | 'Ｒ' | 'Ｗ'
+            | 'ｓ' | 'ｚ' | 'ｆ' | 'ｖ' | 'ｈ' | 'ｍ' | 'ｌ' | 'ｒ' | 'ｗ'
         )
     }
 
@@ -334,7 +337,7 @@ mod english {
         let c1 = fullwidth_lower(chars[1]);
         let c2 = fullwidth_lower(chars[2]);
 
-        let is_v0 = is_vowel_fullwidth(c0);
+        let is_v0 = is_aeiou_fullwidth(c0);
         let is_v1 = is_vowel_fullwidth(c1);
         let is_v2 = is_vowel_fullwidth(c2);
 
@@ -599,9 +602,38 @@ impl Haqumei {
     }
 }
 
-pub(crate) fn modify_english_two_english(text: &str, njd_features: &mut [NjdFeature]) {
-    if njd_features.len() < 3 {
+pub(crate) fn modify_english_words(text: &str, njd_features: &mut [NjdFeature]) {
+    if njd_features.len() < 2 {
         return;
+    }
+
+    #[inline(always)]
+    fn get_target_word(s: &str) -> Option<&'static str> {
+        let mut chars = s.chars();
+        match chars.next()? {
+            'a' | 'A' | 'ａ' | 'Ａ' => {
+                if chars.next().is_none() {
+                    return Some("a");
+                }
+            }
+            'h' | 'H' | 'ｈ' | 'Ｈ' => {
+                if let Some('e' | 'E' | 'ｅ' | 'Ｅ') = chars.next()
+                    && chars.next().is_none()
+                {
+                    return Some("he");
+                }
+            }
+            's' | 'S' | 'ｓ' | 'Ｓ' => {
+                if let Some('h' | 'H' | 'ｈ' | 'Ｈ') = chars.next()
+                    && let Some('e' | 'E' | 'ｅ' | 'Ｅ') = chars.next()
+                    && chars.next().is_none()
+                {
+                    return Some("she");
+                }
+            }
+            _ => {}
+        }
+        None
     }
 
     #[inline(always)]
@@ -613,50 +645,93 @@ pub(crate) fn modify_english_two_english(text: &str, njd_features: &mut [NjdFeat
 
     let mut text_lower_cache: Option<String> = None;
 
-    for i in 1..njd_features.len() - 1 {
-        let curr = &njd_features[i];
+    for i in 0..njd_features.len() {
+        let curr_orig = &njd_features[i].orig;
 
-        let is_two = curr.pos_group1 == "数"
-            && curr.pos == "名詞"
-            && (curr.orig == "二" || curr.orig == "２");
+        // a / he / she
+        if let Some(word) = get_target_word(curr_orig)
+            && i + 1 < njd_features.len()
+        {
+            let next_orig = &njd_features[i + 1].orig;
 
-        if !is_two {
-            continue;
-        }
+            if is_all_alphabet(next_orig) {
+                let next_half = english::to_halfwidth_lower_string(next_orig);
+                let text_lower = text_lower_cache
+                    .get_or_insert_with(|| english::to_halfwidth_lower_string(text));
 
-        let prev_orig = &njd_features[i - 1].orig;
-        let next_orig = &njd_features[i + 1].orig;
+                let pattern_space = format!("{} {}", word, next_half);
+                let pattern_full_space = format!("{}　{}", word, next_half);
 
-        if !is_all_alphabet(prev_orig) || !is_all_alphabet(next_orig) {
-            continue;
-        }
+                if text_lower.contains(&pattern_space) || text_lower.contains(&pattern_full_space) {
+                    let curr_mut = &mut njd_features[i];
 
-        let text_lower =
-            text_lower_cache.get_or_insert_with(|| english::to_halfwidth_lower_string(text));
-
-        let prev_half = english::to_halfwidth_lower_string(prev_orig);
-        let next_half = english::to_halfwidth_lower_string(next_orig);
-
-        let pattern = format!("{}2{}", prev_half, next_half);
-
-        if text_lower.contains(&pattern) {
-            let is_single_both = prev_orig.chars().count() == 1 && next_orig.chars().count() == 1;
-
-            let curr_mut = &mut njd_features[i];
-
-            curr_mut.string = "２".to_string();
-            curr_mut.orig = "２".to_string();
-
-            if is_single_both {
-                curr_mut.read = "ツー".to_string();
-                curr_mut.pron = "ツー".to_string();
-            } else {
-                curr_mut.read = "トゥー".to_string();
-                curr_mut.pron = "トゥー".to_string();
+                    match word {
+                        "a" => {
+                            curr_mut.read = "ア".to_string();
+                            curr_mut.pron = "ア".to_string();
+                            curr_mut.mora_size = 1;
+                            curr_mut.acc = 0; // 平板型
+                        }
+                        "he" => {
+                            curr_mut.read = "ヒー".to_string();
+                            curr_mut.pron = "ヒー".to_string();
+                            curr_mut.mora_size = 2;
+                            curr_mut.acc = 1; // 頭高型
+                        }
+                        "she" => {
+                            curr_mut.read = "シー".to_string();
+                            curr_mut.pron = "シー".to_string();
+                            curr_mut.mora_size = 2;
+                            curr_mut.acc = 1; // 頭高型
+                        }
+                        _ => unreachable!(),
+                    }
+                }
             }
+        }
 
-            curr_mut.mora_size = 2;
-            curr_mut.acc = 1; // 頭高型
+        if i > 0 && i < njd_features.len() - 1 {
+            let curr = &njd_features[i];
+
+            let is_two = curr.pos_group1 == "数"
+                && curr.pos == "名詞"
+                && (curr.orig == "二" || curr.orig == "２" || curr.orig == "2");
+
+            if is_two {
+                let prev_orig = &njd_features[i - 1].orig;
+                let next_orig = &njd_features[i + 1].orig;
+
+                if is_all_alphabet(prev_orig) && is_all_alphabet(next_orig) {
+                    let text_lower = text_lower_cache
+                        .get_or_insert_with(|| english::to_halfwidth_lower_string(text));
+
+                    let prev_half = english::to_halfwidth_lower_string(prev_orig);
+                    let next_half = english::to_halfwidth_lower_string(next_orig);
+
+                    let pattern = format!("{}2{}", prev_half, next_half);
+
+                    if text_lower.contains(&pattern) {
+                        let is_single_both =
+                            prev_orig.chars().count() == 1 && next_orig.chars().count() == 1;
+
+                        let curr_mut = &mut njd_features[i];
+
+                        curr_mut.string = "２".to_string();
+                        curr_mut.orig = "２".to_string();
+
+                        if is_single_both {
+                            curr_mut.read = "ツー".to_string();
+                            curr_mut.pron = "ツー".to_string();
+                        } else {
+                            curr_mut.read = "トゥー".to_string();
+                            curr_mut.pron = "トゥー".to_string();
+                        }
+
+                        curr_mut.mora_size = 2;
+                        curr_mut.acc = 1; // 頭高型
+                    }
+                }
+            }
         }
     }
 }
@@ -1158,53 +1233,5 @@ fn apply_odoriji_logic(
     odori_feature.mora_size = mora_val;
     if odori_feature.pos == "記号" {
         set_to_noun(odori_feature);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_modify_acc_after_chaining_mut() {
-        let mut features = [
-            NjdFeature {
-                string: "参り".to_string(),
-                pos: "動詞".to_string(),
-                pos_group1: "自立".to_string(),
-                pos_group2: "*".to_string(),
-                pos_group3: "*".to_string(),
-                ctype: "五段・ラ行".to_string(),
-                cform: "連用形".to_string(),
-                orig: "参る".to_string(),
-                read: "マイリ".to_string(),
-                pron: "マイリ".to_string(),
-                acc: 1,
-                mora_size: 3,
-                chain_rule: "*".to_string(),
-                chain_flag: -1,
-            },
-            NjdFeature {
-                string: "ます".to_string(),
-                pos: "助動詞".to_string(),
-                pos_group1: "*".to_string(),
-                pos_group2: "*".to_string(),
-                pos_group3: "*".to_string(),
-                ctype: "特殊・マス".to_string(),
-                cform: "基本形".to_string(),
-                orig: "ます".to_string(),
-                read: "マス".to_string(),
-                pron: "マス’".to_string(),
-                acc: 1,
-                mora_size: 2,
-                chain_rule: "動詞%F2@1/助詞%F2@1".to_string(),
-                chain_flag: 1,
-            },
-        ];
-
-        modify_acc_after_chaining(&mut features);
-
-        let 参り = features.first().unwrap();
-        assert_eq!(参り.acc, 4);
     }
 }
