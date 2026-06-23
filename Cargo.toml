@@ -27,14 +27,21 @@ env_logger = "0.11.10"
 fs4 = { version = "1.1.0", features = ["sync"] }
 glob = "0.3.3"
 haqumei-jlabel = { version = "0.1.1", path = "haqumei-jlabel" }
-haqumei-kanalizer = { version = "0.1.0", path = "haqumei-kanalizer" }
+haqumei-kanalizer = { version = "0.1.1", path = "haqumei-kanalizer" }
 haqumei-macros = { version = "0.1.2", path = "haqumei-macros" }
 hex = "0.4.3"
 libc = "0.2.186"
 log = "0.4.33"
 moka = { version = "0.12.15", features = ["sync"] }
 ndarray = "0.17.2"
-ort = "=2.0.0-rc.11"
+ort = { version = "2.0.0-rc.11", default-features = false, features = [
+    "copy-dylibs",
+    "download-binaries",
+    "ndarray",
+    "std",
+    "tls-rustls",
+    "tracing",
+] }
 phf = { version = "0.14.0", features = ["macros"] }
 proc-macro2 = "1.0.106"
 pyo3 = { version = "0.29.0", features = ["abi3-py39"] }
