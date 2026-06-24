@@ -169,7 +169,7 @@ unsafe fn run_push_word_state_test(
             let ctype_c = CString::new(*ctype).unwrap();
             let cform_c = CString::new(*cform).unwrap();
 
-            let _ = super::jpcommon_label::JPCommonLabel_push_word(
+            let _ = super::jpcommon_push_word::JPCommonLabel_push_word(
                 label,
                 pron_c.as_ptr(),
                 pos_c.as_ptr(),
@@ -676,7 +676,7 @@ fn run_comparison_test(inputs: &[(&str, &str, &str, &str, i32, i32)]) {
                 *chain,
             );
 
-            let res = super::jpcommon_label::JPCommonLabel_push_word(
+            let res = super::jpcommon_push_word::JPCommonLabel_push_word(
                 r_label,
                 pron_c.as_ptr(),
                 pos_c.as_ptr(),

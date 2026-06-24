@@ -1008,7 +1008,7 @@ impl OpenJTalk {
             while !node.is_null() {
                 let prev_word_tail = (*jp.label).word_tail;
 
-                super::jpcommon_label::JPCommonLabel_push_word(
+                super::jpcommon_push_word::JPCommonLabel_push_word(
                     jp.label,
                     ffi::JPCommonNode_get_pron(node),
                     ffi::JPCommonNode_get_pos(node),

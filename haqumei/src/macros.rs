@@ -1,3 +1,27 @@
+macro_rules! get_ptr {
+    ($ptr:expr, $field:ident) => {
+        {
+            let p = $ptr;
+            if p.is_null() {
+                std::ptr::null_mut()
+            } else {
+                #[allow(unused_unsafe)]
+                unsafe { (*p).$field }
+            }
+        }
+    };
+    ($ptr:expr, $field:ident $(, $rest:ident)+) => {
+        {
+            let p = $ptr;
+            if p.is_null() {
+                std::ptr::null_mut()
+            } else {
+                get_ptr!(unsafe { (*p).$field } $(, $rest)+)
+            }
+        }
+    };
+}
+
 macro_rules! impl_batch_method_haqumei {
     (
         $(#[$meta:meta])*

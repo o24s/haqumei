@@ -1,6 +1,7 @@
 pub mod dictionary;
 mod jpcommon;
 mod jpcommon_label;
+mod jpcommon_push_word;
 mod jpcommon_rule;
 mod mapping;
 mod mecab;
@@ -1262,7 +1263,7 @@ impl OpenJTalk {
 
             let mut node = jp.head;
             while !node.is_null() {
-                jpcommon_label::JPCommonLabel_push_word(
+                jpcommon_push_word::JPCommonLabel_push_word(
                     jp.label,
                     ffi::JPCommonNode_get_pron(node),
                     ffi::JPCommonNode_get_pos(node),
