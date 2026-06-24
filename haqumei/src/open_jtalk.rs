@@ -1,6 +1,7 @@
 pub mod dictionary;
-mod jp_common;
-mod jp_common_label;
+mod jpcommon;
+mod jpcommon_label;
+mod jpcommon_rule;
 mod mapping;
 mod mecab;
 mod model;
@@ -11,7 +12,7 @@ mod tests;
 
 use crate::errors::HaqumeiError;
 use crate::open_jtalk::{
-    jp_common::JpCommon,
+    jpcommon::JpCommon,
     model::MecabModel,
     njd::{Njd, apply_plus_rules, njd_to_features},
 };
@@ -370,7 +371,8 @@ impl OpenJTalk {
         }
 
         let njd_features = self.run_frontend(text.as_ref())?;
-        self.make_label(&njd_features)
+        self.extract_fullcontext_labels(&njd_features)
+            .map(|labels| labels.into_iter().map(|l| l.to_string()).collect())
     }
 
     /// 入力テキストを音素列 (フラットなリスト) に変換します。
@@ -1260,7 +1262,7 @@ impl OpenJTalk {
 
             let mut node = jp.head;
             while !node.is_null() {
-                ffi::JPCommonLabel_push_word(
+                jpcommon_label::JPCommonLabel_push_word(
                     jp.label,
                     ffi::JPCommonNode_get_pron(node),
                     ffi::JPCommonNode_get_pos(node),
@@ -1268,7 +1270,7 @@ impl OpenJTalk {
                     ffi::JPCommonNode_get_cform(node),
                     ffi::JPCommonNode_get_acc(node),
                     ffi::JPCommonNode_get_chain_flag(node),
-                );
+                )?;
 
                 node = (*node).next;
             }

@@ -1017,7 +1017,9 @@ impl Haqumei {
         }
 
         let njd_features = self.run_frontend(text.as_ref())?;
-        self.open_jtalk.make_label(&njd_features)
+        self.open_jtalk
+            .extract_fullcontext_labels(&njd_features)
+            .map(|labels| labels.into_iter().map(|l| l.to_string()).collect())
     }
 
     fn apply_postprocessing(

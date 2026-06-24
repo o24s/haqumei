@@ -1,8 +1,22 @@
-use std::fs::Metadata;
+use std::{
+    ffi::{CStr, c_char},
+    fs::Metadata,
+};
 
 use sha2::{Digest, Sha256};
 
 use crate::NjdFeature;
+
+#[inline(always)]
+pub(crate) unsafe fn ptr_to_str_unchecked<'a>(ptr: *const c_char) -> &'a str {
+    unsafe {
+        if ptr.is_null() {
+            ""
+        } else {
+            std::str::from_utf8_unchecked(CStr::from_ptr(ptr).to_bytes())
+        }
+    }
+}
 
 /// カタカナをひらがなに変換する
 pub fn kata2hira(s: &str) -> String {

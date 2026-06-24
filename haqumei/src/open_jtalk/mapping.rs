@@ -1,3 +1,5 @@
+use rustc_hash::FxHashMap;
+
 use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::phoneme::Phoneme;
@@ -6,8 +8,6 @@ use crate::utils::has_odori_chars;
 use crate::word_phoneme::WordPhonemeProsody;
 use crate::{MecabMorph, OpenJTalk};
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
-
-use std::collections::HashMap;
 
 pub(crate) trait WordPhonemeEntry {
     fn phonemes_mut(&mut self) -> &mut Vec<Phoneme>;
@@ -978,10 +978,10 @@ impl OpenJTalk {
     unsafe fn prepare_jpcommon_label_internal(
         &mut self,
         features: &[NjdFeature],
-    ) -> Result<HashMap<usize, usize>, HaqumeiError> {
+    ) -> Result<FxHashMap<usize, usize>, HaqumeiError> {
         Self::features_to_njd(features, &mut self.njd)?;
-
-        let mut ptr_to_idx = HashMap::with_capacity(features.len());
+        let mut ptr_to_idx =
+            FxHashMap::with_capacity_and_hasher(features.len(), rustc_hash::FxBuildHasher);
 
         unsafe {
             let jp = self.jp_common.inner.as_mut();
@@ -1008,7 +1008,7 @@ impl OpenJTalk {
             while !node.is_null() {
                 let prev_word_tail = (*jp.label).word_tail;
 
-                ffi::JPCommonLabel_push_word(
+                super::jpcommon_label::JPCommonLabel_push_word(
                     jp.label,
                     ffi::JPCommonNode_get_pron(node),
                     ffi::JPCommonNode_get_pos(node),
@@ -1016,7 +1016,7 @@ impl OpenJTalk {
                     ffi::JPCommonNode_get_cform(node),
                     ffi::JPCommonNode_get_acc(node),
                     ffi::JPCommonNode_get_chain_flag(node),
-                );
+                )?;
 
                 // 追加後の末尾のWordポインタ
                 let curr_word_tail = (*jp.label).word_tail;

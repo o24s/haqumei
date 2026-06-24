@@ -65,6 +65,9 @@ pub enum HaqumeiError {
     UnknownPhoneme(String),
 
     #[error(transparent)]
+    JpCommonLabelError(#[from] JpCommonLabelError),
+
+    #[error(transparent)]
     StripPrefixError(#[from] StripPrefixError),
 
     #[error(transparent)]
@@ -88,4 +91,12 @@ impl From<NulError> for HaqumeiError {
             pos,
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum JpCommonLabelError {
+    #[error("Failed to allocate memory for {0}")]
+    AllocationError(&'static str),
+    #[error("Label state is already invalid")]
+    AlreadyInvalid,
 }
