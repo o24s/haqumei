@@ -1,6 +1,6 @@
 [package]
 name = "haqumei-python"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 description = "A Japanese Grapheme-to-Phoneme (G2P) library."
 license = "Apache-2.0"
