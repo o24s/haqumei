@@ -23,8 +23,6 @@ pub(crate) const JPCOMMON_MORA_LIST: &[(&str, &str, Option<&str>)] = &[
     ("シィ", "s", Some("i")),
     ("デェ", "dy", Some("e")),
     ("フュ", "fy", Some("u")),
-    ("クァ", "kw", Some("a")),
-    ("グァ", "gw", Some("a")),
     ("ヮ", "w", Some("a")),
     ("ヴョ", "by", Some("o")),
     ("ヴュ", "by", Some("u")),

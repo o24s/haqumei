@@ -44,6 +44,7 @@ serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
 [dependencies]
 arc-swap.workspace = true
 crossbeam-channel.workspace = true
+daachorse.workspace = true
 dirs.workspace = true
 fs4.workspace = true
 haqumei-jlabel.workspace = true

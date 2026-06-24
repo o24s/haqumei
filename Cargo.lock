@@ -604,6 +604,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "daachorse"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99251f238b74cd219a86fe6ea9328308ebb223fcbb5b8eb5aa400b847a41dded"
+
+[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -948,6 +954,7 @@ dependencies = [
  "bindgen",
  "cc",
  "crossbeam-channel",
+ "daachorse",
  "digest-io",
  "dirs",
  "fs4",

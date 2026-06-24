@@ -6,8 +6,17 @@ use super::jpcommon_rule::*;
 use crate::errors::JpCommonLabelError;
 use crate::ffi;
 use crate::utils::ptr_to_str_unchecked;
-use std::ffi::CString;
+
+use daachorse::{DoubleArrayAhoCorasick, DoubleArrayAhoCorasickBuilder, MatchKind};
 use std::os::raw::c_char;
+use std::sync::OnceLock;
+
+#[derive(Clone, Copy)]
+enum MoraToken {
+    LongVowel,
+    Unvoice,
+    Normal(&'static str, Option<&'static str>), // (ph1, ph2)
+}
 
 /// メモリ確保を行いつつ、エラー時にはロールバックとフラグ更新を行う。
 /// - 要素が1つの場合は単体の Result<Ptr, Error> を返します。
@@ -44,18 +53,44 @@ macro_rules! try_alloc {
 }
 
 #[inline(always)]
-unsafe fn duplicate_str_or_nodata(s: Option<&str>) -> *mut c_char {
-    unsafe {
-        let cstr = match s {
-            Some(s) => CString::new(s).unwrap_or_else(|_| CString::new("*").unwrap()),
-            None => CString::new("*").unwrap(),
-        };
-        let ptr = libc::strdup(cstr.as_ptr());
-        if ptr.is_null() {
-            NODATA.as_ptr() as *mut c_char
-        } else {
-            ptr
+fn get_mora_automaton() -> &'static DoubleArrayAhoCorasick<MoraToken> {
+    static AUTOMATON: OnceLock<DoubleArrayAhoCorasick<MoraToken>> = OnceLock::new();
+
+    AUTOMATON.get_or_init(|| {
+        let mut patvals = Vec::new();
+
+        patvals.push((JPCOMMON_MORA_LONG_VOWEL, MoraToken::LongVowel));
+
+        patvals.push((JPCOMMON_MORA_UNVOICE, MoraToken::Unvoice));
+
+        for &(mora, ph1, ph2) in JPCOMMON_MORA_LIST {
+            patvals.push((mora, MoraToken::Normal(ph1, ph2)));
         }
+
+        DoubleArrayAhoCorasickBuilder::new()
+            .match_kind(MatchKind::LeftmostLongest)
+            .build_with_values(patvals)
+            .expect("Failed to build Aho-Corasick automaton")
+    })
+}
+
+#[inline(always)]
+unsafe fn duplicate_str_or_nodata(s: Option<&str>) -> *mut c_char {
+    let bytes = match s {
+        Some(s) => s.as_bytes(),
+        None => b"*",
+    };
+
+    let len = bytes.len();
+    unsafe {
+        let ptr = libc::malloc(len + 1) as *mut u8;
+        if ptr.is_null() {
+            return NODATA.as_ptr() as *mut c_char;
+        }
+
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, len);
+        *ptr.add(len) = 0;
+        ptr as *mut c_char
     }
 }
 
@@ -164,8 +199,6 @@ unsafe fn alloc_accent_phrase(
             return Err(());
         }
         (*a).accent = accent;
-        // emotion と excl は null ポインタによる存在判定を行っているため、
-        // 値がない場合は "*" をコピーするのではなく、null を代入しなければならない。
         (*a).emotion = if let Some(e) = emotion {
             duplicate_str_or_nodata(Some(e))
         } else {
@@ -237,7 +270,7 @@ unsafe fn insert_short_pause(label: *mut ffi::JPCommonLabel) -> Result<(), JpCom
     }
 }
 
-/// ワードの情報を構造化された JPCommonLabel へ収納する。
+/// ワードの情報を構造化された JPCommonLabel へ格納する。
 #[allow(non_snake_case)]
 pub(crate) unsafe fn JPCommonLabel_push_word(
     label: *mut ffi::JPCommonLabel,
@@ -253,8 +286,7 @@ pub(crate) unsafe fn JPCommonLabel_push_word(
             return Err(JpCommonLabelError::AlreadyInvalid);
         }
 
-        let original_pron = ptr_to_str_unchecked(pron_ptr);
-        let mut pron = original_pron;
+        let pron = ptr_to_str_unchecked(pron_ptr);
         let pos = ptr_to_str_unchecked(pos_ptr);
         let ctype = ptr_to_str_unchecked(ctype_ptr);
         let cform = ptr_to_str_unchecked(cform_ptr);
@@ -301,84 +333,144 @@ pub(crate) unsafe fn JPCommonLabel_push_word(
             return Ok(());
         }
 
-        // 発音の解析
-        while !pron.is_empty() {
-            if let Some(rest) = pron.strip_prefix(JPCOMMON_MORA_LONG_VOWEL) {
-                // 長音
-                if !(*label).phoneme_tail.is_null() && (*label).short_pause_flag == 0 {
-                    insert_short_pause(label)?;
+        let pma = get_mora_automaton();
+        let mut current_offset = 0;
 
-                    let prev_ph = ptr_to_str_unchecked((*(*label).phoneme_tail).phoneme);
+        for m in pma.leftmost_find_iter(pron) {
+            if m.start() != current_offset {
+                log::warn!(
+                    "JPCommonLabel_push_word(): {} is wrong mora list.",
+                    &pron[current_offset..]
+                );
+                break;
+            }
 
-                    let (p_next, m_next) = try_alloc!(
-                        label,
-                        "long-vowel nodes",
-                        p_res = alloc_phoneme(
-                            prev_ph,
-                            (*label).phoneme_tail,
-                            std::ptr::null_mut(),
-                            std::ptr::null_mut()
-                        ),
-                        m_res = alloc_mora(
-                            JPCOMMON_MORA_LONG_VOWEL,
-                            std::ptr::null_mut(),
-                            std::ptr::null_mut(),
-                            (*label).mora_tail,
-                            std::ptr::null_mut(),
-                            (*(*label).mora_tail).up
-                        )
-                    )?;
+            match m.value() {
+                MoraToken::LongVowel => {
+                    if !(*label).phoneme_tail.is_null() && (*label).short_pause_flag == 0 {
+                        insert_short_pause(label)?;
 
-                    // 自己参照になる要素は後から繋ぐ
-                    (*m_next).head = p_next;
-                    (*m_next).tail = p_next;
+                        let prev_ph = ptr_to_str_unchecked((*(*label).phoneme_tail).phoneme);
 
-                    (*p_next).up = m_next;
-                    (*(*label).phoneme_tail).next = p_next;
-                    (*(*label).mora_tail).next = m_next;
+                        let (p_next, m_next) = try_alloc!(
+                            label,
+                            "long-vowel nodes",
+                            p_res = alloc_phoneme(
+                                prev_ph,
+                                (*label).phoneme_tail,
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut()
+                            ),
+                            m_res = alloc_mora(
+                                JPCOMMON_MORA_LONG_VOWEL,
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                (*label).mora_tail,
+                                std::ptr::null_mut(),
+                                (*(*label).mora_tail).up
+                            )
+                        )?;
 
-                    (*label).phoneme_tail = p_next;
-                    (*label).mora_tail = m_next;
-                    (*(*label).word_tail).tail = m_next;
-                } else {
-                    log::warn!(
-                        "JPCommonLabel_push_word(): First mora should not be long vowel symbol."
-                    );
-                }
-                pron = rest;
-            } else if let Some(rest) = pron.strip_prefix(JPCOMMON_MORA_UNVOICE) {
-                // 無声化
-                if !(*label).phoneme_tail.is_null() && !is_first_word {
-                    let tail_ph_str = ptr_to_str_unchecked((*(*label).phoneme_tail).phoneme);
-                    if let Some(unvoiced) = get_unvoiced_phoneme(tail_ph_str) {
-                        if (*(*label).phoneme_tail).phoneme != NODATA.as_ptr() as *mut c_char {
-                            libc::free((*(*label).phoneme_tail).phoneme as *mut _);
-                        }
-                        (*(*label).phoneme_tail).phoneme = duplicate_str_or_nodata(Some(unvoiced));
+                        (*m_next).head = p_next;
+                        (*m_next).tail = p_next;
+
+                        (*p_next).up = m_next;
+                        (*(*label).phoneme_tail).next = p_next;
+                        (*(*label).mora_tail).next = m_next;
+
+                        (*label).phoneme_tail = p_next;
+                        (*label).mora_tail = m_next;
+                        (*(*label).word_tail).tail = m_next;
                     } else {
                         log::warn!(
-                            "JPCommonLabelPhoneme_convert_unvoice(): {} cannot be unvoiced.",
-                            tail_ph_str
+                            "JPCommonLabel_push_word(): First mora should not be long vowel symbol."
                         );
                     }
-                } else {
-                    log::warn!("JPCommonLabel_push_word(): First mora should not be unvoice flag.");
                 }
-                pron = rest;
-            } else {
-                // 通常のモーラ
-                let mut matched = false;
-                for &(mora_str, ph1, ph2_opt) in JPCOMMON_MORA_LIST {
-                    if let Some(rest) = pron.strip_prefix(mora_str) {
-                        if (*label).phoneme_tail.is_null() {
+                MoraToken::Unvoice => {
+                    if !(*label).phoneme_tail.is_null() && !is_first_word {
+                        let tail_ph_str = ptr_to_str_unchecked((*(*label).phoneme_tail).phoneme);
+                        if let Some(unvoiced) = get_unvoiced_phoneme(tail_ph_str) {
+                            let ptr = (*(*label).phoneme_tail).phoneme as *mut u8;
+                            if !std::ptr::eq(ptr, NODATA.as_ptr()) {
+                                *ptr = unvoiced.as_bytes()[0];
+                            } else {
+                                (*(*label).phoneme_tail).phoneme =
+                                    duplicate_str_or_nodata(Some(unvoiced));
+                            }
+                        } else {
+                            log::warn!(
+                                "JPCommonLabelPhoneme_convert_unvoice(): {} cannot be unvoiced.",
+                                tail_ph_str
+                            );
+                        }
+                    } else {
+                        log::warn!(
+                            "JPCommonLabel_push_word(): First mora should not be unvoice flag."
+                        );
+                    }
+                }
+                MoraToken::Normal(ph1, ph2_opt) => {
+                    let mora_str = &pron[m.start()..m.end()];
+
+                    if (*label).phoneme_tail.is_null() {
+                        insert_short_pause(label)?;
+
+                        let (p, m_node, w) = try_alloc!(
+                            label,
+                            "initial word nodes",
+                            p_res = alloc_phoneme(
+                                ph1,
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut()
+                            ),
+                            m_res = alloc_mora(
+                                mora_str,
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut()
+                            ),
+                            w_res = alloc_word(
+                                pron,
+                                pos,
+                                ctype,
+                                cform,
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut(),
+                                std::ptr::null_mut()
+                            )
+                        )?;
+
+                        (*m_node).head = p;
+                        (*m_node).tail = p;
+                        (*w).head = m_node;
+                        (*w).tail = m_node;
+
+                        (*p).up = m_node;
+                        (*m_node).up = w;
+
+                        (*label).phoneme_head = p;
+                        (*label).phoneme_tail = p;
+                        (*label).mora_head = m_node;
+                        (*label).mora_tail = m_node;
+                        (*label).word_head = w;
+                        (*label).word_tail = w;
+
+                        is_first_word = false;
+                    } else {
+                        if is_first_word {
                             insert_short_pause(label)?;
 
-                            let (p, m, w) = try_alloc!(
+                            let (p, m_node, w) = try_alloc!(
                                 label,
-                                "initial word nodes",
+                                "first-word continuation nodes",
                                 p_res = alloc_phoneme(
                                     ph1,
-                                    std::ptr::null_mut(),
+                                    (*label).phoneme_tail,
                                     std::ptr::null_mut(),
                                     std::ptr::null_mut()
                                 ),
@@ -386,155 +478,106 @@ pub(crate) unsafe fn JPCommonLabel_push_word(
                                     mora_str,
                                     std::ptr::null_mut(),
                                     std::ptr::null_mut(),
-                                    std::ptr::null_mut(),
+                                    (*label).mora_tail,
                                     std::ptr::null_mut(),
                                     std::ptr::null_mut()
                                 ),
                                 w_res = alloc_word(
-                                    original_pron,
+                                    pron,
                                     pos,
                                     ctype,
                                     cform,
                                     std::ptr::null_mut(),
                                     std::ptr::null_mut(),
-                                    std::ptr::null_mut(),
+                                    (*label).word_tail,
                                     std::ptr::null_mut()
                                 )
                             )?;
 
-                            (*m).head = p;
-                            (*m).tail = p;
-                            (*w).head = m;
-                            (*w).tail = m;
+                            (*m_node).head = p;
+                            (*m_node).tail = p;
+                            (*w).head = m_node;
+                            (*w).tail = m_node;
 
-                            (*p).up = m;
-                            (*m).up = w;
+                            (*p).up = m_node;
+                            (*m_node).up = w;
 
-                            (*label).phoneme_head = p;
+                            (*(*label).phoneme_tail).next = p;
+                            (*(*label).mora_tail).next = m_node;
+                            (*(*label).word_tail).next = w;
+
                             (*label).phoneme_tail = p;
-                            (*label).mora_head = m;
-                            (*label).mora_tail = m;
-                            (*label).word_head = w;
+                            (*label).mora_tail = m_node;
                             (*label).word_tail = w;
 
                             is_first_word = false;
                         } else {
-                            if is_first_word {
-                                insert_short_pause(label)?;
-
-                                let (p, m, w) = try_alloc!(
-                                    label,
-                                    "first-word continuation nodes",
-                                    p_res = alloc_phoneme(
-                                        ph1,
-                                        (*label).phoneme_tail,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut()
-                                    ),
-                                    m_res = alloc_mora(
-                                        mora_str,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut(),
-                                        (*label).mora_tail,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut()
-                                    ),
-                                    w_res = alloc_word(
-                                        original_pron,
-                                        pos,
-                                        ctype,
-                                        cform,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut(),
-                                        (*label).word_tail,
-                                        std::ptr::null_mut()
-                                    )
-                                )?;
-
-                                (*m).head = p;
-                                (*m).tail = p;
-                                (*w).head = m;
-                                (*w).tail = m;
-
-                                (*p).up = m;
-                                (*m).up = w;
-
-                                (*(*label).phoneme_tail).next = p;
-                                (*(*label).mora_tail).next = m;
-                                (*(*label).word_tail).next = w;
-
-                                (*label).phoneme_tail = p;
-                                (*label).mora_tail = m;
-                                (*label).word_tail = w;
-
-                                is_first_word = false;
-                            } else {
-                                insert_short_pause(label)?;
-
-                                let (p, m) = try_alloc!(
-                                    label,
-                                    "mora continuation nodes",
-                                    p_res = alloc_phoneme(
-                                        ph1,
-                                        (*label).phoneme_tail,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut()
-                                    ),
-                                    m_res = alloc_mora(
-                                        mora_str,
-                                        std::ptr::null_mut(),
-                                        std::ptr::null_mut(),
-                                        (*label).mora_tail,
-                                        std::ptr::null_mut(),
-                                        (*(*label).mora_tail).up
-                                    )
-                                )?;
-
-                                (*m).head = p;
-                                (*m).tail = p;
-
-                                (*p).up = m;
-
-                                (*(*label).phoneme_tail).next = p;
-                                (*(*label).mora_tail).next = m;
-
-                                (*label).phoneme_tail = p;
-                                (*label).mora_tail = m;
-                                (*(*label).word_tail).tail = m;
-                            }
-                        }
-
-                        // 2音素目の追加
-                        if let Some(ph2) = ph2_opt {
                             insert_short_pause(label)?;
 
-                            let p = try_alloc!(
+                            let (p, m_node) = try_alloc!(
                                 label,
-                                "second phoneme",
+                                "mora continuation nodes",
                                 p_res = alloc_phoneme(
-                                    ph2,
+                                    ph1,
                                     (*label).phoneme_tail,
                                     std::ptr::null_mut(),
-                                    (*label).mora_tail
+                                    std::ptr::null_mut()
+                                ),
+                                m_res = alloc_mora(
+                                    mora_str,
+                                    std::ptr::null_mut(),
+                                    std::ptr::null_mut(),
+                                    (*label).mora_tail,
+                                    std::ptr::null_mut(),
+                                    (*(*label).mora_tail).up
                                 )
                             )?;
 
-                            (*(*label).phoneme_tail).next = p;
-                            (*label).phoneme_tail = p;
-                            (*(*label).mora_tail).tail = p;
-                        }
+                            (*m_node).head = p;
+                            (*m_node).tail = p;
 
-                        pron = rest;
-                        matched = true;
-                        break;
+                            (*p).up = m_node;
+
+                            (*(*label).phoneme_tail).next = p;
+                            (*(*label).mora_tail).next = m_node;
+
+                            (*label).phoneme_tail = p;
+                            (*label).mora_tail = m_node;
+                            (*(*label).word_tail).tail = m_node;
+                        }
+                    }
+
+                    // 2音素目の追加
+                    if let Some(ph2) = ph2_opt {
+                        insert_short_pause(label)?;
+
+                        let p = try_alloc!(
+                            label,
+                            "second phoneme",
+                            p_res = alloc_phoneme(
+                                ph2,
+                                (*label).phoneme_tail,
+                                std::ptr::null_mut(),
+                                (*label).mora_tail
+                            )
+                        )?;
+
+                        (*(*label).phoneme_tail).next = p;
+                        (*label).phoneme_tail = p;
+                        (*(*label).mora_tail).tail = p;
                     }
                 }
-
-                if !matched {
-                    log::warn!("JPCommonLabel_push_word(): {} is wrong mora list.", pron);
-                    break;
-                }
             }
+
+            current_offset = m.end();
+        }
+
+        // 末尾の未解析文字列が残っていないか
+        if current_offset != pron.len() {
+            log::warn!(
+                "JPCommonLabel_push_word(): {} is wrong mora list.",
+                &pron[current_offset..]
+            );
         }
 
         if is_first_word || (*label).phoneme_tail.is_null() {
