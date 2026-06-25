@@ -428,11 +428,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 We evaluated the accuracy using the `haqumei-eval` crate. Below are the results:
 - **Phoneme Error Rate (PER)** evaluated on [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label), a fork of `jsut-label` providing annotations for the Basic5000 subset of the JSUT corpus.
-- **Katakana Error Rate (Katakana ER)** evaluated on [ROHAN](https://github.com/mmorise/rohan4600).
+- **Katakana Error Rate** evaluated on [ROHAN](https://github.com/mmorise/rohan4600).
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **1.24%** (Substitute=2244, Delete=572, Insert=889, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **1.17%** (Substitute=2117, Delete=527, Insert=831, N=297843)
 
 `HaqumeiOptions`:
 ```rust

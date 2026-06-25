@@ -426,11 +426,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 精度
 
-`haqumei-eval` クレートを用いた、JSUT corpus の Basic5000 に対するアノテーションである、jsut-label のフォーク [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label) の音素エラー率(PER)と、[ROHAN](https://github.com/mmorise/rohan4600) のカタカナエラー率(Katakana ER)を示します。
+`haqumei-eval` クレートを用いた、JSUT corpus の Basic5000 に対するアノテーションである、jsut-label のフォーク [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label) の音素エラー率(PER)と、[ROHAN](https://github.com/mmorise/rohan4600) のカタカナエラー率(Katakana Error Rate)を示します。
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): 1.24%  (Substitute=2244 Delete=572 Insert=889 N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **1.17%** (Substitute=2117, Delete=527, Insert=831, N=297843)
 
 `HaqumeiOptions`:
 ```rust
@@ -443,7 +443,7 @@ HaqumeiOptions {
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): 1.64%  (S=1689 D=493 I=288 N=150637)
+Katakana Error Rate (S+D+I / N_expected): **1.64%** (Substitute=1689, Delete=493, Insert=288, N=150637)
 
 `HaqumeiOptions`:
 ```rust
