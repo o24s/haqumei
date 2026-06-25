@@ -579,7 +579,7 @@ impl OpenJTalk {
                         mora_count: limit(m_cnt, 1, MAX_M) as u8,
                         accent_position: limit(acc, 1, MAX_M) as u8,
                         is_interrogative: parse_bool((*ap).emotion),
-                        is_exclamatory: unsafe { parse_bool((*ap).excl) },
+                        is_exclamatory: parse_bool((*ap).excl),
                         is_pause_insertion,
                     })
                 };
@@ -645,7 +645,7 @@ impl OpenJTalk {
                         mora_count: limit(m_cnt, 1, MAX_M) as u8,
                         accent_position: limit(acc, 1, MAX_M) as u8,
                         is_interrogative: parse_bool((*a_curr).emotion),
-                        is_exclamatory: unsafe { parse_bool((*a_curr).excl) },
+                        is_exclamatory: parse_bool((*a_curr).excl),
                         accent_phrase_position_forward: limit(tmp1, 1, MAX_M) as u8,
                         accent_phrase_position_backward: limit(bg_ap_count - tmp1 + 1, 1, MAX_M)
                             as u8,

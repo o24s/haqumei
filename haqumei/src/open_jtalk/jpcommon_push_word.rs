@@ -26,7 +26,7 @@ macro_rules! try_alloc {
         match $alloc_expr {
             Ok(ptr) => Ok(ptr),
             Err(_) => {
-                unsafe { (*$label).is_valid = 0; }
+                (*$label).is_valid = 0;
                 Err(JpCommonLabelError::AllocationError($err_msg))
             }
         }
@@ -42,10 +42,10 @@ macro_rules! try_alloc {
             } else {
                 $(
                     if let Ok(ptr) = $name {
-                        unsafe { ptr.free_node(); }
+                        ptr.free_node();
                     }
                 )+
-                unsafe { (*$label).is_valid = 0; }
+                (*$label).is_valid = 0;
                 Err(JpCommonLabelError::AllocationError($err_msg))
             }
         }

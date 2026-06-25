@@ -24,7 +24,7 @@ csv = "1.4.0"
 daachorse = "3.0.2"
 digest-io = "0.1.0"
 dirs = "6.0.0"
-env_logger = "0.11.10"
+env_logger = "0.11.11"
 fs4 = { version = "1.1.0", features = ["sync"] }
 glob = "0.3.3"
 haqumei-jlabel = { version = "0.1.1", path = "haqumei-jlabel" }
@@ -60,6 +60,6 @@ tar = "0.4.46"
 tempfile = "3.27.0"
 thiserror = "2.0.18"
 unicode-normalization = "0.1.25"
-vibrato-rkyv = { version = "0.7.11" }
+vibrato-rkyv = { version = "0.7.12" }
 walkdir = "2.5.0"
 zstd = "0.13.3"

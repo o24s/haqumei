@@ -184,12 +184,7 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add(
         "ALL_PHONEMES",
-        PyTuple::new(
-            m.py(),
-            ::haqumei::Phoneme::ALL
-                .iter()
-                .map(|i| i.as_str()),
-        )?,
+        PyTuple::new(m.py(), ::haqumei::Phoneme::ALL.iter().map(|i| i.as_str()))?,
     )?;
     Ok(())
 }
