@@ -993,7 +993,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "anyhow",
  "clap",

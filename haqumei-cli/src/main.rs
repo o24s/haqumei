@@ -140,6 +140,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_predict_nani: bool,
 
+    /// Kanalizer を使って、英語の読み予測を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_predict_kana_english: bool,
+
     /// Unidic を使って漢字の読みを修正する (初回実行時に辞書をダウンロードします)
     #[arg(long)]
     use_unidic_yomi: bool,
@@ -210,6 +214,7 @@ fn main() -> Result<()> {
         revert_yotsugana: cli.options.revert_yotsugana,
         modify_filler_accent: !cli.options.no_modify_filler_accent,
         predict_nani: !cli.options.no_predict_nani,
+        predict_kana_english: !cli.options.no_predict_kana_english,
         use_unidic_yomi: cli.options.use_unidic_yomi,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
@@ -241,33 +246,19 @@ fn main() -> Result<()> {
     let prosody_format: ProsodyFormat = cli.prosody_format.into();
 
     if let Some(text) = cli.text.as_deref() {
-        process_line(
+        process_batch(
             &mut haqumei,
-            text,
+            &[text.to_string()],
             &cli.mode,
             &cli.format,
             prosody_format,
             &mut writer,
         )?;
-    } else if let Some(input_path) = cli.input {
-        let file = File::open(&input_path)
+    } else if let Some(input_path) = cli.input.as_ref() {
+        let file = File::open(input_path)
             .with_context(|| format!("Failed to open input file: {:?}", input_path))?;
         let reader = io::BufReader::new(file);
-        for line in reader.lines() {
-            let line = line.context("Failed to read line from file")?;
-            if line.trim().is_empty() {
-                writeln!(writer)?;
-                continue;
-            }
-            process_line(
-                &mut haqumei,
-                &line,
-                &cli.mode,
-                &cli.format,
-                prosody_format,
-                &mut writer,
-            )?;
-        }
+        process_input(reader, &mut haqumei, &cli.mode, &cli.format, prosody_format, &mut writer)?;
     } else {
         let stdin = io::stdin();
         let stdout = io::stdout();
@@ -290,9 +281,9 @@ fn main() -> Result<()> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                process_line(
+                process_batch(
                     &mut haqumei,
-                    trimmed,
+                    &[trimmed.to_string()],
                     &cli.mode,
                     &cli.format,
                     prosody_format,
@@ -302,25 +293,31 @@ fn main() -> Result<()> {
                 writer.flush()?;
             }
         } else {
-            for line in stdin.lock().lines() {
-                let line = line.context("Failed to read line from stdin")?;
-                if line.trim().is_empty() {
-                    writeln!(writer)?;
-                    continue;
-                }
-                process_line(
-                    &mut haqumei,
-                    &line,
-                    &cli.mode,
-                    &cli.format,
-                    prosody_format,
-                    &mut writer,
-                )?;
-            }
+            let reader = stdin.lock();
+            process_input(reader, &mut haqumei, &cli.mode, &cli.format, prosody_format, &mut writer)?;
         }
     }
 
     writer.flush()?;
+    Ok(())
+}
+
+fn process_input<R: BufRead>(
+    reader: R,
+    haqumei: &mut Haqumei,
+    mode: &OutputMode,
+    format: &OutputFormat,
+    prosody_format: ProsodyFormat,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let texts: Result<Vec<String>, _> = reader.lines().collect();
+    let texts = texts.context("Failed to read input")?;
+
+    if texts.is_empty() {
+        return Ok(());
+    }
+
+    process_batch(haqumei, &texts, mode, format, prosody_format, writer)?;
     Ok(())
 }
 
@@ -331,9 +328,24 @@ fn write_json<T: serde::Serialize>(writer: &mut dyn Write, data: &T) -> Result<(
     Ok(())
 }
 
-fn process_line(
+macro_rules! handle_batch {
+    ($texts:expr, $writer:expr, $format:expr, $res_batch:expr, |$res:ident| $text_format:block) => {
+        for (text, $res) in $texts.iter().zip($res_batch) {
+            if text.trim().is_empty() {
+                writeln!($writer)?;
+                continue;
+            }
+            match $format {
+                OutputFormat::Text => $text_format,
+                OutputFormat::Json => write_json($writer, &$res)?,
+            }
+        }
+    };
+}
+
+fn process_batch(
     haqumei: &mut Haqumei,
-    text: &str,
+    texts: &[String],
     mode: &OutputMode,
     format: &OutputFormat,
     prosody_format: ProsodyFormat,
@@ -341,177 +353,151 @@ fn process_line(
 ) -> Result<()> {
     match mode {
         OutputMode::G2p => {
-            let res = haqumei.g2p(text)?;
-            match format {
-                OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2p_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                writeln!(writer, "{}", res.join(" "))?;
+            });
         }
         OutputMode::Prosody => {
-            let res = haqumei.g2p_prosody_with_options(text, prosody_format)?;
-            match format {
-                OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2p_prosody_with_options_batch(texts, prosody_format)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                writeln!(writer, "{}", res.join(" "))?;
+            });
         }
         OutputMode::G2pDetailed => {
-            let res = haqumei.g2p_detailed(text)?;
-            match format {
-                OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2p_detailed_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                writeln!(writer, "{}", res.join(" "))?;
+            });
         }
         OutputMode::Kana => {
-            let res = haqumei.g2k(text)?;
-            match format {
-                OutputFormat::Text => writeln!(writer, "{}", res)?,
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2k_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                writeln!(writer, "{}", res)?;
+            });
         }
         OutputMode::KanaPerWord => {
-            let res = haqumei.g2k_per_word(text)?;
-            match format {
-                OutputFormat::Text => writeln!(writer, "{}", res.join(" "))?,
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2k_per_word_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                writeln!(writer, "{}", res.join(" "))?;
+            });
         }
         OutputMode::PerWord => {
-            let res = haqumei.g2p_per_word(text)?;
-            match format {
-                OutputFormat::Text => {
-                    let formatted: Vec<String> = res
-                        .into_iter()
-                        .map(|phonemes| format!("[{}]", phonemes.join(", ")))
-                        .collect();
-                    writeln!(writer, "{}", formatted.join(" "))?;
-                }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            let res_batch = haqumei.g2p_per_word_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                let formatted: Vec<String> = res
+                    .into_iter()
+                    .map(|phonemes| format!("[{}]", phonemes.join(", ")))
+                    .collect();
+                writeln!(writer, "{}", formatted.join(" "))?;
+            });
         }
         OutputMode::Pairs => {
-            let res = haqumei.g2p_pairs(text)?;
-            match format {
-                OutputFormat::Text => {
-                    for pair in res {
-                        writeln!(writer, "{}\t{}", pair.word, pair.phonemes.join(" "))?;
-                    }
+            let res_batch = haqumei.g2p_pairs_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for pair in res {
+                    writeln!(writer, "{}\t{}", pair.word, pair.phonemes.join(" "))?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
         OutputMode::Mapping => {
-            let res = haqumei.g2p_mapping(text)?;
-            match format {
-                OutputFormat::Text => {
-                    for map in res {
-                        let status = if map.is_unknown {
-                            "[UNK]"
-                        } else if map.is_ignored {
-                            "[IGN]"
-                        } else {
-                            "[OK] "
-                        };
-                        writeln!(
-                            writer,
-                            "{} {}\t{}",
-                            status,
-                            map.word,
-                            map.phonemes.join(" "),
-                        )?;
-                    }
+            let res_batch = haqumei.g2p_mapping_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for map in res {
+                    let status = if map.is_unknown {
+                        "[UNK]"
+                    } else if map.is_ignored {
+                        "[IGN]"
+                    } else {
+                        "[OK] "
+                    };
+                    writeln!(
+                        writer,
+                        "{} {}\t{}",
+                        status,
+                        map.word,
+                        map.phonemes.join(" "),
+                    )?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
         OutputMode::MappingDetailed => {
-            let res = haqumei.g2p_mapping_detailed(text)?;
-            match format {
-                OutputFormat::Text => {
-                    for detail in res {
-                        let status = if detail.is_unknown {
-                            "[UNK]"
-                        } else if detail.is_ignored {
-                            "[IGN]"
-                        } else {
-                            "[OK] "
-                        };
-                        writeln!(
-                            writer,
-                            "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}\tCHAIN_FLAG: {}\tCHAIN_RULE: {}",
-                            status,
-                            detail.word,
-                            detail.phonemes.join(" "),
-                            detail.pos,
-                            detail.pos_group1,
-                            detail.pron,
-                            detail.read,
-                            detail.accent_nucleus,
-                            detail.mora_count,
-                            detail.chain_flag,
-                            detail.chain_rule,
-                        )?;
-                    }
+            let res_batch = haqumei.g2p_mapping_detailed_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for detail in res {
+                    let status = if detail.is_unknown {
+                        "[UNK]"
+                    } else if detail.is_ignored {
+                        "[IGN]"
+                    } else {
+                        "[OK] "
+                    };
+                    writeln!(
+                        writer,
+                        "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}\tCHAIN_FLAG: {}\tCHAIN_RULE: {}",
+                        status,
+                        detail.word,
+                        detail.phonemes.join(" "),
+                        detail.pos,
+                        detail.pos_group1,
+                        detail.pron,
+                        detail.read,
+                        detail.accent_nucleus,
+                        detail.mora_count,
+                        detail.chain_flag,
+                        detail.chain_rule,
+                    )?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
         OutputMode::MappingProsody => {
-            let res = haqumei.g2p_mapping_prosody(text)?;
-            match format {
-                OutputFormat::Text => {
-                    let mut prev_pitch = None;
-                    for detail in res {
-                        let status = if detail.is_unknown {
-                            "[UNK]"
-                        } else if detail.is_ignored {
-                            "[IGN]"
-                        } else {
-                            "[OK] "
-                        };
+            let res_batch = haqumei.g2p_mapping_prosody_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                let mut prev_pitch = None;
+                for detail in res {
+                    let status = if detail.is_unknown {
+                        "[UNK]"
+                    } else if detail.is_ignored {
+                        "[IGN]"
+                    } else {
+                        "[OK] "
+                    };
 
-                        let phones = detail
-                            .to_formatted_strings(prosody_format, &mut prev_pitch)
-                            .join(" ");
+                    let phones = detail
+                        .to_formatted_strings(prosody_format, &mut prev_pitch)
+                        .join(" ");
 
-                        writeln!(
-                            writer,
-                            "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}",
-                            status,
-                            detail.word,
-                            phones,
-                            detail.pos,
-                            detail.pos_group1,
-                            detail.pron,
-                            detail.read,
-                            detail.accent_nucleus,
-                            detail.mora_count,
-                        )?;
-                    }
+                    writeln!(
+                        writer,
+                        "{} {}: {}\tPOS: {}\tPOS_GROUP1: {}\tPRON: {}\tREAD: {}\tACC: {}/{}",
+                        status,
+                        detail.word,
+                        phones,
+                        detail.pos,
+                        detail.pos_group1,
+                        detail.pron,
+                        detail.read,
+                        detail.accent_nucleus,
+                        detail.mora_count,
+                    )?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
         OutputMode::Fullcontext => {
-            let res = haqumei.extract_fullcontext(text)?;
-            match format {
-                OutputFormat::Text => {
-                    for label in res {
-                        writeln!(writer, "{}", label)?;
-                    }
+            let res_batch = haqumei.extract_fullcontext_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for label in res {
+                    writeln!(writer, "{}", label)?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
         OutputMode::FullcontextString => {
-            let res = haqumei.extract_fullcontext_string(text)?;
-            match format {
-                OutputFormat::Text => {
-                    for label in res {
-                        writeln!(writer, "{}", label)?;
-                    }
+            let res_batch = haqumei.extract_fullcontext_string_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for label in res {
+                    writeln!(writer, "{}", label)?;
                 }
-                OutputFormat::Json => write_json(writer, &res)?,
-            }
+            });
         }
     }
     Ok(())
