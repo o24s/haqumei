@@ -2,18 +2,21 @@ use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashSet;
 use syn::{
-    Ident, LitStr, Result, Token,
+    Attribute, Ident, LitStr, Result, Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
 
 struct Entry {
+    attrs: Vec<Attribute>,
     name: Ident,
     value: LitStr,
 }
 
 impl Parse for Entry {
     fn parse(input: ParseStream) -> Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+
         let name = input.parse()?;
         input.parse::<Token![=]>()?;
         let value = input.parse()?;
@@ -22,7 +25,7 @@ impl Parse for Entry {
             input.parse::<Token![,]>()?;
         }
 
-        Ok(Self { name, value })
+        Ok(Self { attrs, name, value })
     }
 }
 
@@ -79,6 +82,7 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
         }
     };
 
+    let attrs = items.iter().map(|e| &e.attrs).collect::<Vec<_>>();
     let names = items.iter().map(|e| &e.name).collect::<Vec<_>>();
     let strs = items.iter().map(|e| &e.value).collect::<Vec<_>>();
 
@@ -86,7 +90,10 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
         #[repr(u8)]
         #[derive(Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Phoneme {
-            #( #names ),*
+            #(
+                #( #attrs )*
+                #names
+            ),*
         }
 
         impl Phoneme {
