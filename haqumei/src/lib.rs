@@ -45,6 +45,7 @@ pub mod features;
 mod macros;
 pub mod nani_predict;
 pub mod open_jtalk;
+pub mod options;
 pub mod phoneme;
 mod postprocess;
 pub mod prosody;
@@ -66,6 +67,7 @@ pub use features::NjdFeature;
 pub use open_jtalk::{
     MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary, update_global_dictionary,
 };
+pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
@@ -82,7 +84,6 @@ use crate::{
         modify_acc_after_chaining, modify_english_words, modify_filler_accent,
         predict_kana_english, process_odori_features, retreat_acc_nuc, vibrato_analysis,
     },
-    utils::default_is_non_pause_symbol,
     word_phoneme::WordPhonemeProsody,
 };
 
@@ -130,175 +131,6 @@ pub struct Haqumei {
     pub(crate) tokenizer: Option<vibrato_rkyv::Tokenizer>,
     pub(crate) rx: Option<crossbeam_channel::Receiver<Vec<UnidicFeature>>>,
     pub options: HaqumeiOptions,
-}
-
-/// `Haqumei` の設定。
-/// 詳細は、それぞれのフィールドのドキュメントを見てください。
-#[derive(Debug, Clone, Copy)]
-pub struct HaqumeiOptions {
-    /// 入力テキストを [UnicodeNormalization] の指定された方法で正規化する。
-    /// 「か + 濁点」などの結合文字を1文字の「が」に統合できます。
-    ///
-    /// デフォルトで無効になっています。
-    pub normalize_unicode: UnicodeNormalization,
-
-    /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
-    ///
-    /// これにより、長音の自動変換機能が無効化されます。 (e.g., "ジンセー" -> "ジンセイ")
-    /// なお、助詞にもこの影響が及び、"は" は「ワ」ではなく「ハ」として、
-    /// "へ" は「エ」ではなく「ヘ」として発音されます。
-    ///
-    /// すなわち、これを有効にした場合、`revert_long_vowels`, `revert_yotsugana` のフラグに関係なく、
-    /// 読み (`read`) に強制的に置き換えられます。
-    ///
-    /// デフォルトで無効になっています。
-    pub use_read_as_pron: bool,
-
-    /// 辞書によって自動的に長音化された発音を、元のテキストに忠実な読みに復元するかどうか。
-    ///
-    /// `true` に設定すると、発音 (`pron`) に「ー」が含まれている単語について、
-    /// 元のテキスト (`orig`) に「ー」が含まれていない場合のみ、発音を読み (`read`) の値で上書きします。
-    /// (e.g., 「効果」 pron: コーカ -> コウカ / 「人生」 pron: ジンセー -> ジンセイ)
-    ///
-    /// 助詞 (は、へ、を) などの発音は「ー」を含まないため影響を受けず、
-    /// そのまま音声合成に適した発音 (ワ、エ、オ) が維持されます。
-    ///
-    /// デフォルトで無効になっています。
-    pub revert_long_vowels: bool,
-
-    /// 現代仮名遣いにおいて発音上統合される四つ仮名 (ヅ・ヂ) を、
-    /// 元のテキスト通りの表記に復元するかどうか。
-    ///
-    /// `true` に設定すると、発音 (`pron`) において「ズ」「ジ」に変換されたものを、
-    /// 読み (`read`) に基づいて「ヅ」「ヂ」に復元します。
-    /// (e.g., 「気づかず」 pron: キズカズ -> キヅカズ / 「鼻血」 pron: ハナジ -> ハナヂ)
-    ///
-    /// デフォルトで無効になっています。
-    pub revert_yotsugana: bool,
-
-    /// 形態素解析辞書の仕様により「イウ」と「ユウ」のどちらに解析されるか不定な
-    /// 動詞「言う」 (およびその活用形や複合語) の読み・発音を、指定した方に強制的に統一します。
-    ///
-    /// 辞書には「言う」に対して「イウ」「ユウ」の両方が登録されており、
-    /// 形態素解析のコスト計算によって出力が変動します。
-    /// `Some` を指定することで、解析結果に関わらず意図した発音に固定できます。
-    ///
-    /// デフォルトは `None` (形態素解析辞書の出力結果をそのまま使用する) です。
-    pub normalize_iu: Option<IuPronunciation>,
-
-    /// - フィラーが acc > mora_size のときに、平版型 (acc = 0) にする
-    /// - フィラー直後の形態素が名詞だったとき、その前のフィラーに結合しない (chain_flag = 0) ようにする
-    ///
-    /// デフォルトで有効になっています。
-    pub modify_filler_accent: bool,
-
-    /// Nani Predictor を使って、「何」 の読みを修正する。
-    ///
-    /// デフォルトで有効になっています。
-    pub predict_nani: bool,
-
-    /// Kanalizer を使って、英語の読みを予測する。
-    ///
-    /// デフォルトで有効になっています。
-    pub predict_kana_english: bool,
-
-    /// Unidic を使って、漢字の読みを修正する。
-    /// 有効にした初回実行時には、辞書のダウンロードが発生します。
-    ///
-    /// デフォルトで無効になっています。
-    pub use_unidic_yomi: bool,
-
-    /// 長母音、重母音、撥音がアクセント核に来た場合に、
-    /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
-    ///
-    /// デフォルトで有効になっています。
-    pub retreat_acc_nuc: bool,
-
-    /// 品詞「特殊・マス」の直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる。
-    ///
-    ///   書きます -> か\[きま\]す, 参ります -> ま\[いりま\]す
-    ///   書いております -> \[か\]いております
-    ///
-    /// デフォルトで有効になっています。
-    pub modify_acc_after_chaining: bool,
-
-    /// 踊り字 (e.g., 々, ヽ, ヾ) の展開を有効にする。
-    ///
-    /// デフォルトで有効になっています。
-    pub process_odoriji: bool,
-
-    /// `*_detailed` API において、記号に対して `pau` を割り当てるべきか判定する関数を設定するフィールド。
-    ///
-    /// `true` を返した記号には `pau` が付与されません。
-    /// 閉じ括弧に `pau` を割り当てたくないようなケースに使ってください。
-    ///
-    /// デフォルトでは、以下の表層系に `pau` が割り当てられません。
-    /// `「` , `」` , `『` , `』` , ` (` , `) ` , `(` , `)` ,
-    /// `【` , `】` , `［` , `］` , `[` , `]` , `〈` , `〉` ,
-    /// `《` , `》` , `〔` , `〕` , `｛` , `｝` , `{` , `}` ,
-    /// `"` , `'` , `”` , `“` , `’` , `‘`
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use haqumei::utils::default_is_non_pause_symbol;
-    ///
-    /// fn my_custom_pause_rule(s: &str) -> bool {
-    ///     if s == "「" {
-    ///         return false; // false を返すと pau が割り当てられる
-    ///     }
-    ///     // それ以外はデフォルトの挙動を継承
-    ///     default_is_non_pause_symbol(s)
-    /// }
-    /// ```
-    pub is_non_pause_symbol: fn(&str) -> bool,
-}
-
-impl Default for HaqumeiOptions {
-    fn default() -> Self {
-        Self {
-            normalize_unicode: UnicodeNormalization::None,
-            use_read_as_pron: false,
-            revert_long_vowels: false,
-            revert_yotsugana: false,
-            normalize_iu: None,
-            modify_filler_accent: true,
-            predict_nani: true,
-            predict_kana_english: true,
-            use_unidic_yomi: false,
-            retreat_acc_nuc: true,
-            modify_acc_after_chaining: true,
-            process_odoriji: true,
-            is_non_pause_symbol: default_is_non_pause_symbol,
-        }
-    }
-}
-
-/// 入力テキストをどのように正規化するかを指定します。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum UnicodeNormalization {
-    /// 正規化を行わない (デフォルト)
-    #[default]
-    None,
-    /// NFC (正準等価性による合成: 結合文字の合体のみ)
-    Nfc,
-    /// NFKC (互換等価性による分解と合成: 半角カナ -> 全角カナ、全角英数 -> 半角英数など)
-    Nfkc,
-}
-
-/// 動詞「言う」およびその派生語の発音・読みをどのように正規化するかを指定します。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IuPronunciation {
-    /// すべての「言う」「いう」を「イウ」に統一します。
-    Iu,
-    /// すべての「言う」「いう」を「ユウ」に統一します。
-    Yuu,
-    /// 漢字表記 (`言う`, `云う`) が含まれる場合のみ「イウ」に統一し、
-    /// 平仮名表記 (`いう`, `そういう`) は辞書の解析結果をそのまま使用します。
-    KanjiIu,
-    /// 漢字表記 (`言う`, `云う`) が含まれる場合のみ「ユウ」に統一し、
-    /// 平仮名表記 (`いう`, `そういう`) は辞書の解析結果をそのまま使用します。
-    KanjiYuu,
 }
 
 impl Haqumei {

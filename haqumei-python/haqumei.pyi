@@ -920,6 +920,12 @@ class Haqumei:
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,
+        use_allophones: bool = False,
+        split_n_allophones: bool = False,
+        split_n_before_palatal_affricate: bool = False,
+        split_n_before_r: bool = False,
+        split_q_allophones: bool = False,
+        enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。"""
         ...

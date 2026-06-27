@@ -34,6 +34,12 @@ impl PyHaqumei {
         retreat_acc_nuc = true,
         modify_acc_after_chaining = true,
         process_odoriji = true,
+        use_allophones = false,
+        split_n_allophones = false,
+        split_n_before_palatal_affricate = false,
+        split_n_before_r = false,
+        split_q_allophones = false,
+        enable_final_glottal_stop = false,
     ))]
     fn new(
         normalize_unicode: UnicodeNormalization,
@@ -48,6 +54,12 @@ impl PyHaqumei {
         retreat_acc_nuc: bool,
         modify_acc_after_chaining: bool,
         process_odoriji: bool,
+        use_allophones: bool,
+        split_n_allophones: bool,
+        split_n_before_palatal_affricate: bool,
+        split_n_before_r: bool,
+        split_q_allophones: bool,
+        enable_final_glottal_stop: bool,
     ) -> PyResult<Self> {
         let options = HaqumeiOptions {
             normalize_unicode: match normalize_unicode {
@@ -73,6 +85,12 @@ impl PyHaqumei {
             modify_acc_after_chaining,
             process_odoriji,
             is_non_pause_symbol: default_is_non_pause_symbol,
+            use_allophones,
+            split_n_allophones,
+            split_n_before_palatal_affricate,
+            split_n_before_r,
+            split_q_allophones,
+            enable_final_glottal_stop,
         };
 
         let inner = Haqumei::with_options(options).map_err(to_py_err)?;

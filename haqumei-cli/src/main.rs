@@ -258,7 +258,14 @@ fn main() -> Result<()> {
         let file = File::open(input_path)
             .with_context(|| format!("Failed to open input file: {:?}", input_path))?;
         let reader = io::BufReader::new(file);
-        process_input(reader, &mut haqumei, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+        process_input(
+            reader,
+            &mut haqumei,
+            &cli.mode,
+            &cli.format,
+            prosody_format,
+            &mut writer,
+        )?;
     } else {
         let stdin = io::stdin();
         let stdout = io::stdout();
@@ -294,7 +301,14 @@ fn main() -> Result<()> {
             }
         } else {
             let reader = stdin.lock();
-            process_input(reader, &mut haqumei, &cli.mode, &cli.format, prosody_format, &mut writer)?;
+            process_input(
+                reader,
+                &mut haqumei,
+                &cli.mode,
+                &cli.format,
+                prosody_format,
+                &mut writer,
+            )?;
         }
     }
 
