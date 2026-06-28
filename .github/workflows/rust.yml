@@ -47,6 +47,18 @@ jobs:
           $llvmPath = (Get-Command clang).Source | Split-Path -Parent
           echo "LIBCLANG_PATH=$llvmPath" >> $env:GITHUB_ENV
 
+      - name: Set up Clang Runtime Path (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          CLANG_RT_PATH=$(find $(xcode-select -p) -name "libclang_rt.osx.a" | head -n 1)
+          if [ -n "$CLANG_RT_PATH" ]; then
+            CLANG_RT_DIR=$(dirname "$CLANG_RT_PATH")
+            echo "LIBRARY_PATH=$CLANG_RT_DIR" >> $GITHUB_ENV
+            echo "Found clang_rt.osx at: $CLANG_RT_DIR"
+          else
+            echo "Warning: libclang_rt.osx.a not found"
+          fi
+
       - name: Build
         run: cargo build --verbose --workspace --exclude haqumei-python
 
