@@ -36,7 +36,7 @@
 
 ## 特徴 (Features)
 
-- Phoneme <-> Word mapping: 従来は取得できなかった、形態素解析の結果と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
+- Word-Phoneme mapping APIs: 従来では直接取得できなかった、入力テキストに対してロスの少ない分割された部分文字列($\approx$ 表層系・辞書エントリ)と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
 - プロソディ情報の取得: プロソディ記号付き音素列および、表層形に対してロスの少ないマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
 - パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
 - 精度: `haqumei-kanalizer` による英単語読み推定やその他の補正に加えて、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))

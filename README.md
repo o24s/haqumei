@@ -35,7 +35,7 @@
 
 ## Features
 
-- **Phoneme <-> Word mapping:** Provides detailed mappings linking morphological analysis results with phonemes (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`), which were previously unavailable. (See [Advanced Features](#advanced-features))
+* **Word-Phoneme Mapping APIs:** Provides APIs for obtaining detailed mappings between phonemes and minimally lossy segmented substrings of the input text ($\approx$ surface forms or dictionary entries), which were not previously available (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`). (See [Advanced Features](#advanced-features))
 - **Prosody Information Retrieval:** Provides phoneme sequences enriched with prosodic symbols as well as near-lossless mappings to surface forms (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
 - **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
 - **Accuracy:** Improves accuracy by incorporating English pronunciation estimation via `haqumei-kanalizer` and other corrections, alongside various techniques from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
@@ -144,7 +144,6 @@ print(f"Katakana reading: {kana}")
 ### Getting Phoneme Mapping with the Original Word String
 
 Haqumei implements `g2p_pairs` to obtain the correspondence between phonemes and their original words.  
-This is achieved by traversing the `JPCommon` structure and tracking the pointers to the words to which each phoneme belongs.
 
 ```rust
 use haqumei::Haqumei;

@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 arc-swap = "1.9.1"
 bindgen = "0.72.1"
 cc = "1.2.65"
