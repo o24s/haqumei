@@ -24,7 +24,8 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     #[test]
     fn test_mapping_nightmare_case() {
         let mut haqumei = Haqumei::new().unwrap();
-        let text = NIGHTMARE_TEXT;
+        haqumei.options.use_allophones = true;
+
         let expected = vec![
             (
                 "つまみ出さ",
@@ -59,10 +60,10 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("そこで", vec!["s", "o", "k", "o", "d", "e"]),
             ("、", vec!["pau"]),
             ("𰻞𰻞", vec!["unk"]),
-            ("麺", vec!["m", "e", "N"]),
+            ("麺", vec!["m", "e", "Nq"]),
             ("。", vec!["pau"]),
             ("ー", vec!["unk"]),
-            ("っ", vec!["cl"]),
+            ("っ", vec!["clq"]),
             ("、", vec!["pau"]),
             ("\u{3000}", vec!["sp"]),
             ("𰻞", vec!["unk"]),
@@ -98,21 +99,21 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("々", vec!["y", "o", "o", "sh", "o"]),
             ("槇野々", vec!["m", "a", "k", "i", "n", "o", "n", "o"]),
             ("々々", vec!["n", "o", "n", "o"]),
-            ("散々", vec!["s", "a", "N", "z", "a", "N"]),
-            ("々", vec!["z", "a", "N"]),
+            ("散々", vec!["s", "a", "Nd", "z", "a", "Nd"]),
+            ("々", vec!["z", "a", "Nd"]),
             ("二", vec!["n", "i"]),
-            ("千", vec!["s", "e", "N"]),
+            ("千", vec!["s", "e", "Nd"]),
             ("十", vec!["j", "u", "u"]),
             ("八", vec!["h", "a", "ch", "i"]),
             ("\u{3000}", vec!["sp"]),
             (
                 "Ｏｐｅｎ　ＪＴａｌｋ",
                 vec![
-                    "o", "o", "p", "u", "N", "j", "e", "e", "t", "o", "o", "k", "u",
+                    "o", "o", "p", "u", "Nd", "j", "e", "e", "t", "o", "o", "k", "u",
                 ],
             ),
             ("\u{3000}", vec!["sp"]),
-            ("一", vec!["i", "cl"]),
+            ("一", vec!["i", "clt"]),
             ("．", vec!["t", "e", "N"]),
             ("一", vec!["i", "ch", "i"]),
             ("一", vec!["i", "ch", "i"]),
@@ -126,7 +127,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("？", vec!["pau"]),
             ("ー", vec!["unk"]),
             ("！", vec!["pau"]),
-            ("￥", vec!["e", "N"]),
+            ("￥", vec!["e", "Nq"]),
             ("／", vec!["pau"]),
             ("？", vec!["pau"]),
             ("ー", vec!["unk"]),
@@ -136,9 +137,9 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("？", vec!["pau"]),
             ("ＣＰＵ", vec!["sh", "i", "i", "p", "i", "i", "y", "u", "u"]),
             ("\u{3000}", vec!["sp"]),
-            ("ｉｔ", vec!["i", "cl", "t", "o"]),
+            ("ｉｔ", vec!["i", "clt", "t", "o"]),
             ("\u{3000}", vec!["sp"]),
-            ("Ｉｔ", vec!["i", "cl", "t", "o"]),
+            ("Ｉｔ", vec!["i", "clt", "t", "o"]),
             ("\u{3000}", vec!["sp"]),
             ("ＩＴ", vec!["a", "i", "t", "i", "i"]),
             ("\u{3000}", vec!["sp"]),
@@ -156,7 +157,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("ｐ", vec!["p", "i", "i"]),
         ];
 
-        let result = haqumei.g2p_mapping(text).unwrap();
+        let result = haqumei.g2p_mapping(NIGHTMARE_TEXT).unwrap();
         let result: Vec<(&str, Vec<&str>)> = result
             .iter()
             .map(|d| {

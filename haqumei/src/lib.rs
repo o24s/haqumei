@@ -257,7 +257,10 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        self.open_jtalk.extract_phonemes(&features)
+        let mut phonemes = self.open_jtalk.extract_phonemes(&features)?;
+        postprocess::apply_allophones(&mut phonemes, &self.options);
+
+        Ok(phonemes)
     }
 
     /// すべてのトークンを保持する詳細な G2P 変換。
@@ -284,12 +287,13 @@ impl Haqumei {
 
         let detailed_mapping = self.g2p_mapping(text)?;
 
-        let mut result_phonemes = Vec::new();
+        let mut phonemes = Vec::new();
         for map in detailed_mapping {
-            result_phonemes.extend(map.phonemes);
+            phonemes.extend(map.phonemes);
         }
+        postprocess::apply_allophones(&mut phonemes, &self.options);
 
-        Ok(result_phonemes)
+        Ok(phonemes)
     }
 
     /// 入力テキストをカタカナに変換します。
@@ -471,7 +475,8 @@ impl Haqumei {
 
         let mapping = self.g2p_pairs(text.as_ref())?;
 
-        let result = mapping.into_iter().map(|m| m.phonemes).collect();
+        let mut result: Vec<Vec<Phoneme>> = mapping.into_iter().map(|m| m.phonemes).collect();
+        postprocess::apply_allophones(result.iter_mut().flat_map(|p| p.iter_mut()), &self.options);
 
         Ok(result)
     }
@@ -527,8 +532,16 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        self.open_jtalk
-            .g2p_pairs_inner(&features, self.options.is_non_pause_symbol)
+        let mut pairs = self
+            .open_jtalk
+            .g2p_pairs_inner(&features, self.options.is_non_pause_symbol)?;
+
+        postprocess::apply_allophones(
+            pairs.iter_mut().flat_map(|p| p.phonemes.iter_mut()),
+            &self.options,
+        );
+
+        Ok(pairs)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを未知語などの情報とともに返します。
@@ -601,7 +614,13 @@ impl Haqumei {
             .open_jtalk
             .g2p_pairs_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
-        self.open_jtalk.make_phoneme_mapping(morphs, mapping)
+        let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
+        postprocess::apply_allophones(
+            mapping.iter_mut().flat_map(|m| m.phonemes.iter_mut()),
+            &self.options,
+        );
+
+        Ok(mapping)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
@@ -677,7 +696,14 @@ impl Haqumei {
             .open_jtalk
             .g2p_mapping_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
-        self.open_jtalk.make_phoneme_mapping(morphs, mapping)
+        let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
+
+        postprocess::apply_allophones(
+            mapping.iter_mut().flat_map(|m| m.phonemes.iter_mut()),
+            &self.options,
+        );
+
+        Ok(mapping)
     }
 
     /// 入力テキストを解析し、形態素 (単語) ごとの詳細な言語情報と、プロソディ (韻律) 記号付き音素をマッピングして取得します。
@@ -760,7 +786,13 @@ impl Haqumei {
             .open_jtalk
             .g2p_mapping_prosody_inner(&njd_features, self.options.is_non_pause_symbol)?;
 
-        self.open_jtalk.make_phoneme_mapping(morphs, mapping)
+        let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
+        postprocess::apply_allophones_to_prosody(
+            mapping.iter_mut().flat_map(|m| m.phonemes.iter_mut()),
+            &self.options,
+        );
+
+        Ok(mapping)
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
