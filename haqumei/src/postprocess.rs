@@ -1095,8 +1095,8 @@ where
     I: IntoIterator<Item = &'a mut Phoneme>,
 {
     let split_n = options.split_n_allophones || options.use_allophones;
-    let split_n_r = options.split_n_before_r && !options.use_allophones;
-    let split_n_pa = options.split_n_before_palatal_affricate && !options.use_allophones;
+    let split_n_r = options.split_n_before_r;
+    let split_n_pa = options.split_n_before_palatal_affricate;
     let split_q = options.split_q_allophones || options.use_allophones;
     let final_glottal = options.enable_final_glottal_stop || options.use_allophones;
 
@@ -1138,8 +1138,8 @@ where
     I: IntoIterator<Item = &'a mut ProsodicPhoneme>,
 {
     let split_n = options.split_n_allophones || options.use_allophones;
-    let split_n_r = options.split_n_before_r && !options.use_allophones;
-    let split_n_pa = options.split_n_before_palatal_affricate && !options.use_allophones;
+    let split_n_r = options.split_n_before_r;
+    let split_n_pa = options.split_n_before_palatal_affricate;
     let split_q = options.split_q_allophones || options.use_allophones;
     let final_glottal = options.enable_final_glottal_stop || options.use_allophones;
 

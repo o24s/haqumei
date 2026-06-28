@@ -132,14 +132,12 @@ pub struct HaqumeiOptions {
     ///   声門の緊縮がないことが実証されており、語末との区別自体は
     ///   比較的信頼性が高いと判断したため)
     ///
-    /// 以下のオプションは有効化されません。
-    /// - `split_n_before_r = false`
-    ///   (rtMRI実測でt/d/nと未分離のクラスタであり、信頼性が高くないため)
-    /// - `split_n_before_palatal_affricate = false`
-    ///   (同上の理由により信頼性が高くないため)
-    ///
-    /// これが `true` である時点で、上記 5つのオプションに強制的に上書きされることに
+    /// これが `true` である時点で、上記 3 つのオプションは強制的に上書きされることに
     /// 注意してください。
+    ///
+    /// また、以下のオプションは有効化されません。
+    /// - `split_n_before_r = false`
+    /// - `split_n_before_palatal_affricate = false`
     ///
     /// デフォルトで無効になっています。
     pub use_allophones: bool,

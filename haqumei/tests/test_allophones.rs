@@ -90,19 +90,20 @@ fn test_use_allophones_master_switch() {
     let mut h = Haqumei::new().unwrap();
     h.options.use_allophones = true;
 
-    // 個別フラグが false でも、`use_allophones` が優先され有効化される
     h.options.split_n_allophones = false;
     h.options.split_q_allophones = false;
     h.options.enable_final_glottal_stop = false;
-
-    h.options.split_n_before_r = true;
-    h.options.split_n_before_palatal_affricate = true;
 
     assert_eq!(h.g2p("サンマ").unwrap(), [S, A, Nm, M, A]);
     assert_eq!(h.g2p("切符").unwrap(), [K, I, ClP, P, U]);
     assert_eq!(h.g2p("あっ").unwrap(), [A, ClQ]);
     assert_eq!(h.g2p("漢字").unwrap(), [K, A, Nd, J, I]);
     assert_eq!(h.g2p("新緑").unwrap(), [Sh, I, Nd, Ry, O, K, U]);
+
+    h.options.split_n_before_r = true;
+    h.options.split_n_before_palatal_affricate = true;
+
+    assert_eq!(h.g2p("漢字").unwrap(), [K, A, Npl, J, I]);
 }
 
 #[test]
