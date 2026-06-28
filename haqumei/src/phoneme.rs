@@ -29,12 +29,13 @@ phonemes! {
     /// 口蓋垂鼻音 [ɴ] (語末専用): 発話境界の前
     Nq   = "Nq",
 
-    // 学術的な根拠が弱い専用ラベル
+    // 学術的な根拠が弱いかもしれない音素ラベル
 
     /// 硬口蓋鼻音 [ɲ]: ch, j の前
     Npl  = "Npl",
     /// 後部歯茎鼻音 [n̠]: r の前
     Nr   = "Nr",
+
 
     A    = "a",
     B    = "b",
@@ -148,6 +149,15 @@ impl Phoneme {
         self.is_voiced_vowel() || self.is_voiced_consonant() || self.is_moraic_nasal()
     }
 
+    /// 声帯振動の有無 (有声・無声) がラベル単体では不定であるか判定します
+    ///
+    /// `ClS` の声帯振動は後続音素が確定した後も一つの値に定まりません。
+    /// (s/sh/f/h の前では無声、v の前では有声)
+    /// そのラベルは声帯振動という特徴に関わるものではないためです。
+    pub const fn is_voicing_underspecified(&self) -> bool {
+        self.is_continuant_sokuon()
+    }
+
     /// 母音 (有声・無声両方) であるか判定します
     pub const fn is_vowel(&self) -> bool {
         self.is_voiced_vowel() || self.is_unvoiced_vowel()
@@ -190,14 +200,10 @@ impl Phoneme {
 
     /// 子音 (有声・無声両方) であるか判定します
     pub const fn is_consonant(&self) -> bool {
-        self.is_unvoiced_consonant() || self.is_voiced_consonant()
+        self.is_unvoiced_consonant() || self.is_voiced_consonant() || self.is_continuant_sokuon()
     }
 
     /// 無声子音であるか判定します (促音 cl 系を含みません)
-    ///
-    /// `ClS` (摩擦の継続) は、独立した子音としての構えを持たない促音の異音
-    /// であるため `is_sokuon` 側ではなくこちらに含めています。
-    /// (摩擦が無声で継続する点で、通常の無声摩擦音と音響的に同じ性質のため)
     pub const fn is_unvoiced_consonant(&self) -> bool {
         matches!(
             self,
@@ -216,7 +222,6 @@ impl Phoneme {
                 | Self::Fy
                 | Self::H
                 | Self::Hy
-                | Self::ClS
         )
     }
 
@@ -248,6 +253,14 @@ impl Phoneme {
                 | Self::V
                 | Self::ClV
         )
+    }
+
+    /// 促音の異音のうち、摩擦・接近の継続によって実現されるものか判定します
+    ///
+    /// 声帯振動の有無 (無声/有声) は後続音素によって変わるため、
+    /// is_voiced / is_unvoiced のどちらにも属しません。
+    pub const fn is_continuant_sokuon(&self) -> bool {
+        matches!(self, Self::ClS)
     }
 
     /// 閉鎖区間 (促音の無声閉鎖・声門閉鎖、ポーズ、スペース) であるかを判定します。
@@ -636,16 +649,25 @@ mod tests {
         let all_phonemes = Phoneme::ALL;
 
         for p in all_phonemes {
-            // Sp, Pau を除くすべての音素は「有声音」「無声音」「閉鎖区間」「無音・特殊記号」のいずれか1つに必ず属するべき
+            // Sp, Pau を除くすべての音素は「有声音」「無声音」「閉鎖区間」
+            // 「無音・特殊記号」「声帯振動不定(単体では声帯振動の有無が判定できない)」
+            // のいずれか1つに必ず属するべき
             let is_voiced = p.is_voiced();
             let is_unvoiced = p.is_unvoiced();
             let is_silent = p.is_silent();
             let is_special = p.is_special();
+            let is_voicing_unresolved = p.is_voicing_underspecified();
 
-            let true_count = [is_voiced, is_unvoiced, is_silent, is_special]
-                .iter()
-                .filter(|&&x| x)
-                .count();
+            let true_count = [
+                is_voiced,
+                is_unvoiced,
+                is_silent,
+                is_special,
+                is_voicing_unresolved,
+            ]
+            .iter()
+            .filter(|&&x| x)
+            .count();
 
             if !matches!(p, Phoneme::Sp | Phoneme::Pau) {
                 assert_eq!(
