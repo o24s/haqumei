@@ -128,7 +128,7 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     revert_long_vowels: bool,
 
-    /// 四つ仮名（ヅ・ヂ）を元のテキスト通りの表記に復元する
+    /// 四つ仮名 (ヅ・ヂ) を元のテキスト通りの表記に復元する
     #[arg(long)]
     revert_yotsugana: bool,
 
@@ -159,6 +159,30 @@ struct HaqumeiConfigArgs {
     /// 踊り字 (々, ヽ, ヾ) の展開を無効にする (デフォルトは有効)
     #[arg(long)]
     no_process_odoriji: bool,
+
+    /// 異音解決 (split_n_allophones, split_q_allophones, enable_final_glottal_stop) を一括で有効化する
+    #[arg(long)]
+    use_allophones: bool,
+
+    /// 撥音「ン」を後続音素の環境に応じて異音 (Nm, Ng, Nd, Nq) に分岐させる
+    #[arg(long)]
+    split_n_allophones: bool,
+
+    /// r/ry の前の撥音「ン」をさらに専用の Nr [n̠] (後部歯茎鼻音) に解決する (split_n_allophones が必要)
+    #[arg(long)]
+    split_n_before_r: bool,
+
+    /// ch, j の前の撥音「ン」をさらに専用の Npl [ɲ] (硬口蓋鼻音) に解決する (split_n_allophones が必要)
+    #[arg(long)]
+    split_n_before_palatal_affricate: bool,
+
+    /// 語中の促音「ッ」を後続音素の環境に応じて異音 (ClP, ClT, ClK, ClS, ClV) に分岐させる
+    #[arg(long)]
+    split_q_allophones: bool,
+
+    /// 語末やポーズ前における、後続子音を伴わない促音「ッ」を専用の声門閉鎖音 ClQ [ʔ] として出力する
+    #[arg(long)]
+    enable_final_glottal_stop: bool,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -219,6 +243,12 @@ fn main() -> Result<()> {
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
         process_odoriji: !cli.options.no_process_odoriji,
+        use_allophones: cli.options.use_allophones,
+        split_n_allophones: cli.options.split_n_allophones,
+        split_n_before_r: cli.options.split_n_before_r,
+        split_n_before_palatal_affricate: cli.options.split_n_before_palatal_affricate,
+        split_q_allophones: cli.options.split_q_allophones,
+        enable_final_glottal_stop: cli.options.enable_final_glottal_stop,
         ..Default::default()
     };
 
