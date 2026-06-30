@@ -102,7 +102,13 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 
 /// Open JTalk をバインディングしたG2Pエンジン。
 ///
-/// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
+/// Sync ではありませんが、代わりに `haqumei` は辞書を
+/// グローバルに共有しており、 [OpenJTalk::new] の二回目実行
+/// 以降はそれらのポインタをコピーするため、比較的軽量です。
+///
+/// 辞書の更新には `update_global_dictionary`,
+/// グローバル辞書のユーザー辞書の解除には `unset_user_dictionary`
+/// を使用してください。
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
@@ -184,6 +190,7 @@ impl OpenJTalk {
         Ok(())
     }
 
+    /// [Dictionary] から [OpenJTalk] を作成します。
     pub fn from_dictionary(dict: Dictionary) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::from_model(&dict.model)?;
         let njd = Njd::new()?;

@@ -1,3 +1,56 @@
+//! 日本語の音素 (Phoneme) 定義と、条件異音 (allophone) の解決ロジック。
+//!
+//! 本モジュールでは、音声合成のフロントエンド処理において使用される音素の
+//! 列挙型 ([`Phoneme`]) と、その音韻的特徴を判定するメソッド群を提供します。
+//!
+//! # 「ン」「ッ」の異音解決に関する音声学的・音韻論的背景
+//!
+//! 詳細は各アイテムのドキュメントコメントを参照してください。
+//! ([`HaqumeiOptions::split_n_allophones`], [`HaqumeiOptions::split_n_before_r`],
+//! [`HaqumeiOptions::split_n_before_palatal_affricate`],
+//! [`HaqumeiOptions::split_q_allophones`],
+//! [`HaqumeiOptions::enable_final_glottal_stop`], [`Phoneme::resolve_n_allophone`],
+//! [`Phoneme::resolve_q_allophone`], [`Phoneme::resolve_q_final_glottal_stop`],
+//! [`NEnvironment`], [`QEnvironment`])
+//!
+//! ## 設計上の基本方針
+//!
+//! - 実証データによって裏付けられた区別 (語中/語末の促音の声門化の有無など)
+//!   は、信頼性の高いオプションとしてまとめて有効化できます
+//!   ([`HaqumeiOptions::use_allophones`])。
+//! - 伝統的記述にはあるが、直接的な構音観測では支持されていない、あるいは
+//!   未検証の区別 (rの前・チの前の撥音の構音点の違いなど) は、デフォルトでは
+//!   無効にしつつ、利用者が選択できる形で残しています。
+//! - 後続音素の環境だけでは決まらない、トークンごとの確率的な
+//!   変異 (s/h/j/wの前の撥音閉鎖の有無など) は、専用ラベルへの切り出しを
+//!   行わず、音響モデル側に委ねるような設計にしています。
+//! - 実測データが連続的な変動を示す場合、それを離散的な異音規則で
+//!   近似する実装・オプションは意図的に提供していません。
+//!
+//! ## 主な参照文献
+//!
+//! - Maekawa, K. (2019). A real-time MRI study of Japanese moraic nasal in
+//!   utterance-final position. *Proceedings of ICPhS XIX*, Melbourne, 1987–1991.
+//! - Maekawa, K. (2023). Production of the utterance-final moraic nasal
+//!   in Japanese: A real-time MRI study. *Journal of the International
+//!   Phonetic Association*, 53(1), 189–212.
+//! - Fujimoto, M., Maekawa, K., & Funatsu, S. (2010). Laryngeal
+//!   characteristics during the production of geminate consonants.
+//!   *Proceedings of Interspeech 2010*, Makuhari, 925–928.
+//! - Kawahara, S. (2005). Voicing and geminacy in Japanese: An acoustic and
+//!   perceptual study. *UMOP* 31, 87–120.
+//! - Vance, T. J. (2008). *The Sounds of Japanese*. Cambridge University Press.
+//! - Okada, H. (1999). Japanese. In *Handbook of the International Phonetic
+//!   Association*. Cambridge University Press.
+//!
+//! ## 注意点・既知の限界
+//!
+//! - Fujimoto et al. (2010) は被験者1名による予備的研究であり、著者ら自身も
+//!   追加データによる検証が必要であると明言しています。
+//! - 「伝統的記述」として引用している Vance (2008) / Okada (1999) は、
+//!   いずれも印象的・聴覚的観察に基づく記述であり、それ自体が rtMRI 等の
+//!   直接的構音観測によって裏付けられているわけではありません。
+
 use haqumei_macros::phonemes;
 
 phonemes! {
@@ -9,11 +62,11 @@ phonemes! {
 
     // 撥音「ン」とその異音
 
-    /// Moraic nasal (ん): デフォルト (鼻音化母音 / 未解決)
+    /// Moraic nasal (ン): デフォルト (鼻音化母音 / 未解決)
     Nn   = "N",
 
-    // Nn は"ん"を表す `HaqumeiOptions::split_n_*` オプション無効化時のデフォルトで、
-    // これは pyopenjtalk(-plus) の "ん" と同様の表現です。
+    // Nn は "ン" を表す `HaqumeiOptions::split_n_*` オプション無効化時のデフォルトで、
+    // これは pyopenjtalk(-plus) の "ン" と同様の表現です。
     //
     // `HaqumeiOptions::split_n_allophones` のオプション有効時の未解決状態、
     // すなわち口腔閉鎖を伴わない鼻音化母音としての発音を表すフォールバック先でもあります。
@@ -408,14 +461,14 @@ impl Phoneme {
     ///   (多数派が口腔閉鎖を伴わない「鼻音化母音」になるため)
     ///
     /// なお `s`/`h`/`j`/`w` の前は、実測上は少数のトークンが実際の鼻音閉鎖を
-    /// 伴うことが報告されていますが (Maekawa 2021)、多数派は鼻音化母音である
+    /// 伴うことが報告されていますが (Maekawa 2023)、多数派は鼻音化母音である
     /// ため、本メソッドでは一律「解決せず `Nn` のまま」をデフォルト挙動として
     /// います。
     ///
     /// ## 語末 `Nq` の細分化を提供しない理由
     ///
     /// 語末の `Nq` を直前母音の前後性によって [ŋ]/[ɴ] に離散的に二値分岐させる
-    /// オプションは、意図的に提供していません。Maekawa (2021, JIPA 53(1):
+    /// オプションは、意図的に提供していません。Maekawa (2023, JIPA 53(1):
     /// 189-212) のリアルタイムMRI観測により、この変動は実際には連続的な
     /// 調音位置の変動であり、統計的にも前舌/後舌の2分法ではなく
     /// 「{i} / {e, u} / {a, o}」という3水準のグルーピングに近いことが
@@ -467,7 +520,7 @@ enum NEnvironment {
 
     /// 歯茎音 (t, d, ts, n, z) の前 -> 歯茎鼻音 [n] に同化
     ///
-    /// 「Nd のデフォルト確定環境」です。rtMRI実測 (Maekawa 2021) で明確に
+    /// 「Nd のデフォルト確定環境」です。rtMRI実測 (Maekawa 2023) で明確に
     /// 分離されたクラスタであり、比較的信頼性は高いと判断しています。
     Alveolar,
 
