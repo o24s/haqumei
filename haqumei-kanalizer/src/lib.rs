@@ -23,13 +23,17 @@ pub struct Kanalizer {
 impl Kanalizer {
     pub fn new() -> Result<Self> {
         let encoder = Session::builder()?
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
+            .with_intra_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
+            .with_inter_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_memory(ENCODER_MODEL_BYTES)?;
 
         let decoder = Session::builder()?
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
+            .with_intra_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
+            .with_inter_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_memory(DECODER_MODEL_BYTES)?;
 
         Ok(Self::new_inner(encoder, decoder))
@@ -37,13 +41,17 @@ impl Kanalizer {
 
     pub fn from_paths(enc_path: &str, dec_path: &str) -> Result<Self> {
         let encoder = Session::builder()?
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
+            .with_intra_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
+            .with_inter_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_file(enc_path)?;
 
         let decoder = Session::builder()?
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
+            .with_intra_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
+            .with_inter_threads(1)
+            .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_file(dec_path)?;
 
         Ok(Self::new_inner(encoder, decoder))

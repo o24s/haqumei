@@ -14,7 +14,7 @@ members = [
 
 [workspace.dependencies]
 anyhow = "1.0.103"
-arc-swap = "1.9.1"
+arc-swap = "1.9.2"
 bindgen = "0.72.1"
 cc = "1.2.65"
 clap = { version = "4.6.1", features = ["derive"] }
@@ -35,7 +35,8 @@ libc = "0.2.186"
 log = "0.4.33"
 moka = { version = "0.12.15", features = ["sync"] }
 ndarray = "0.17.2"
-ort = { version = "=2.0.0-rc.11", default-features = false, features = [
+ort = { version = "=2.0.0-rc.12", default-features = false, features = [
+    "api-21",
     "copy-dylibs",
     "download-binaries",
     "ndarray",
