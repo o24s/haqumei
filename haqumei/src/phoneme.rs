@@ -39,6 +39,12 @@
 //!   *Proceedings of Interspeech 2010*, Makuhari, 925–928.
 //! - Kawahara, S. (2005). Voicing and geminacy in Japanese: An acoustic and
 //!   perceptual study. *UMOP* 31, 87–120.
+//! - Maekawa, K. (2023). Articulatory characteristics of the Japanese /r/:
+//!   A real-time MRI study.
+//!   *Proceedings of ICPhS 2023*, Prague, pp.992-996, 2023.08.10
+//! - Yoshinaga, T., Maekawa, K., and Iida, A. (2022). Variability in Production of
+//!   Non-Sibilant Fricative [ç] in /hi/.
+//!   *Proceedings of Interspeech 2022*, 620-624.
 //! - Vance, T. J. (2008). *The Sounds of Japanese*. Cambridge University Press.
 //! - Okada, H. (1999). Japanese. In *Handbook of the International Phonetic
 //!   Association*. Cambridge University Press.
@@ -50,6 +56,11 @@
 //! - 「伝統的記述」として引用している Vance (2008) / Okada (1999) は、
 //!   いずれも印象的・聴覚的観察に基づく記述であり、それ自体が rtMRI 等の
 //!   直接的構音観測によって裏付けられているわけではありません。
+//! - Okada (1999) のIPAハンドブック掲載の日本語音素記述については、
+//!   少なくとも /r/ に関しては rtMRI 実測 (Maekawa, ICPhS 2023) により
+//!   調音様式・調音位置の両面で実態と一致しないことが示されており、
+//!   伝統的な /r/ 前の撥音異音の記述 [Phoneme::Nr] ([n̠]) の信頼性の低さ
+//!   の可能性を示唆するものです。
 
 use haqumei_macros::phonemes;
 
@@ -560,6 +571,17 @@ enum NEnvironment {
     /// しかし、r/chの分離オプションとは異なり、これを分岐させると
     /// 「閉鎖が起きない方が多い可能性がある環境」に閉鎖を強制することになるため、
     /// オプションとしても提供していません。
+    ///
+    /// # h/hy ([ç]) の前についての補足
+    ///
+    /// h/hy の前は大多数が鼻音化母音として実現されますが、それに加えて、
+    /// 被験者1名での3回のMRIスキャンによる検証ではあるものの、[ç] 自体の声道形状が
+    /// トークンごとに変異することも報告されています。
+    /// (Yoshinaga, Maekawa & Iida, Interspeech 2022)
+    /// そのため、後続子音の調音形状が安定せず、その前の/N/の
+    /// 閉鎖位置も安定した値に収束しないことも推測できます。
+    /// これは「後続音素の環境だけでは閉鎖位置が決まらない」という、
+    /// このライブラリが専用ラベルを提供しない理由の独立した根拠です。
     Unresolved,
 }
 
