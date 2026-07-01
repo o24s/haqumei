@@ -70,7 +70,7 @@ pub use open_jtalk::{
 pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
-pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
+pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, WordPhonemeProsody};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use vibrato_rkyv::dictionary::PresetDictionaryKind;
@@ -84,7 +84,6 @@ use crate::{
         modify_acc_after_chaining, modify_english_words, modify_filler_accent,
         predict_kana_english, process_odori_features, retreat_acc_nuc, vibrato_analysis,
     },
-    word_phoneme::WordPhonemeProsody,
 };
 
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> =
