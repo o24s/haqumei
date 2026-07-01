@@ -39,6 +39,9 @@ pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(doc)]
+use crate::Haqumei;
+
 /// `Haqumei`, `OpenJTalk` が利用するグローバル辞書。
 /// [update_global_dictionary], [unset_user_dictionary] を使って変更してください。
 pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::new(|| {
