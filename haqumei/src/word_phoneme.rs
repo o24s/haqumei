@@ -15,7 +15,7 @@ pub struct WordPhonemePair {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeMap {
-    /// Word (表層系・辞書エントリを意味しない)
+    /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<Phoneme>,
 
@@ -35,7 +35,7 @@ pub struct WordPhonemeMap {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeDetail {
-    /// Word (表層系・辞書エントリを意味しない)
+    /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<Phoneme>,
 
@@ -85,11 +85,11 @@ pub struct WordPhonemeDetail {
     pub is_ignored: bool,
 }
 
-/// プロソディ情報つきの [ProsodicPhoneme] のリストや表層系、未知語・無視フラグ、Mecab の解析情報を表す構造体。
+/// プロソディ情報つきの [ProsodicPhoneme] のリストや表層形、未知語・無視フラグ、Mecab の解析情報を表す構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemeProsody {
-    /// Word (表層系・辞書エントリを意味しない)
+    /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
     pub phonemes: Vec<ProsodicPhoneme>,
 
