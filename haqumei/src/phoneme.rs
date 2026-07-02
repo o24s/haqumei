@@ -3,14 +3,20 @@
 //! 本モジュールでは、音声合成のフロントエンド処理において使用される音素の
 //! 列挙型 ([`Phoneme`]) と、その音韻的特徴を判定するメソッド群を提供します。
 //!
+//! [`Haqumei`] からこれらのロジックを使用するには、[`HaqumeiOptions`]
+//! で設定を行う必要があります。
+//!
 //! # 「ン」「ッ」の異音解決に関する音声学的・音韻論的背景
 //!
 //! 詳細は各アイテムのドキュメントコメントを参照してください。
-//! ([`HaqumeiOptions::split_n_allophones`], [`HaqumeiOptions::split_n_before_r`],
-//! [`HaqumeiOptions::split_n_before_palatal_affricate`],
-//! [`HaqumeiOptions::split_q_allophones`],
-//! [`HaqumeiOptions::enable_final_glottal_stop`], [`Phoneme::resolve_n_allophone`],
-//! [`Phoneme::resolve_q_allophone`], [`Phoneme::resolve_q_final_glottal_stop`])
+//! - [`HaqumeiOptions::split_n_allophones`]
+//! - [`HaqumeiOptions::split_n_before_r`]
+//! - [`HaqumeiOptions::split_n_before_palatal_affricate`]
+//! - [`HaqumeiOptions::split_q_allophones`]
+//! - [`HaqumeiOptions::enable_final_glottal_stop`]
+//! - [`Phoneme::resolve_n_allophone`]
+//! - [`Phoneme::resolve_q_allophone`]
+//! - [`Phoneme::resolve_q_final_glottal_stop`]
 //!
 //! ## 設計上の基本方針
 //!
@@ -61,6 +67,8 @@
 //!   伝統的な /r/ 前の撥音異音の記述 [Phoneme::Nr] (`[n̠]`) の信頼性の低さ
 //!   の可能性を示唆するものです。
 
+#[cfg(doc)]
+use crate::Haqumei;
 #[cfg(doc)]
 use crate::HaqumeiOptions;
 
@@ -391,7 +399,7 @@ impl Phoneme {
     /// 後続に阻害音がある通常の語中促音の発音中に声門の緊縮は見られなかった
     /// ことが報告されています。したがって「ッ」という同一の表記であっても、
     /// 語中 (口腔閉鎖) と語末 (声門閉鎖) では全く異なる発声器官のジェスチャー
-    /// が用いられており、これを明示的に分けることには強い音声学的妥当性が
+    /// が用いられており、これを明示的に分けることには一定の音声学的な妥当性が
     /// あります。
     pub fn resolve_q_final_glottal_stop(
         self,

@@ -59,7 +59,7 @@ use std::{
 };
 
 use crossbeam_channel::{Sender, bounded};
-use haqumei_jlabel::Label;
+pub use haqumei_jlabel::Label;
 use haqumei_kanalizer::Kanalizer;
 use moka::sync::Cache;
 
