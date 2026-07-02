@@ -17,8 +17,7 @@
       <img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0">
     </a>
   </p>
-  </p>
-    <p>
+  <p>
     <a href="https://pypi.org/project/haqumei/">
       <img src="https://img.shields.io/pypi/v/haqumei.svg" alt="PyPI version">
     </a>
@@ -34,14 +33,56 @@
   </p>
 </div>
 
+## 目次
+
+- [特徴 (Features)](#特徴-features)
+- [インストール](#インストール)
+  - [Rust](#rust)
+  - [Python](#python)
+    - [対応プラットフォーム](#対応プラットフォーム)
+- [CLI](#cli)
+- [使い方 (Usage)](#使い方-usage)
+  - [Rust](#rust-1)
+  - [Python](#python-1)
+- [Advanced Features](#advanced-features)
+  - [Word-Phoneme Mapping APIs について](#word-phoneme-mapping-apis-について)
+  - [G2P オプションで出力を変更する](#g2p-オプションで出力を変更する)
+- [プロソディ機能 (`g2p_prosody` / `g2p_mapping_prosody`)](#プロソディ機能-g2p_prosody--g2p_mapping_prosody)
+  - [`g2p_prosody_with_options` の仕様](#g2p_prosody_with_options-の仕様)
+    - [ProsodyFormat::Default](#prosodyformatdefault)
+    - [ProsodyFormat::Prefix](#prosodyformatprefix)
+    - [ProsodyFormat::Numeric](#prosodyformatnumeric)
+    - [例](#例)
+  - [`g2p_mapping_prosody` の仕様](#g2p_mapping_prosody-の仕様)
+    - [`WordPhonemeProsody` に含まれる主な情報](#wordphonemeprosody-に含まれる主な情報)
+    - [プロソディ音素 (`ProsodicPhoneme`)](#プロソディ音素-prosodicphoneme)
+    - [例](#例-1)
+- [精度](#精度)
+  - [jsut-label](#jsut-label)
+  - [ROHAN](#rohan)
+- [ベンチマーク](#ベンチマーク)
+  - [注意点](#注意点)
+  - [Heavy について](#heavy-について)
+    - [`use_unidic_yomi` オプション](#use_unidic_yomi-オプション)
+    - [`predict_nani` 機能](#predict_nani-機能)
+    - [`pyopenjtalk-plus` との比較](#pyopenjtalk-plus-との比較)
+- [カスタム辞書の埋め込みビルド](#カスタム辞書の埋め込みビルド)
+  - [Cargo の Feature を変更する](#cargo-の-feature-を変更する)
+  - [辞書ソースの準備と環境変数の設定](#辞書ソースの準備と環境変数の設定)
+- [辞書](#辞書)
+- [ライセンス](#ライセンス)
+  - [同梱ソフトウェアのライセンスと由来](#同梱ソフトウェアのライセンスと由来)
+- [謝辞](#謝辞)
+
 ## 特徴 (Features)
 
-- Word-Phoneme mapping APIs: 従来では直接取得できなかった、入力テキストに対してロスの少ない分割された部分文字列($\approx$ 表層系・辞書エントリ)と音素をマッピングした詳細情報 (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`) が取得可能です。 ([Advanced Features](#advanced-features))
-- プロソディ情報の取得: プロソディ記号付き音素列および、表層形に対してロスの少ないマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
+- Word-Phoneme Mapping APIs: 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features))
+- プロソディ情報の取得: プロソディ記号付き音素列と、入力テキストに対してロスの少ないマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
+- より詳細な音素ラベル: 撥音・促音に対する条件異音 (allophone) 解決によって、専用の音素ラベルとして導入された異音の取得をいくつかの選択肢から設定できます。 (詳細は、[ここ](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) を参照してください。)
 - パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
 - 精度: `haqumei-kanalizer` による英単語読み推定やその他の補正に加えて、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
-- 出力形式: 単純な音素列 (`g2p`) に加え、未知語情報を含む詳細なリスト (`g2p_detailed`) など、多様な形式で結果を取得できます。
 - 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
+- 多様なオプション: [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html) を用いることで、条件異音の音素ラベル導入、Unicode 正規化、読み方についての柔軟な変更が可能です。
 
 コード例は [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples) にあります。
 
@@ -100,7 +141,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   // 音素リストに変換
   let phonemes = haqumei.g2p(text)?;
-  assert_eq!(phonemes, ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"]);
+  assert_eq!(
+      phonemes,
+      [
+          "k", "o", "N", "n", "i", "ch", "i", "w", "a", "pau", "s", "e", "k", "a", "i"
+      ]
+  );
 
   // プロソディ記号付きの音素リストを得る
   let phones = haqumei.g2p_prosody(text)?.join(" ");
@@ -110,9 +156,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let kana = haqumei.g2k(text)?;
   assert_eq!(kana, "コンニチワ、セカイ！");
 
+  // 異音解決を有効にする
+  haqumei.options.use_allophones = true;
+
+  let text = "執筆";
+
+  // プロソディ情報付きの Word-Phoneme 対応を得る
+  let mapping = haqumei.g2p_mapping_prosody(text)?;
+  let shippitsu = &mapping[0];
+  assert_eq!(shippitsu.word, "執筆");
+  assert_eq!(shippitsu.pos, "名詞");
+  assert_eq!(shippitsu.accent_nucleus, 0); // 平板型
+
+  println!("{:?}", shippitsu.phonemes);
+  // 出力:
+  // [Phoneme {
+  //     phoneme: Sh,
+  //     pitch: Some(Low)
+  // },
+  // Phoneme {
+  //     phoneme: I,
+  //     pitch: Some(Low)
+  // },
+  // Phoneme {
+  //     phoneme: ClP, // 促音 /cl/ (Phoneme::Cl) の異音, 無声両唇閉鎖
+  //     pitch: Some(High)
+  // },
+  // Phoneme {
+  //     phoneme: P,
+  //     pitch: Some(High)
+  // },
+  // Phoneme {
+  //     phoneme: UnvoicedI,
+  //     pitch: Some(High)
+  // }, ...]
+
   Ok(())
 }
 ```
+
+> [!WARNING]
+> 無声化母音・音素ラベルとして導入された異音には声帯振動を伴わない、すなわちピッチが存在しないと考えられるケースについてもピッチを削除していません。
+> これは、G2Pライブラリとして情報を恣意的に減らすことを避け、ピッチを削除するかどうかの判断をユーザー側の選択に委ねるべきだと考えているためです。 (ピッチを維持したまま、有声母音に変更する手段を潰すべきではない)
 
 ### Python
 
@@ -142,57 +227,43 @@ print(f"カタカナ読み: {kana}")
 
 ## Advanced Features
 
-### 元の単語文字列との音素マッピングを得る
-
-音素から元の単語の対応を得る `g2p_pairs` が実装されています。  
-`JPCommon` の構造体を走査し、各音素の属する単語のポインタを追うことによって実現しています。
-
-```rust
-use haqumei::Haqumei;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let mut haqumei = Haqumei::new()?;
-
-  println!("{:?}", haqumei.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ")?);
-  // [WordPhonemePair {
-  //     word: "𰻞𰻞",
-  //     phonemes: ["pau"]
-  // }, WordPhonemePair {
-  //     word: "麺",
-  //     phonemes: ["m", "e", "N"]
-  // }, WordPhonemePair {
-  //     word: "＆",
-  //     phonemes: ["a", "N", "d", "o"]
-  // }, WordPhonemePair {
-  //     word: "お冷",
-  //     phonemes: ["o", "h", "i", "y", "a"]
-  // }, ...
-
-  Ok(())
-}
-```
-
-### 詳細な G2P 出力
+### Word-Phoneme Mapping APIs について
 
 Open JTalk (pyopenjtalk) では、未知語は `pau` として扱われますが、`Haqumei` の `g2p` 関数もそれに則っています。  
-しかし、`g2p_**_detailed` な関数を使うことで、無視された未知語や空白そのものを `unk`, `sp` として検出可能です。  
+しかし、`mapping`, `detailed` あるいは `prosody` の名前を含む G2P 関数を使うことで、未知語や空白そのものを `unk`, `sp` として検出可能です。  
 
-`sp` は、入力された空白ではなく、Mecab が出力した、本来 `pyopenjtalk` で無視される`"記号,空白"`であることに注意してください。そのため、Mecab がそもそも無視する記号 (e.g., `\t`, `\n`) などは `sp` に含まれません。  
+> [!WARNING]
+> `sp` は、入力された空白ではなく、Mecab が出力した、本来 `pyopenjtalk` で無視される`"記号,空白"`であることに注意してください。特に、Mecab がそもそも無視する記号 (e.g., `\t`, `\n`) などは `sp` に含まれません。  
+> Word-Phoneme Mapping APIs について、"入力テキストに対してロスの少ない" と表現しているのはそのためで、入力テキストと完全な一致が保証されるわけではありません。(英字も Open JTalk によって全角化される)
+>
+> "単語($\approx$ 表層形・辞書エントリ)と音素をマッピングする" という表現についても補足します。
+> まず、そもそも日本語に「単語」の明確な共通の定義は存在せず、日本語形態素解析の文脈においては、
+> 辞書の表層形を「単語」だとみなし、入力文字列を解析することで文法機能を同定していると[されて](https://clrd.ninjal.ac.jp/unidic/glossary.html#morphological_analysis)います。
+> Open JTalk は様々な処理の過程で、表層形や文法、アクセント情報を伴う `NjdFeature` のマージが発生し、
+> (Haqumei では[拡張されている](https://github.com/o24s/haqumei/tree/main/haqumei-jlabel)) HTS形式のフルコンテキストラベルではこれを抽象的な [Word](https://docs.rs/haqumei-jlabel/latest/haqumei_jlabel/struct.Word.html) として扱っています。
+> そのため、それを表現するには、マージ処理のために明らかに表層形は誤りで、とはいえ処理のしやすい分割された形式として、あえて定義が曖昧な Word という表現を用いています。
 
 - 既知語: 通常の音素列 (読点などは `pau`)
 - 未知語: `unk`
 - 空白等: `sp` (Space)
 
 `g2p_mapping` を使用すると、未知語かどうか (`is_unknown`)、本来のパイプラインで無視されるかどうか (`is_ignored`) という情報とともに、音素と元の単語のマッピングが取得できます。また、`g2p_mapping_detailed` を使うことで、マッピングに加えて品詞やアクセント情報などを取得することもできます。
+未知語情報さえ必要ない場合は、`g2p_pairs` のような API もありますが、従来の `g2p` と同様に入力の損失が大きいためにあまり推奨しません。
+
+プロソディ情報付きの単語と音素を得るには、`g2p_mapping_prosody` が有用です。
+詳しくは [ここ](#g2p_mapping_prosody-の仕様) を読んでください。  
+とはいえ、`g2p_mapping_prosody` がリストとして返す [`WordPhonemeProsody`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeProsody.html) は、 `g2p_mapping_detailed` の返却する [`WordPhonemeDetail`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeDetail.html) のスーパーセット的な実装になっている (Mecab の features を除けば) 点は留意してください。
+
+以上より、この API で得られる情報の大きさを簡単に示すと、  
+`g2p_pairs` < `g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`  
+のようになると言えます。
+
 
 ```rust
 use haqumei::Haqumei;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
-
-  println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺")?);
-  // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
   println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
   // [WordPhonemeMap {
@@ -493,7 +564,7 @@ HaqumeiOptions {
 
 #### `predict_nani` 機能
 
-`predict_nani` は ONNX を用いますが、セッションをOSスレッドごとに作るのは正気ではないため、`Mutex` を使用しています。(ONNX のセッションはスレッドセーフだが、そのバインディングの ort は `Session::run` を[排他参照をとるようにしている](https://github.com/pykeio/ort/issues/402#issuecomment-2949993914))  
+`predict_nani` は "何" の読み推定のために ONNX を用いますが、セッションをOSスレッドごとに作るのは正気ではないため、`Mutex` を使用しています。(ONNX のセッションはスレッドセーフだが、そのバインディングの ort は `Session::run` を[排他参照をとるようにしている](https://github.com/pykeio/ort/issues/402#issuecomment-2949993914))  
 並行に処理をしている際に、入力に大量の"何"がくることでボトルネックになってしまうケースはまれであるため、ボトルネックとなる懸念は否定されます。  
 また、このモデル自体は軽量で、並行性に耐性のあるキャッシュ機構を挟んでいるため、DOS的な入力への多少の耐性はあるといえます。  
 

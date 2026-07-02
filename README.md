@@ -33,14 +33,52 @@
   </p>
 </div>
 
+## Table of Contents
+
+- [Features](#features)
+- [Install](#install)
+  - [Rust](#rust)
+  - [Python](#python)
+    - [Supported Platforms](#supported-platforms)
+- [Command-Line Tool](#command-line-tool)
+- [Usage](#usage)
+  - [Rust](#rust-1)
+  - [Python](#python-1)
+- [Advanced Features](#advanced-features)
+  - [Word-Phoneme Mapping APIs](#word-phoneme-mapping-apis)
+  - [Modifying Output with G2P Options](#modifying-output-with-g2p-options)
+- [Prosody Features (`g2p_prosody` / `g2p_mapping_prosody`)](#prosody-features-g2p_prosody--g2p_mapping_prosody)
+  - [Specification of `g2p_prosody_with_options`](#specification-of-g2p_prosody_with_options)
+    - [ProsodyFormat::Default](#prosodyformatdefault)
+    - [ProsodyFormat::Prefix](#prosodyformatprefix)
+    - [ProsodyFormat::Numeric](#prosodyformatnumeric)
+    - [Example](#example)
+  - [Specification of `g2p_mapping_prosody`](#specification-of-g2p_mapping_prosody)
+    - [Information included in `WordPhonemeProsody`](#information-included-in-wordphonemeprosody)
+    - [Prosodic Phoneme (`ProsodicPhoneme`)](#prosodic-phoneme-prosodicphoneme)
+    - [Example](#example-1)
+- [Accuracy](#accuracy)
+  - [jsut-label](#jsut-label)
+  - [ROHAN](#rohan)
+- [Benchmark](#benchmark)
+  - [Performance Notes](#performance-notes)
+- [Building with a Custom Embedded Dictionary](#building-with-a-custom-embedded-dictionary)
+  - [Change the Cargo Features](#change-the-cargo-features)
+  - [Prepare the Dictionary Source and Set the Environment Variable](#prepare-the-dictionary-source-and-set-the-environment-variable)
+- [Dictionary](#dictionary)
+- [License](#license)
+  - [Licenses and Origins of Bundled Software](#licenses-and-origins-of-bundled-software)
+- [Acknowledgements](#acknowledgements)
+
 ## Features
 
-* **Word-Phoneme Mapping APIs:** Provides APIs for obtaining detailed mappings between phonemes and minimally lossy segmented substrings of the input text ($\approx$ surface forms or dictionary entries), which were not previously available (`g2p_pairs`, `g2p_mapping`, `g2p_mapping_prosody`, `g2p_mapping_detailed`). (See [Advanced Features](#advanced-features))
-- **Prosody Information Retrieval:** Provides phoneme sequences enriched with prosodic symbols as well as near-lossless mappings to surface forms (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
+- **Word-Phoneme Mapping APIs:** Provides mapping information between words ($\approx$ surface forms / dictionary entries) and phonemes, which was previously difficult to obtain directly. Enables retrieval of detailed analysis results with minimal loss of information from the input text, including unknown-word information. (See [Advanced Features](#advanced-features))
+- **Prosody Information Retrieval:** Provides phoneme sequences annotated with prosodic symbols, along with near-lossless mappings to the input text (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).)
+- **More Detailed Phoneme Labels:** Through allophone resolution for moraic nasals (撥音) and geminate consonants (促音), you can choose from several options for the allophones introduced as dedicated phoneme labels. (See [here](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) for details.)
 - **Performance:** Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark))
 - **Accuracy:** Improves accuracy by incorporating English pronunciation estimation via `haqumei-kanalizer` and other corrections, alongside various techniques from [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy))
-- **Output Formats:** Provides results in various formats, including a simple phoneme sequence (`g2p`) and a detailed list including unknown word information (`g2p_detailed`).
 - **Concurrency:** Enables concurrent G2P processing across multiple threads using the `*_batch` methods.
+- **Diverse Options:** Using [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html), you can flexibly customize allophone phoneme label introduction, Unicode normalization, and reading behavior.
 
 Examples can be found in [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples).
 
@@ -109,9 +147,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let kana = haqumei.g2k(text)?;
   assert_eq!(kana, "コンニチワ、セカイ！");
 
+  // Enable allophone resolution
+  haqumei.options.use_allophones = true;
+
+  let text = "執筆";
+
+  // Get Word-Phoneme mapping with prosody information
+  let mapping = haqumei.g2p_mapping_prosody(text)?;
+  let shippitsu = &mapping[0];
+  assert_eq!(shippitsu.word, "執筆");
+  assert_eq!(shippitsu.pos, "名詞");
+  assert_eq!(shippitsu.accent_nucleus, 0); // Heiban (flat) type
+
+  println!("{:?}", shippitsu.phonemes);
+  // Output:
+  // [Phoneme {
+  //     phoneme: Sh,
+  //     pitch: Some(Low)
+  // },
+  // Phoneme {
+  //     phoneme: I,
+  //     pitch: Some(Low)
+  // },
+  // Phoneme {
+  //     phoneme: ClP, // Allophone of the geminate consonant /cl/ (Phoneme::Cl): voiceless bilabial stop
+  //     pitch: Some(High)
+  // },
+  // Phoneme {
+  //     phoneme: P,
+  //     pitch: Some(High)
+  // },
+  // Phoneme {
+  //     phoneme: UnvoicedI,
+  //     pitch: Some(High)
+  // }, ...]
+
   Ok(())
 }
 ```
+
+> [!WARNING]
+> We do not remove pitch information from devoiced vowels or from allophones introduced as dedicated phoneme labels, even in cases where no vocal-cord vibration (and thus no pitch) would be expected.
+> As a G2P library, we believe it is better not to arbitrarily discard information, and to leave the decision of whether to drop pitch up to the user. (We shouldn't foreclose the option of keeping the pitch while converting back to a voiced vowel.)
 
 ### Python
 
@@ -141,41 +218,19 @@ print(f"Katakana reading: {kana}")
 
 ## Advanced Features
 
-### Getting Phoneme Mapping with the Original Word String
-
-Haqumei implements `g2p_pairs` to obtain the correspondence between phonemes and their original words.  
-
-```rust
-use haqumei::Haqumei;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let mut haqumei = Haqumei::new()?;
-
-  println!("{:?}", haqumei.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ")?);
-  // [WordPhonemePair {
-  //     word: "𰻞𰻞",
-  //     phonemes: ["pau"]
-  // }, WordPhonemePair {
-  //     word: "麺",
-  //     phonemes: ["m", "e", "N"]
-  // }, WordPhonemePair {
-  //     word: "＆",
-  //     phonemes: ["a", "N", "d", "o"]
-  // }, WordPhonemePair {
-  //     word: "お冷",
-  //     phonemes: ["o", "h", "i", "y", "a"]
-  // }, ... ]
-
-  Ok(())
-}
-```
-
-### Detailed G2P Output
+### Word-Phoneme Mapping APIs
 
 In Open JTalk (`pyopenjtalk`), unknown words are treated as `pau` (pauses), and Haqumei's standard `g2p` function follows this behavior.  
-However, by using the `g2p_**_detailed` functions, you can detect otherwise ignored unknown words and spaces as `unk` and `sp` respectively.  
+However, by using G2P functions whose names contain `mapping`, `detailed`, or `prosody`, you can detect unknown words and spaces themselves as `unk` and `sp` respectively.
 
-Please note that `sp` does not refer to raw space characters in the input, but rather the `"記号,空白"` (symbol, space) part-of-speech output by Mecab, which is normally ignored in `pyopenjtalk`. Therefore, symbols that Mecab itself ignores (e.g., `\t`, `\n`) are not included in `sp`.  
+> [!WARNING]
+> Note that `sp` does not refer to raw space characters in the input, but rather the `"記号,空白"` (symbol, space) part-of-speech output by Mecab, which is normally ignored in `pyopenjtalk`. In particular, symbols that Mecab itself ignores (e.g., `\t`, `\n`) are not included in `sp`.
+> This is why we describe the Word-Phoneme Mapping APIs as having "minimal loss relative to the input text": an exact match with the input text is not guaranteed. (Open JTalk also converts Latin characters to full-width.)
+>
+> A note on the phrase "mapping words ($\approx$ surface forms / dictionary entries) to phonemes":
+> To begin with, there is no single, universally agreed-upon definition of a "word" in Japanese. In the context of Japanese morphological analysis, a dictionary's surface form is generally [treated](https://clrd.ninjal.ac.jp/unidic/glossary.html#morphological_analysis) as a "word," with grammatical function identified by analyzing the input string.
+> During various stages of processing, Open JTalk merges `NjdFeature` entries carrying surface form, grammar, and accent information, and the HTS-format full-context label (which Haqumei [extends](https://github.com/o24s/haqumei/tree/main/haqumei-jlabel)) represents this abstractly as a [Word](https://docs.rs/haqumei-jlabel/latest/haqumei_jlabel/struct.Word.html).
+> To express this, "surface form" is clearly inaccurate given the merging involved, yet we still needed a term for this split-but-processing-friendly unit, hence our deliberate use of the intentionally loose term "Word".
 
 - **Known words**: Regular phoneme sequence (punctuation marks become `pau`).
 - **Unknown words**: `unk`
@@ -183,6 +238,14 @@ Please note that `sp` does not refer to raw space characters in the input, but r
 
 Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
 In addition, using `g2p_mapping_detailed` allows you to retrieve not only the mapping but also part-of-speech information and accent details.
+Additionally, an API such as `g2p_pairs` is available for cases where unknown-word information is not needed. However, like the traditional `g2p`, it loses a significant amount of input information and is not particularly recommended.
+
+To obtain words and phonemes together with prosody information, `g2p_mapping_prosody` is useful.
+See [here](#specification-of-g2p_mapping_prosody) for details.
+That said, keep in mind that [`WordPhonemeProsody`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeProsody.html), the list type returned by `g2p_mapping_prosody`, is essentially a superset of [`WordPhonemeDetail`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeDetail.html) (returned by `g2p_mapping_detailed`), aside from Mecab's `features`.
+
+In short, the amount of information provided by these APIs can be roughly ordered as:
+`g2p_pairs` < `g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`
 
 
 ```rust
@@ -190,9 +253,6 @@ use haqumei::Haqumei;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
-
-  println!("{:?}", haqumei.g2p_detailed("こんにちは 𰻞𰻞麺")?);
-  // ["k", "o", "N", "n", "i", "ch", "i", "w", "a", "sp", "unk", "m", "e", "N"]
 
   println!("{:?}", haqumei.g2p_mapping("𰻞𰻞麺 お冷を頼んだ")?);
   // [WordPhonemeMap {
