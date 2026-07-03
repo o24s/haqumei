@@ -49,14 +49,7 @@
   - [Modifying Output with G2P Options](#modifying-output-with-g2p-options)
 - [Prosody Features (`g2p_prosody` / `g2p_mapping_prosody`)](#prosody-features-g2p_prosody--g2p_mapping_prosody)
   - [Specification of `g2p_prosody_with_options`](#specification-of-g2p_prosody_with_options)
-    - [ProsodyFormat::Default](#prosodyformatdefault)
-    - [ProsodyFormat::Prefix](#prosodyformatprefix)
-    - [ProsodyFormat::Numeric](#prosodyformatnumeric)
-    - [Example](#example)
   - [Specification of `g2p_mapping_prosody`](#specification-of-g2p_mapping_prosody)
-    - [Information included in `WordPhonemeProsody`](#information-included-in-wordphonemeprosody)
-    - [Prosodic Phoneme (`ProsodicPhoneme`)](#prosodic-phoneme-prosodicphoneme)
-    - [Example](#example-1)
 - [Accuracy](#accuracy)
   - [jsut-label](#jsut-label)
   - [ROHAN](#rohan)
@@ -230,7 +223,7 @@ However, by using G2P functions whose names contain `mapping`, `detailed`, or `p
 > A note on the phrase "mapping words ($\approx$ surface forms / dictionary entries) to phonemes":
 > To begin with, there is no single, universally agreed-upon definition of a "word" in Japanese. In the context of Japanese morphological analysis, a dictionary's surface form is generally [treated](https://clrd.ninjal.ac.jp/unidic/glossary.html#morphological_analysis) as a "word," with grammatical function identified by analyzing the input string.
 > During various stages of processing, Open JTalk merges `NjdFeature` entries carrying surface form, grammar, and accent information, and the HTS-format full-context label (which Haqumei [extends](https://github.com/o24s/haqumei/tree/main/haqumei-jlabel)) represents this abstractly as a [Word](https://docs.rs/haqumei-jlabel/latest/haqumei_jlabel/struct.Word.html).
-> To express this, "surface form" is clearly inaccurate given the merging involved, yet we still needed a term for this split-but-processing-friendly unit, hence our deliberate use of the intentionally loose term "Word".
+> To represent substrings of the input text, using "surface form" is clearly inaccurate given the merging involved. Yet, we still needed a term for this split-but-processing-friendly unit, hence our deliberate use of the intentionally loose term "Word".
 
 - **Known words**: Regular phoneme sequence (punctuation marks become `pau`).
 - **Unknown words**: `unk`
@@ -431,7 +424,8 @@ The following information is included as data for each morpheme:
 
 | Field | Description | Example |
 | :--- | :--- | :--- |
-| `word` | Surface form of the morpheme | `"空"` |
+| `word` | Word, a substring of the input text | `"空"` |
+| `phonemes` | List consisting of phonemes, pitch information, and prosodic symbols (see below) | `[ProsodicPhoneme::Exclamatory]` |
 | `pos`, `pos_group1`~`3` | Part-of-speech and its subdivisions | `"名詞"`, `"一般"` |
 | `orig`, `read`, `pron` | Original form, reading, pronunciation form | `"空"`, `"ソラ"`, `"ソラ"` |
 | `accent_nucleus` | Accent nucleus position (0: Heiban type, 1~: n-th mora) | `1` |
@@ -445,7 +439,7 @@ The `phonemes` field contains a list of the following elements:
 
 | Variant | Meaning | Output symbol in `g2p_prosody`, etc. |
 | :--- | :--- | :--- |
-| `Phoneme` | The phoneme itself and its pitch (`High` / `Low`) | `a`, `a:0`, `H_a`, etc. |
+| `Phoneme` | [Phoneme](https://docs.rs/haqumei/latest/haqumei/phoneme/enum.Phoneme.html) and its pitch (`High` / `Low`) | `a`, `a:0`, `H_a`, etc. |
 | `AccentPhraseBoundary` | Accent phrase boundary | `#` |
 | `Pause` | Regular pause / comma | `_` |
 | `Interrogative` | End of interrogative / Pause | `?` |

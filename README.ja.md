@@ -49,23 +49,13 @@
   - [G2P オプションで出力を変更する](#g2p-オプションで出力を変更する)
 - [プロソディ機能 (`g2p_prosody` / `g2p_mapping_prosody`)](#プロソディ機能-g2p_prosody--g2p_mapping_prosody)
   - [`g2p_prosody_with_options` の仕様](#g2p_prosody_with_options-の仕様)
-    - [ProsodyFormat::Default](#prosodyformatdefault)
-    - [ProsodyFormat::Prefix](#prosodyformatprefix)
-    - [ProsodyFormat::Numeric](#prosodyformatnumeric)
-    - [例](#例)
   - [`g2p_mapping_prosody` の仕様](#g2p_mapping_prosody-の仕様)
-    - [`WordPhonemeProsody` に含まれる主な情報](#wordphonemeprosody-に含まれる主な情報)
-    - [プロソディ音素 (`ProsodicPhoneme`)](#プロソディ音素-prosodicphoneme)
-    - [例](#例-1)
 - [精度](#精度)
   - [jsut-label](#jsut-label)
   - [ROHAN](#rohan)
 - [ベンチマーク](#ベンチマーク)
   - [注意点](#注意点)
   - [Heavy について](#heavy-について)
-    - [`use_unidic_yomi` オプション](#use_unidic_yomi-オプション)
-    - [`predict_nani` 機能](#predict_nani-機能)
-    - [`pyopenjtalk-plus` との比較](#pyopenjtalk-plus-との比較)
 - [カスタム辞書の埋め込みビルド](#カスタム辞書の埋め込みビルド)
   - [Cargo の Feature を変更する](#cargo-の-feature-を変更する)
   - [辞書ソースの準備と環境変数の設定](#辞書ソースの準備と環境変数の設定)
@@ -241,7 +231,7 @@ Open JTalk (pyopenjtalk) では、未知語は `pau` として扱われますが
 > 辞書の表層形を「単語」だとみなし、入力文字列を解析することで文法機能を同定していると[されて](https://clrd.ninjal.ac.jp/unidic/glossary.html#morphological_analysis)います。
 > Open JTalk は様々な処理の過程で、表層形や文法、アクセント情報を伴う `NjdFeature` のマージが発生し、
 > (Haqumei では[拡張されている](https://github.com/o24s/haqumei/tree/main/haqumei-jlabel)) HTS形式のフルコンテキストラベルではこれを抽象的な [Word](https://docs.rs/haqumei-jlabel/latest/haqumei_jlabel/struct.Word.html) として扱っています。
-> そのため、それを表現するには、マージ処理のために明らかに表層形は誤りで、とはいえ処理のしやすい分割された形式として、あえて定義が曖昧な Word という表現を用いています。
+> そのため、入力テキストの部分文字列を表現するには、マージ処理のために明らかに表層形は誤りで、とはいえ処理のしやすい分割された形式として、あえて定義が曖昧な Word という表現を用いています。
 
 - 既知語: 通常の音素列 (読点などは `pau`)
 - 未知語: `unk`
@@ -443,7 +433,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | フィールド | 説明 | 例 |
 | :--- | :--- | :--- |
-| `word` | 形態素の表層形 | `"空"` |
+| `word` | 単語、入力の部分文字列 | `"空"` |
+| `phonemes` | 音素とピッチ情報やプロソディ記号からなるリスト (後述) | `[ProsodicPhoneme::Exclamatory]` |
 | `pos`, `pos_group1`~`3` | 品詞およびその細分類 | `"名詞"`, `"一般"` |
 | `orig`, `read`, `pron` | 原形、読み、発音形式 | `"空"`, `"ソラ"`, `"ソラ"` |
 | `accent_nucleus` | アクセント核位置 (0: 平板型, 1~: n番目のモーラ) | `1` |
@@ -457,7 +448,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | 列挙子 | 意味 | `g2p_prosody` 等での出力記号 |
 | :--- | :--- | :--- |
-| `Phoneme` | 音素本体と、そのピッチの高低 (`High` / `Low`) | `a`, `a:0`, `H_a` など |
+| `Phoneme` | [音素](https://docs.rs/haqumei/latest/haqumei/phoneme/enum.Phoneme.html)と、そのピッチの高低 (`High` / `Low`) | `a`, `a:0`, `H_a` など |
 | `AccentPhraseBoundary` | アクセント句境界 | `#` |
 | `Pause` | 通常のポーズ・読点 | `_` |
 | `Interrogative` | 疑問文の終結・ポーズ | `?` |
