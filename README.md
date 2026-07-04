@@ -179,9 +179,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-> [!WARNING]
-> We do not remove pitch information from devoiced vowels or from allophones introduced as dedicated phoneme labels, even in cases where no vocal-cord vibration (and thus no pitch) would be expected.
+> [!IMPORTANT]
+> We do not remove pitch information from devoiced vowels or from contextual allophones introduced as dedicated phoneme labels, even in cases where no vocal-cord vibration (and thus no pitch) would be expected.
 > As a G2P library, we believe it is better not to arbitrarily discard information, and to leave the decision of whether to drop pitch up to the user. (We shouldn't foreclose the option of keeping the pitch while converting back to a voiced vowel.)
+>
+> Please refer to the [documentation](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) for options other than `use_allophones` and more detailed information.
 
 ### Python
 
