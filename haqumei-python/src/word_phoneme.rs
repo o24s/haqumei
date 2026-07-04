@@ -42,7 +42,7 @@ impl PyWordPhonemePair {
     name = "WordPhonemeMap",
     module = "haqumei",
     get_all,
-    skip_from_py_object
+    skip_from_py_object,
 )]
 #[derive(Clone)]
 pub struct PyWordPhonemeMap {
@@ -80,8 +80,13 @@ impl PyWordPhonemeMap {
     }
 }
 
+#[pyclass(
+    name = "WordPhonemeDetail",
+    module = "haqumei",
+    get_all,
+    skip_from_py_object,
+)]
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass(module = "haqumei", get_all, skip_from_py_object)]
 pub struct PyWordPhonemeDetail {
     pub word: String,
     pub phonemes: Vec<&'static str>,
@@ -183,7 +188,7 @@ impl PyWordPhonemeDetail {
     name = "WordPhonemeProsody",
     module = "haqumei",
     get_all,
-    skip_from_py_object
+    skip_from_py_object,
 )]
 #[derive(Debug, Clone)]
 pub struct PyWordPhonemeProsody {

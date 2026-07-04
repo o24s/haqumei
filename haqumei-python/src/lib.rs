@@ -88,7 +88,13 @@ impl From<::haqumei::MecabMorph> for PyMecabMorph {
     }
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
+#[pyclass(
+    name = "UnicodeNormalization",
+    module = "haqumei",
+    eq,
+    eq_int,
+    from_py_object,
+)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeNormalization {
     None_ = 0,
@@ -96,7 +102,13 @@ pub enum UnicodeNormalization {
     Nfkc = 2,
 }
 
-#[pyclass(eq, eq_int, from_py_object)]
+#[pyclass(
+    name = "IuPronunciation",
+    module = "haqumei",
+    eq,
+    eq_int,
+    from_py_object,
+)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IuPronunciation {
     None_ = 0,
