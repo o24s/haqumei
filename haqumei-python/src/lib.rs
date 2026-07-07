@@ -93,7 +93,7 @@ impl From<::haqumei::MecabMorph> for PyMecabMorph {
     module = "haqumei",
     eq,
     eq_int,
-    from_py_object,
+    from_py_object
 )]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UnicodeNormalization {
@@ -107,7 +107,7 @@ pub enum UnicodeNormalization {
     module = "haqumei",
     eq,
     eq_int,
-    from_py_object,
+    from_py_object
 )]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IuPronunciation {

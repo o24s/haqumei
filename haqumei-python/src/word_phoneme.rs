@@ -42,7 +42,7 @@ impl PyWordPhonemePair {
     name = "WordPhonemeMap",
     module = "haqumei",
     get_all,
-    skip_from_py_object,
+    skip_from_py_object
 )]
 #[derive(Clone)]
 pub struct PyWordPhonemeMap {
@@ -84,7 +84,7 @@ impl PyWordPhonemeMap {
     name = "WordPhonemeDetail",
     module = "haqumei",
     get_all,
-    skip_from_py_object,
+    skip_from_py_object
 )]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyWordPhonemeDetail {
@@ -188,7 +188,7 @@ impl PyWordPhonemeDetail {
     name = "WordPhonemeProsody",
     module = "haqumei",
     get_all,
-    skip_from_py_object,
+    skip_from_py_object
 )]
 #[derive(Debug, Clone)]
 pub struct PyWordPhonemeProsody {
