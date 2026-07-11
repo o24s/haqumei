@@ -585,7 +585,7 @@ enum NEnvironment {
     /// デフォルトでは Nd に統合します。
     Liquid,
 
-    /// 発話境界 (後続音素なし、Pau, Sp) -> 口蓋垂鼻音 `[ɴ]` (語末専用) に解決
+    /// 発話境界 (後続音素なし、Pau, Sp) -> Utterance-final moraic nasal として解決
     UtteranceBoundary,
 
     /// 上記のいずれにも該当しない環境
