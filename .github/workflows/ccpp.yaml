@@ -44,6 +44,9 @@ jobs:
         uses: jwlawson/actions-setup-cmake@v1
         with:
           cmake-version: '3.31.0'
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
       - uses: actions/checkout@v2
         with:
           repository: syoyo/hts_engine_API
