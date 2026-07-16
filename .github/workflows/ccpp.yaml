@@ -15,28 +15,18 @@ jobs:
           - os: ubuntu-latest
             cc: gcc
             cxx: g++
-            cmake_generator_args: ''
-            library_path: ../../hts_engine_API/src/build/lib
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
-            cmake_generator_args: ''
-            library_path: ../../hts_engine_API/src/build/lib
           - os: macos-latest
             cc: gcc
             cxx: g++
-            cmake_generator_args: ''
-            library_path: ../../hts_engine_API/src/build/lib
           - os: macos-latest
             cc: clang
             cxx: clang++
-            cmake_generator_args: ''
-            library_path: ../../hts_engine_API/src/build/lib
           - os: windows-latest
             cc: ''
             cxx: ''
-            cmake_generator_args: '-G "Visual Studio 17 2022" -A x64'
-            library_path: ../../hts_engine_API/src/build/lib/Release
 
     runs-on: ${{ matrix.config.os }}
 
@@ -54,15 +44,33 @@ jobs:
           repository: syoyo/hts_engine_API
           path: hts_engine_API
       - name: Build hts_engine_API
+        if: runner.os != 'Windows'
         working-directory: ./hts_engine_API/src
         run: |
-          cmake ${{ matrix.config.cmake_generator_args }} -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
+          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
+          cmake --build build --config ${{ matrix.build_type }}
+      - name: Build hts_engine_API on Windows
+        if: runner.os == 'Windows'
+        shell: cmd
+        working-directory: ./hts_engine_API/src
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
           cmake --build build --config ${{ matrix.build_type }}
       - uses: actions/checkout@v7
         with:
           path: open_jtalk
       - name: Build open_jtalk
+        if: runner.os != 'Windows'
         working-directory: ./open_jtalk/src
         run: |
-          cmake ${{ matrix.config.cmake_generator_args }} -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -D CMAKE_INCLUDE_PATH=../../hts_engine_API/src/include -D CMAKE_LIBRARY_PATH=${{ matrix.config.library_path }} -S . -B build
+          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
+          cmake --build build --config ${{ matrix.build_type }}
+      - name: Build open_jtalk on Windows
+        if: runner.os == 'Windows'
+        shell: cmd
+        working-directory: ./open_jtalk/src
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
           cmake --build build --config ${{ matrix.build_type }}
