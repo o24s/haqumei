@@ -15,23 +15,28 @@ jobs:
           - os: ubuntu-latest
             cc: gcc
             cxx: g++
-            config_generator_type: single
+            cmake_generator_args: ''
+            library_path: ../../hts_engine_API/src/build/lib
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
-            config_generator_type: single
+            cmake_generator_args: ''
+            library_path: ../../hts_engine_API/src/build/lib
           - os: macos-latest
             cc: gcc
             cxx: g++
-            config_generator_type: single
+            cmake_generator_args: ''
+            library_path: ../../hts_engine_API/src/build/lib
           - os: macos-latest
             cc: clang
             cxx: clang++
-            config_generator_type: single
+            cmake_generator_args: ''
+            library_path: ../../hts_engine_API/src/build/lib
           - os: windows-latest
-            cc: cl
-            cxx: cl
-            config_generator_type: multiple
+            cc: ''
+            cxx: ''
+            cmake_generator_args: '-G "Visual Studio 17 2022" -A x64'
+            library_path: ../../hts_engine_API/src/build/lib/Release
 
     runs-on: ${{ matrix.config.os }}
 
@@ -41,33 +46,23 @@ jobs:
 
     steps:
       - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v1
+        uses: jwlawson/actions-setup-cmake@v2.2.0
         with:
           cmake-version: '3.31.0'
-      - name: Setup MSVC
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
         with:
           repository: syoyo/hts_engine_API
           path: hts_engine_API
       - name: Build hts_engine_API
         working-directory: ./hts_engine_API/src
         run: |
-          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
+          cmake ${{ matrix.config.cmake_generator_args }} -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -S . -B build
           cmake --build build --config ${{ matrix.build_type }}
-      - name: Library Path
-        id: library_path
-        uses: haya14busa/action-cond@v1
-        with:
-          cond: ${{ matrix.config.config_generator_type == 'multiple' }}
-          if_true: ../../hts_engine_API/src/build/lib/${{ matrix.build_type }}
-          if_false: ../../hts_engine_API/src/build/lib
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
         with:
           path: open_jtalk
       - name: Build open_jtalk
         working-directory: ./open_jtalk/src
         run: |
-          cmake -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -D CMAKE_INCLUDE_PATH=../../hts_engine_API/src/include -D CMAKE_LIBRARY_PATH=${{ steps.library_path.outputs.value }} -S . -B build
+          cmake ${{ matrix.config.cmake_generator_args }} -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} -D BUILD_SHARED_LIBS=ON -D CMAKE_INCLUDE_PATH=../../hts_engine_API/src/include -D CMAKE_LIBRARY_PATH=${{ matrix.config.library_path }} -S . -B build
           cmake --build build --config ${{ matrix.build_type }}
