@@ -39,6 +39,7 @@ struct mecab_learner_node_t {
   unsigned char                char_type;
   unsigned char                stat;
   unsigned char                isbest;
+  unsigned char                dictionary_index;
   double                       alpha;
   double                       beta;
   short                        wcost2;

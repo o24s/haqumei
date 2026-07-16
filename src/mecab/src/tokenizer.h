@@ -24,6 +24,8 @@ class Allocator {
   N *newNode() {
     N *node = node_freelist_->alloc();
     std::memset(node, 0, sizeof(N));
+    // Unknown and control nodes keep this sentinel unless lookup overwrites it.
+    node->dictionary_index = MECAB_NO_DICTIONARY_INDEX;
     node->id = id_++;
     return node;
   }

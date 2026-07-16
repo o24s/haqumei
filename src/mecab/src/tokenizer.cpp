@@ -123,6 +123,9 @@ bool Tokenizer<N, P>::open(const Param &param) {
     std::strncpy(buf.get(), userdic.c_str(), buf.size());
     const size_t n = tokenizeCSV(buf.get(), dicfile.get(), dicfile.size());
     for (size_t i = 0; i < n; ++i) {
+      // 255 is reserved for nodes which do not originate from a dictionary.
+      CHECK_FALSE(dic_.size() < MECAB_NO_DICTIONARY_INDEX)
+          << "too many dictionaries: " << (dic_.size() + 1);
       Dictionary *d = new Dictionary;
       CHECK_FALSE(d->open(dicfile[i])) << d->what();
       CHECK_FALSE(d->type() == 1)
@@ -271,19 +274,22 @@ N *Tokenizer<N, P>::lookup(const char *begin, const char *end,
   Dictionary::result_type *daresults = allocator->mutable_results();
   const size_t results_size = allocator->results_size();
 
-  for (std::vector<Dictionary *>::const_iterator it = dic_.begin();
-       it != dic_.end(); ++it) {
-    const size_t n = (*it)->commonPrefixSearch(
+  for (size_t dictionary_index = 0; dictionary_index < dic_.size();
+       ++dictionary_index) {
+    const Dictionary *dictionary = dic_[dictionary_index];
+    const size_t n = dictionary->commonPrefixSearch(
         begin2,
         static_cast<size_t>(end - begin2),
         daresults, results_size);
 
     for (size_t i = 0; i < n; ++i) {
-      size_t size = (*it)->token_size(daresults[i]);
-      const Token *token = (*it)->token(daresults[i]);
+      size_t size = dictionary->token_size(daresults[i]);
+      const Token *token = dictionary->token(daresults[i]);
       for (size_t j = 0; j < size; ++j) {
         N *new_node = allocator->newNode();
-        read_node_info(**it, *(token + j), &new_node);
+        read_node_info(*dictionary, *(token + j), &new_node);
+        // System is 0; user dictionaries are 1..N in --userdic order.
+        new_node->dictionary_index = static_cast<unsigned char>(dictionary_index);
         new_node->length = daresults[i].length;
         new_node->rlength = begin2 - begin + new_node->length;
         new_node->surface = begin2;
