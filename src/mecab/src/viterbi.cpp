@@ -37,6 +37,13 @@ void calc_beta(Node *n, double beta) {
                         path == n->rpath);
   }
 }
+
+template <bool IsAllPath, bool PreferExistingBest>
+bool connect(size_t pos, Node *rnode,
+             Node **begin_node_list,
+             Node **end_node_list,
+             const Connector *connector,
+             Allocator<Node, Path> *allocator);
 }  // namespace
 
 Viterbi::Viterbi()
@@ -115,6 +122,88 @@ bool Viterbi::analyze(Lattice *lattice) const {
   }
 
   return true;
+}
+
+bool Viterbi::rebuildBestFromExistingNodes(Lattice *lattice) const {
+  if (!lattice || !lattice->is_available()) {
+    return false;
+  }
+
+  if (lattice->has_request_type(MECAB_NBEST) ||
+      lattice->has_request_type(MECAB_MARGINAL_PROB) ||
+      lattice->has_request_type(MECAB_PARTIAL) ||
+      lattice->has_request_type(MECAB_ALL_MORPHS) ||
+      lattice->has_constraint()) {
+    lattice->set_what("unsupported lattice request type for rebuild");
+    return false;
+  }
+
+  Node **end_node_list   = lattice->end_nodes();
+  Node **begin_node_list = lattice->begin_nodes();
+  Allocator<Node, Path> *allocator = lattice->allocator();
+  const size_t len = lattice->size();
+  Node *bos_node = end_node_list[0];
+  Node *eos_node = begin_node_list[len];
+
+  if (!bos_node || !eos_node) {
+    lattice->set_what("lattice does not have BOS/EOS nodes");
+    return false;
+  }
+
+  for (long pos = 0; pos <= static_cast<long>(len); ++pos) {
+    for (Node *node = begin_node_list[pos]; node; node = node->bnext) {
+      node->next = 0;
+      node->enext = 0;
+      node->cost = 0;
+      node->isbest = 0;
+    }
+    end_node_list[pos] = 0;
+  }
+
+  bos_node->prev = 0;
+  bos_node->next = 0;
+  bos_node->enext = 0;
+  bos_node->cost = 0;
+  bos_node->isbest = 1;
+  end_node_list[0] = bos_node;
+
+  eos_node->next = 0;
+  eos_node->enext = 0;
+  eos_node->cost = 0;
+  eos_node->isbest = 0;
+
+  for (size_t pos = 0; pos < len; ++pos) {
+    if (end_node_list[pos]) {
+      Node *right_node = begin_node_list[pos];
+      if (!connect<false, true>(pos, right_node,
+                                begin_node_list,
+                                end_node_list,
+                                connector_.get(),
+                                allocator)) {
+        lattice->set_what("too long sentence.");
+        return false;
+      }
+    }
+  }
+
+  for (long pos = len; static_cast<long>(pos) >= 0; --pos) {
+    if (end_node_list[pos]) {
+      if (!connect<false, true>(pos, eos_node,
+                                begin_node_list,
+                                end_node_list,
+                                connector_.get(),
+                                allocator)) {
+        lattice->set_what("too long sentence.");
+        return false;
+      }
+      break;
+    }
+  }
+
+  end_node_list[0] = bos_node;
+  begin_node_list[len] = eos_node;
+
+  return buildBestLattice(lattice);
 }
 
 const Tokenizer<Node, Path> *Viterbi::tokenizer() const {
@@ -312,19 +401,25 @@ bool Viterbi::initPartial(Lattice *lattice) {
 }
 
 namespace {
-template <bool IsAllPath> bool connect(size_t pos, Node *rnode,
-                                       Node **begin_node_list,
-                                       Node **end_node_list,
-                                       const Connector *connector,
-                                       Allocator<Node, Path> *allocator) {
+template <bool IsAllPath, bool PreferExistingBest>
+bool connect(size_t pos, Node *rnode,
+             Node **begin_node_list,
+             Node **end_node_list,
+             const Connector *connector,
+             Allocator<Node, Path> *allocator) {
   for (;rnode; rnode = rnode->bnext) {
+    // Rebuilds use the original dynamic-programming choice as the stable
+    // second key when adjusted costs become exactly equal.
+    Node *existing_best_node = rnode->prev;
     long best_cost = 2147483647;
     Node* best_node = 0;
     for (Node *lnode = end_node_list[pos]; lnode; lnode = lnode->enext) {
       int lcost = connector->cost(lnode, rnode);  // local cost
       long cost = lnode->cost + lcost;
 
-      if (cost < best_cost) {
+      if (cost < best_cost ||
+          (PreferExistingBest && cost == best_cost &&
+           lnode == existing_best_node)) {
         best_node  = lnode;
         best_cost  = cost;
   }
@@ -376,11 +471,11 @@ bool Viterbi::viterbi(Lattice *lattice) const {
       Node *right_node = tokenizer_->lookup<IsPartial>(begin + pos, end,
                                                        allocator, lattice);
       begin_node_list[pos] = right_node;
-      if (!connect<IsAllPath>(pos, right_node,
-                              begin_node_list,
-                              end_node_list,
-                              connector_.get(),
-                              allocator)) {
+      if (!connect<IsAllPath, false>(pos, right_node,
+                                     begin_node_list,
+                                     end_node_list,
+                                     connector_.get(),
+                                     allocator)) {
         lattice->set_what("too long sentence.");
         return false;
       }
@@ -393,11 +488,11 @@ bool Viterbi::viterbi(Lattice *lattice) const {
 
   for (long pos = len; static_cast<long>(pos) >= 0; --pos) {
     if (end_node_list[pos]) {
-      if (!connect<IsAllPath>(pos, eos_node,
-                              begin_node_list,
-                              end_node_list,
-                              connector_.get(),
-                              allocator)) {
+      if (!connect<IsAllPath, false>(pos, eos_node,
+                                     begin_node_list,
+                                     end_node_list,
+                                     connector_.get(),
+                                     allocator)) {
         lattice->set_what("too long sentence.");
         return false;
       }

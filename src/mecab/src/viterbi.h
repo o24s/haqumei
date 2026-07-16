@@ -23,6 +23,8 @@ class Viterbi {
 
   bool analyze(Lattice *lattice) const;
 
+  bool rebuildBestFromExistingNodes(Lattice *lattice) const;
+
   const Tokenizer<Node, Path> *tokenizer() const;
 
   const Connector *connector() const;

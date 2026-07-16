@@ -497,6 +497,11 @@ extern "C" {
   MECAB_DLL_EXTERN int           mecab_parse_lattice(mecab_t *mecab, mecab_lattice_t *lattice);
 
   /**
+   * Rebuild one-best path from existing lattice nodes.
+   */
+  MECAB_DLL_EXTERN int           mecab_lattice_rebuild_best(mecab_t *mecab, mecab_lattice_t *lattice);
+
+  /**
    * C wrapper of MeCab::Tagger::parse(const char *str)
    */
   MECAB_DLL_EXTERN const char*   mecab_sparse_tostr(mecab_t *mecab, const char *str);
