@@ -58,7 +58,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let target = std::env::var("TARGET").unwrap();
 
     let watch_files = [
-        "compat.c",
         "redirect.c",
         "redirect.h",
         "redirect_cpp.cpp",
@@ -234,8 +233,6 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         .cpp(true)
         .file("redirect_cpp.cpp")
         .compile("redirect_cpp_impl");
-
-    cc::Build::new().file("compat.c").compile("compat_impl");
 
     let mut build = cc::Build::new();
     build.cpp(true);

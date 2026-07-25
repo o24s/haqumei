@@ -17,4 +17,3 @@ haqumei-jlabel.workspace = true
 pyo3 = { workspace = true, features = ["extension-module"] }
 
 [build-dependencies]
-openssl = { version = "0.10.80", features = ["vendored"] }
