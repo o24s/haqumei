@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -993,7 +993,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-cli"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "clap",
@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-jlabel"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "thiserror 2.0.19",
@@ -1040,7 +1040,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-kanalizer"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "criterion",
  "ndarray",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-macros"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-python"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "haqumei",
  "haqumei-jlabel",
