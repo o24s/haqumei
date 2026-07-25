@@ -36,15 +36,17 @@ include = [
 ]
 
 [features]
-default = ["embed-dictionary", "download-dictionary"]
+default = ["embed-dictionary", "download-dictionary", "unidic-yomi"]
 embed-dictionary = []
 build-dictionary = []
 download-dictionary = ["dep:reqwest", "dep:tempfile"]
 serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
+unidic-yomi = ["dep:vibrato-rkyv", "dep:crossbeam-channel"]
+
 
 [dependencies]
 arc-swap.workspace = true
-crossbeam-channel.workspace = true
+crossbeam-channel = { workspace = true, optional = true }
 daachorse.workspace = true
 dirs.workspace = true
 fs4.workspace = true
@@ -65,7 +67,7 @@ tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
-vibrato-rkyv.workspace = true
+vibrato-rkyv = { workspace = true, optional = true }
 walkdir.workspace = true
 zstd.workspace = true
 
@@ -80,7 +82,7 @@ glob.workspace = true
 hex.workspace = true
 sha2.workspace = true
 tar.workspace = true
-vibrato-rkyv.workspace = true
+vibrato-rkyv = { workspace = true, optional = true }
 walkdir.workspace = true
 zstd.workspace = true
 

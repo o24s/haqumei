@@ -1,5 +1,7 @@
+#[cfg(feature = "unidic-yomi")]
 use std::ops::Range;
 
+#[cfg(feature = "unidic-yomi")]
 use vibrato_rkyv::dictionary::{LexType, WordIdx};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,6 +36,7 @@ pub struct NjdFeature {
     pub chain_flag: i32,
 }
 
+#[cfg(feature = "unidic-yomi")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnidicFeature {
     pub surface: String,
@@ -82,6 +85,7 @@ f[27]: lid
 f[28]: lemma_id
 */
 
+#[cfg(feature = "unidic-yomi")]
 impl UnidicFeature {
     #[track_caller]
     pub fn pos1(&self) -> &str {

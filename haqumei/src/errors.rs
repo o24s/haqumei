@@ -77,6 +77,7 @@ pub enum HaqumeiError {
     DirError(#[from] walkdir::Error),
 
     #[error(transparent)]
+    #[cfg(feature = "unidic-yomi")]
     VibratoError(#[from] vibrato_rkyv::errors::VibratoError),
 
     #[error(transparent)]

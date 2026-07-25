@@ -75,6 +75,7 @@ pub struct HaqumeiOptions {
     /// 無効の場合、初回に実行時の辞書ダウンロードが発生します。
     ///
     /// デフォルトで無効になっています。
+    #[cfg(feature = "unidic-yomi")]
     pub use_unidic_yomi: bool,
 
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
@@ -397,6 +398,7 @@ impl Default for HaqumeiOptions {
             modify_filler_accent: true,
             predict_nani: true,
             predict_kana_english: true,
+            #[cfg(feature = "unidic-yomi")]
             use_unidic_yomi: false,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,

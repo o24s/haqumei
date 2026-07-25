@@ -55,9 +55,9 @@ pub mod word_phoneme;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, LazyLock, Mutex, OnceLock},
-    thread,
 };
 
+#[cfg(feature = "unidic-yomi")]
 use crossbeam_channel::{Sender, bounded};
 pub use haqumei_jlabel::Label;
 use haqumei_kanalizer::Kanalizer;
@@ -72,21 +72,23 @@ pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, WordPhonemeProsody};
 
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
 use crate::{
     errors::HaqumeiError,
-    features::UnidicFeature,
     nani_predict::NaniPredictor,
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     postprocess::{
         modify_acc_after_chaining, modify_english_words, modify_filler_accent,
-        predict_kana_english, process_odori_features, retreat_acc_nuc, vibrato_analysis,
+        predict_kana_english, process_odori_features, retreat_acc_nuc,
     },
 };
+#[cfg(feature = "unidic-yomi")]
+use crate::{features::UnidicFeature, postprocess::vibrato_analysis};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
+#[cfg(feature = "unidic-yomi")]
 static VIBRATO_CACHE: LazyLock<Cache<String, Vec<UnidicFeature>>> =
     LazyLock::new(|| Cache::new(1000));
+
 static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|| Cache::new(1000));
 static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
@@ -97,9 +99,12 @@ static KANALIZER: LazyLock<Mutex<Kanalizer>> =
 #[allow(unused)]
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
+#[cfg(feature = "unidic-yomi")]
 type VibratoTask = (String, Sender<Vec<UnidicFeature>>);
+#[cfg(feature = "unidic-yomi")]
 static VIBRATO_TASK_TX: OnceLock<Sender<VibratoTask>> = OnceLock::new();
 
+#[cfg(feature = "unidic-yomi")]
 pub(crate) fn init_vibrato_workers_if_needed(tokenizer: &vibrato_rkyv::Tokenizer) {
     VIBRATO_TASK_TX.get_or_init(|| {
         let (tx, rx) = bounded::<VibratoTask>(1024);
@@ -108,7 +113,7 @@ pub(crate) fn init_vibrato_workers_if_needed(tokenizer: &vibrato_rkyv::Tokenizer
         for _ in 0..worker_count {
             let rx = rx.clone();
             let tokenizer = tokenizer.clone();
-            thread::spawn(move || {
+            std::thread::spawn(move || {
                 let mut worker = tokenizer.new_worker();
                 while let Ok((text, res_tx)) = rx.recv() {
                     let features = vibrato_analysis(&mut worker, &text);
@@ -127,8 +132,13 @@ pub(crate) fn init_vibrato_workers_if_needed(tokenizer: &vibrato_rkyv::Tokenizer
 /// [Haqumei::with_options], [HaqumeiOptions] を使うことで、出力をカスタマイズできます。
 pub struct Haqumei {
     pub(crate) open_jtalk: OpenJTalk,
+
+    #[cfg(feature = "unidic-yomi")]
     pub(crate) tokenizer: Option<vibrato_rkyv::Tokenizer>,
+
+    #[cfg(feature = "unidic-yomi")]
     pub(crate) rx: Option<crossbeam_channel::Receiver<Vec<UnidicFeature>>>,
+
     pub options: HaqumeiOptions,
 }
 
@@ -149,13 +159,17 @@ impl Haqumei {
         open_jtalk: OpenJTalk,
         options: HaqumeiOptions,
     ) -> Result<Self, HaqumeiError> {
+        #[allow(unused_mut)]
         let mut haqumei = Haqumei {
             open_jtalk,
+            #[cfg(feature = "unidic-yomi")]
             tokenizer: None,
+            #[cfg(feature = "unidic-yomi")]
             rx: None,
             options,
         };
 
+        #[cfg(feature = "unidic-yomi")]
         if options.use_unidic_yomi {
             haqumei.init_tokenizer_if_needed()?;
         }
@@ -163,6 +177,7 @@ impl Haqumei {
         Ok(haqumei)
     }
 
+    #[cfg(feature = "unidic-yomi")]
     pub(crate) fn init_tokenizer_if_needed(&mut self) -> Result<(), HaqumeiError> {
         if self.tokenizer.is_some() {
             return Ok(());
@@ -199,6 +214,7 @@ impl Haqumei {
         Ok(())
     }
 
+    #[cfg(feature = "unidic-yomi")]
     pub(crate) fn init_tokenizer_if_needed_and_modify_kanji_yomi_enabled(
         &mut self,
     ) -> Result<Option<vibrato_rkyv::Tokenizer>, HaqumeiError> {
@@ -818,18 +834,21 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        self.rx = if let Some(tokenizer) =
-            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+        #[cfg(feature = "unidic-yomi")]
         {
-            init_vibrato_workers_if_needed(&tokenizer);
-            let (tx, rx) = bounded(1);
-            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
-                let _ = task_tx.send((text.to_string(), tx));
-            }
-            Some(rx)
-        } else {
-            None
-        };
+            self.rx = if let Some(tokenizer) =
+                self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+            {
+                init_vibrato_workers_if_needed(&tokenizer);
+                let (tx, rx) = bounded(1);
+                if let Some(task_tx) = VIBRATO_TASK_TX.get() {
+                    let _ = task_tx.send((text.to_string(), tx));
+                }
+                Some(rx)
+            } else {
+                None
+            };
+        }
 
         let njd_features = self.open_jtalk.run_frontend(text)?;
 
@@ -851,18 +870,21 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        self.rx = if let Some(tokenizer) =
-            self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+        #[cfg(feature = "unidic-yomi")]
         {
-            init_vibrato_workers_if_needed(&tokenizer);
-            let (tx, rx) = bounded(1);
-            if let Some(task_tx) = VIBRATO_TASK_TX.get() {
-                let _ = task_tx.send((text.to_string(), tx));
-            }
-            Some(rx)
-        } else {
-            None
-        };
+            self.rx = if let Some(tokenizer) =
+                self.init_tokenizer_if_needed_and_modify_kanji_yomi_enabled()?
+            {
+                init_vibrato_workers_if_needed(&tokenizer);
+                let (tx, rx) = bounded(1);
+                if let Some(task_tx) = VIBRATO_TASK_TX.get() {
+                    let _ = task_tx.send((text.to_string(), tx));
+                }
+                Some(rx)
+            } else {
+                None
+            };
+        }
 
         let (njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
 
@@ -916,9 +938,12 @@ impl Haqumei {
             predict_kana_english(&mut njd_features);
             modify_english_words(text, &mut njd_features);
         }
+
+        #[cfg(feature = "unidic-yomi")]
         if options.use_unidic_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);
         }
+
         if options.retreat_acc_nuc {
             retreat_acc_nuc(&mut njd_features);
         }

@@ -8,19 +8,21 @@ use std::ops::Range;
 
 use haqumei_kanalizer::{ConvertOptions, MaxLength};
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
+
+#[cfg(feature = "unidic-yomi")]
 use vibrato_rkyv::tokenizer::worker::Worker;
 
 use crate::{
     Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, NjdFeature, OpenJTalk,
-    Phoneme, ProsodicPhoneme, UnicodeNormalization, VIBRATO_CACHE,
-    data::MULTI_READ_KANJI_LIST,
+    Phoneme, ProsodicPhoneme, UnicodeNormalization,
     errors::HaqumeiError,
-    features::UnidicFeature,
     utils::{
         count_mora, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
         split_kana_mora,
     },
 };
+#[cfg(feature = "unidic-yomi")]
+use crate::{VIBRATO_CACHE, data::MULTI_READ_KANJI_LIST, features::UnidicFeature};
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 
 impl Haqumei {
@@ -214,6 +216,7 @@ pub(crate) fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
     }
 }
 
+#[cfg(feature = "unidic-yomi")]
 pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFeature> {
     VIBRATO_CACHE.get_with(text.to_string(), || {
         worker.reset_sentence(text);
@@ -400,6 +403,7 @@ impl Haqumei {
         }
     }
 
+    #[cfg(feature = "unidic-yomi")]
     pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
         let tokens: Vec<UnidicFeature> = if let Some(rx) = self.rx.take() {
             rx.recv().unwrap_or_default()
