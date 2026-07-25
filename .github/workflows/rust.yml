@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Build
-        run: cargo build --verbose --workspace --exclude haqumei-python
+        run: cargo build --verbose --workspace --exclude haqumei-python --no-default-features --features "embed-dictionary download-dictionary"
 
       - name: Run tests on ${{ matrix.os }}
-        run: cargo test --verbose -p haqumei
+        run: cargo test --verbose -p haqumei --no-default-features --features "embed-dictionary download-dictionary"
