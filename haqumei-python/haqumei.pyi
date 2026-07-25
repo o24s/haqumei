@@ -1,12 +1,12 @@
 from enum import IntEnum
-from typing import List, Literal, Tuple, Final, Optional
+from typing import Final, Literal, TypeAlias
 
-Phoneme = Literal[
-    "A", "E", "I", "O", "U", "N", 
-    "a", "b", "by", "ch", "cl", "d", "dy", "e", "f", "fy", 
-    "g", "gw", "gy", "h", "hy", "i", "j", "k", "kw", "ky", 
-    "m", "my", "n", "ny", "o", "p", "py", "r", "ry", "s", 
-    "sh", "t", "ts", "ty", "u", "v", "w", "y", "z", 
+Phoneme: TypeAlias = Literal[
+    "A", "E", "I", "O", "U", "N",
+    "a", "b", "by", "ch", "cl", "d", "dy", "e", "f", "fy",
+    "g", "gw", "gy", "h", "hy", "i", "j", "k", "kw", "ky",
+    "m", "my", "n", "ny", "o", "p", "py", "r", "ry", "s",
+    "sh", "t", "ts", "ty", "u", "v", "w", "y", "z",
     "sp", "pau", "unk",
 ]
 
@@ -14,12 +14,14 @@ ALL_PHONEMES: Final[tuple[Phoneme, ...]]
 
 class UnicodeNormalization(IntEnum):
     """Unicode正規化の方式を指定する。"""
+
     None_ = 0
     Nfc = 1
     Nfkc = 2
 
 class IuPronunciation(IntEnum):
     """「言う」の発音正規化方式を指定する。"""
+
     None_ = 0
     Iu = 1
     Yuu = 2
@@ -28,11 +30,13 @@ class IuPronunciation(IntEnum):
 
 class PitchAccent(IntEnum):
     """音素ごとのピッチアクセント (高低) を表す enum"""
+
     Low = 0
     High = 1
 
 class ProsodyFormat(IntEnum):
     """出力するプロソディ表現のフォーマット"""
+
     Default = 0
     """tdmelodic 風 (`a [ o ] i #`) の記法"""
     Prefix = 1
@@ -124,10 +128,9 @@ class WordPhonemePair:
     word: str
     """単語の表層形。"""
 
-    phonemes: List[str]
+    phonemes: list[str]
     """その単語に対応する音素のリスト。"""
 
-    def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
 
 class WordPhonemeMap:
@@ -139,7 +142,7 @@ class WordPhonemeMap:
     word: str
     """単語の表層形。"""
 
-    phonemes: List[str]
+    phonemes: list[str]
     """その単語に対応する音素のリスト。"""
 
     is_unknown: bool
@@ -148,18 +151,16 @@ class WordPhonemeMap:
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
 
-    def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
-
 
 class WordPhonemeDetail:
     """形態素ごとの音素マッピングと、NJDによる詳細な解析情報を保持する構造体"""
 
     word: str
     """表層形 (surface)"""
-    phonemes: List[str]
+    phonemes: list[str]
     """音素のリスト"""
-    features: List[str]
+    features: list[str]
     """Mecab が出力した features。既知語は 12 列、未知語は 8 列"""
     pos: str
     """品詞"""
@@ -192,27 +193,24 @@ class WordPhonemeDetail:
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
 
-    def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
-
 
 class ProsodicPhoneme:
     """プロソディ（ピッチやポーズなどの韻律情報）を伴う音素構造体。"""
 
     kind: str
     """要素の種類 ("phoneme", "accent_phrase_boundary", "pause", "interrogative", "exclamatory")"""
-    phoneme: Optional[str]
+    phoneme: str | None
     """音素文字列 (kind == "phoneme" の場合のみ値を持つ)"""
-    pitch: Optional[PitchAccent]
+    pitch: PitchAccent | None
     """ピッチアクセントの高低 (kind == "phoneme" の場合のみ値を持つ)"""
-
 
 class WordPhonemeProsody:
     """単語ごとのプロソディ情報とNJD特徴量を保持する構造体"""
 
     word: str
     """表層形 (surface)"""
-    phonemes: List[ProsodicPhoneme]
+    phonemes: list[ProsodicPhoneme]
     """プロソディ付き音素のリスト"""
     pos: str
     """品詞"""
@@ -245,31 +243,34 @@ class WordPhonemeProsody:
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
 
-    def __repr__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
 
 class LabelPhoneme:
     """`Phoneme` field of full-context label."""
-    p2: Optional[str]
-    p1: Optional[str]
-    c: Optional[str]
-    n1: Optional[str]
-    n2: Optional[str]
+
+    p2: str | None
+    p1: str | None
+    c: str | None
+    n1: str | None
+    n2: str | None
 
 class Mora:
     """`Mora` field of full-context label (`A` field)."""
+
     relative_accent_position: int
     position_forward: int
     position_backward: int
 
 class Word:
     """`Word` field of full-context label (`B`, `C`, and `D` field)."""
-    pos: Optional[int]
-    ctype: Optional[int]
-    cform: Optional[int]
+
+    pos: int | None
+    ctype: int | None
+    cform: int | None
 
 class AccentPhraseCurrent:
     """`AccentPhrase` field of full-context label for current accent phrase (`F` field)."""
+
     mora_count: int
     accent_position: int
     is_interrogative: bool
@@ -281,14 +282,16 @@ class AccentPhraseCurrent:
 
 class AccentPhrasePrevNext:
     """`AccentPhrase` field of full-context label for previous or next accent phrase (`E` and `G` field)."""
+
     mora_count: int
     accent_position: int
     is_interrogative: bool
-    is_pause_insertion: Optional[bool]
+    is_pause_insertion: bool | None
     is_exclamatory: bool
 
 class BreathGroupCurrent:
     """`BreathGroup` field of full-context label for current breath group (`I` field)."""
+
     accent_phrase_count: int
     mora_count: int
     breath_group_position_forward: int
@@ -300,28 +303,31 @@ class BreathGroupCurrent:
 
 class BreathGroupPrevNext:
     """`BreathGroup` field of full-context label for previous or next breath group (`H` and `J` field)."""
+
     accent_phrase_count: int
     mora_count: int
 
 class Utterance:
     """`Utterance` field of full-context label (`K` field)."""
+
     breath_group_count: int
     accent_phrase_count: int
     mora_count: int
 
 class Label:
     """The structure representing a single line of HTS-style full-context label."""
+
     phoneme: LabelPhoneme
-    mora: Optional[Mora]
-    word_prev: Optional[Word]
-    word_curr: Optional[Word]
-    word_next: Optional[Word]
-    accent_phrase_prev: Optional[AccentPhrasePrevNext]
-    accent_phrase_curr: Optional[AccentPhraseCurrent]
-    accent_phrase_next: Optional[AccentPhrasePrevNext]
-    breath_group_prev: Optional[BreathGroupPrevNext]
-    breath_group_curr: Optional[BreathGroupCurrent]
-    breath_group_next: Optional[BreathGroupPrevNext]
+    mora: Mora | None
+    word_prev: Word | None
+    word_curr: Word | None
+    word_next: Word | None
+    accent_phrase_prev: AccentPhrasePrevNext | None
+    accent_phrase_curr: AccentPhraseCurrent | None
+    accent_phrase_next: AccentPhrasePrevNext | None
+    breath_group_prev: BreathGroupPrevNext | None
+    breath_group_curr: BreathGroupCurrent | None
+    breath_group_next: BreathGroupPrevNext | None
     utterance: Utterance
 
 class Dictionary:
@@ -334,7 +340,7 @@ class Dictionary:
     """
 
     @staticmethod
-    def from_path(dict_dir: str, user_dict: Optional[str] = None) -> "Dictionary":
+    def from_path(dict_dir: str, user_dict: str | None = None) -> Dictionary:
         """指定されたパスから辞書をロードします。
 
         Args:
@@ -347,16 +353,14 @@ class Dictionary:
         Raises:
             RuntimeError: 指定されたパスに辞書が存在しない、またはフォーマットが不正な場合。
         """
-        ...
 
     @staticmethod
-    def from_embedded() -> "Dictionary":
+    def from_embedded() -> Dictionary:
         """ライブラリに埋め込まれた辞書データをロードします。
 
         Returns:
             Dictionary: ロードされた辞書オブジェクト。
         """
-        ...
 
 class OpenJTalk:
     """OpenJTalk の機能を提供するラッパークラス。
@@ -390,10 +394,9 @@ class OpenJTalk:
         Raises:
             RuntimeError: 辞書のロードに失敗した場合。
         """
-        ...
 
     @staticmethod
-    def from_dictionary(dict: Dictionary) -> "OpenJTalk":
+    def from_dictionary(dict: Dictionary) -> OpenJTalk:
         """既存の Dictionary オブジェクトを共有してインスタンスを作成します。
 
         Args:
@@ -402,10 +405,9 @@ class OpenJTalk:
         Returns:
             OpenJTalk: 初期化されたインスタンス。
         """
-        ...
 
     @staticmethod
-    def from_path(dict_dir: str, user_dict: Optional[str] = None) -> "OpenJTalk":
+    def from_path(dict_dir: str, user_dict: str | None = None) -> OpenJTalk:
         """指定されたパスから辞書をロードしてインスタンスを作成します。
 
         Args:
@@ -415,13 +417,13 @@ class OpenJTalk:
         Returns:
             OpenJTalk: 初期化されたインスタンス。
         """
-        ...
 
-    def run_frontend(self, text: str) -> List[NjdFeature]:
+    def run_frontend(self, text: str) -> list[NjdFeature]:
         """テキストを解析し、NJD特徴量のリストを返します。"""
-        ...
 
-    def run_frontend_detailed(self, text: str) -> Tuple[List[NjdFeature], List[MecabMorph]]:
+    def run_frontend_detailed(
+        self, text: str
+    ) -> tuple[list[NjdFeature], list[MecabMorph]]:
         """
         テキストを詳細に解析し、NJD特徴量とMeCab形態素情報の両方を返します。
 
@@ -432,9 +434,8 @@ class OpenJTalk:
             Tuple[List[PyNjdFeature], List[MecabMorph]]:
                 NJD特徴量のリストと、詳細な形態素情報のリストのタプル。
         """
-        ...
 
-    def extract_fullcontext(self, text: str) -> List[Label]:
+    def extract_fullcontext(self, text: str) -> list[Label]:
         """フルコンテキストラベルを構造化データとして抽出します。
 
         Args:
@@ -443,9 +444,8 @@ class OpenJTalk:
         Returns:
             List[Label]: フルコンテキストラベルのリスト。
         """
-        ...
 
-    def extract_fullcontext_string(self, text: str) -> List[str]:
+    def extract_fullcontext_string(self, text: str) -> list[str]:
         """フルコンテキストラベルを抽出します。
 
         Args:
@@ -454,9 +454,8 @@ class OpenJTalk:
         Returns:
             List[str]: フルコンテキストラベルのリスト。
         """
-        ...
 
-    def g2p(self, text: str) -> List[str]:
+    def g2p(self, text: str) -> list[str]:
         """テキストを音素リストに変換します。
 
         pyopenjtalk のような音素文字列を得るためには、
@@ -468,9 +467,8 @@ class OpenJTalk:
         Returns:
             List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
         """
-        ...
 
-    def g2p_detailed(self, text: str) -> List[str]:
+    def g2p_detailed(self, text: str) -> list[str]:
         """より詳細な G2P 変換。
         - 既知語: 通常の音素列 (読点などは `pau`)
         - 未知語: `unk`
@@ -485,8 +483,6 @@ class OpenJTalk:
         Returns:
             List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
         """
-        ...
-
 
     def g2k(self, text: str) -> str:
         """テキストをカタカナ読みに変換します。
@@ -499,9 +495,8 @@ class OpenJTalk:
         Returns:
             str: カタカナ文字列 (例: `"コンニチワ"`)。
         """
-        ...
 
-    def g2k_per_word(self, text: str) -> List[str]:
+    def g2k_per_word(self, text: str) -> list[str]:
         """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
@@ -512,9 +507,10 @@ class OpenJTalk:
         Returns:
             List[str]: カタカナ文字列のリスト。
         """
-        ...
 
-    def g2p_prosody(self, text: str, format: ProsodyFormat = ProsodyFormat.Default) -> List[str]:
+    def g2p_prosody(
+        self, text: str, format: ProsodyFormat = ProsodyFormat.Default
+    ) -> list[str]:
         """
         入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストに変換します。
 
@@ -569,9 +565,8 @@ class OpenJTalk:
         Returns:
             List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
         """
-        ...
 
-    def g2p_per_word(self, text: str) -> List[List[str]]:
+    def g2p_per_word(self, text: str) -> list[list[str]]:
         """テキストを単語ごとに区切られた音素リストに変換します。
 
         Args:
@@ -581,9 +576,8 @@ class OpenJTalk:
             List[List[str]]: 単語ごとの音素リストのリスト。
             (例: `[['k', 'o', 'N', ...], ['pau'], ['s', 'e', 'k', 'a', 'i']]`)
         """
-        ...
 
-    def g2p_pairs(self, text: str) -> List[WordPhonemePair]:
+    def g2p_pairs(self, text: str) -> list[WordPhonemePair]:
         """テキストを解析し、単語と音素のマッピング情報を返します。
 
         Args:
@@ -592,9 +586,8 @@ class OpenJTalk:
         Returns:
             List[WordPhonemePair]: 単語と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping(self, text: str) -> List[WordPhonemeMap]:
+    def g2p_mapping(self, text: str) -> list[WordPhonemeMap]:
         """入力テキストの形態素ごとの音素マッピングを返します。
         MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
 
@@ -608,9 +601,8 @@ class OpenJTalk:
         Returns:
             List[WordPhonemeMap]: 単語と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+    def g2p_mapping_detailed(self, text: str) -> list[WordPhonemeDetail]:
         """
         入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
 
@@ -624,9 +616,8 @@ class OpenJTalk:
         Returns:
             List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_prosody(self, text: str) -> List[WordPhonemeProsody]:
+    def g2p_mapping_prosody(self, text: str) -> list[WordPhonemeProsody]:
         """入力テキストを解析し、形態素ごとの詳細な言語情報と、プロソディ記号付き音素をマッピングして取得します。
 
         Args:
@@ -635,9 +626,8 @@ class OpenJTalk:
         Returns:
             List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
         """
-        ...
 
-    def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
+    def run_frontend_batch(self, texts: list[str]) -> list[list[NjdFeature]]:
         """複数のテキストに対して `run_frontend` を実行します。
 
         Args:
@@ -646,12 +636,10 @@ class OpenJTalk:
         Returns:
             List[List[PyNjdFeature]]: 各テキストに対応するNJD特徴量リストのリスト。
         """
-        ...
 
     def run_frontend_detailed_batch(
-        self,
-        texts: List[str]
-    ) -> List[Tuple[List[NjdFeature], List[MecabMorph]]]:
+        self, texts: list[str]
+    ) -> list[tuple[list[NjdFeature], list[MecabMorph]]]:
         """複数のテキストに対して `run_frontend_detailed` を実行します。
 
         Args:
@@ -661,9 +649,8 @@ class OpenJTalk:
             List[Tuple[List[PyNjdFeature], List[MecabMorph]]]:
                 各テキストに対応する（NJD特徴量リスト, MeCab形態素情報リスト）のタプルのリスト。
         """
-        ...
 
-    def g2p_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2p_batch(self, texts: list[str]) -> list[list[str]]:
         """複数のテキストに対して `g2p` を実行します。
 
         Python の GIL を解放してバッチ処理を行います。大量のテキストデータセットの前処理などに最適です。
@@ -674,9 +661,8 @@ class OpenJTalk:
         Returns:
             List[List[str]]: 各テキストに対応する音素リストのリスト。
         """
-        ...
 
-    def g2p_detailed_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2p_detailed_batch(self, texts: list[str]) -> list[list[str]]:
         """複数のテキストに対して詳細な G2P 変換を実行します。
 
         - 既知語: 通常の音素列 (読点などは `pau`)
@@ -691,9 +677,8 @@ class OpenJTalk:
         Returns:
             List[List[str]]: 各テキストに対応する詳細な音素リストのリスト。
         """
-        ...
 
-    def g2k_batch(self, texts: List[str]) -> List[str]:
+    def g2k_batch(self, texts: list[str]) -> list[str]:
         """複数のテキストをカタカナ読みに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -704,9 +689,8 @@ class OpenJTalk:
         Returns:
             List[str]: 各テキストに対応するカタカナ文字列のリスト。
         """
-        ...
 
-    def g2k_per_word_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2k_per_word_batch(self, texts: list[str]) -> list[list[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -719,10 +703,10 @@ class OpenJTalk:
         Returns:
             List[List[str]]: 単語ごとのカタカナ文字列のリストのリスト。
         """
-        ...
 
-
-    def g2p_prosody_batch(self, texts: List[str], format: ProsodyFormat = ProsodyFormat.Default) -> List[List[str]]:
+    def g2p_prosody_batch(
+        self, texts: list[str], format: ProsodyFormat = ProsodyFormat.Default
+    ) -> list[list[str]]:
         """
         複数の入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストのリストに変換します。
 
@@ -777,9 +761,8 @@ class OpenJTalk:
         Returns:
             List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
         """
-        ...
 
-    def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
+    def g2p_per_word_batch(self, texts: list[str]) -> list[list[list[str]]]:
         """複数のテキストを単語ごとに区切られた音素リストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -790,9 +773,8 @@ class OpenJTalk:
         Returns:
             List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
         """
-        ...
 
-    def g2p_pairs_batch(self, texts: List[str]) -> List[List[WordPhonemePair]]:
+    def g2p_pairs_batch(self, texts: list[str]) -> list[list[WordPhonemePair]]:
         """複数のテキストを解析し、単語と音素のマッピング情報を返します。
 
         注意:
@@ -807,9 +789,8 @@ class OpenJTalk:
         Returns:
             List[List[WordPhonemePair]]: 各テキストに対応するマッピング情報のリスト。
         """
-        ...
 
-    def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
+    def g2p_mapping_batch(self, texts: list[str]) -> list[list[WordPhonemeMap]]:
         """入力テキストの形態素ごとの音素マッピング（詳細版）をバッチ処理で返します。
 
         MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
@@ -826,9 +807,10 @@ class OpenJTalk:
         Returns:
             List[List[WordPhonemeMap]]: 各テキストに対応する詳細なマッピング情報のリスト。
         """
-        ...
 
-    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+    def g2p_mapping_detailed_batch(
+        self, texts: list[str]
+    ) -> list[list[WordPhonemeDetail]]:
         """
         入力テキストのリストに対して `g2p_mapping_detailed` を並列に実行します。
 
@@ -842,9 +824,10 @@ class OpenJTalk:
         Returns:
             List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_prosody_batch(self, texts: List[str]) -> List[List[WordPhonemeProsody]]:
+    def g2p_mapping_prosody_batch(
+        self, texts: list[str]
+    ) -> list[list[WordPhonemeProsody]]:
         """複数のテキストに対して `g2p_mapping_prosody` を並行に実行します。
 
         Args:
@@ -853,9 +836,8 @@ class OpenJTalk:
         Returns:
             List[List[WordPhonemeProsody]]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリストのリスト。
         """
-        ...
 
-    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[Label]]:
+    def extract_fullcontext_batch(self, texts: list[str]) -> list[list[Label]]:
         """複数のテキストからフルコンテキストラベルを構造化データとして抽出します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -866,9 +848,8 @@ class OpenJTalk:
         Returns:
             List[List[Label]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
-        ...
 
-    def extract_fullcontext_string_batch(self, texts: List[str]) -> List[List[str]]:
+    def extract_fullcontext_string_batch(self, texts: list[str]) -> list[list[str]]:
         """複数のテキストからフルコンテキストラベル文字列を抽出します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -879,8 +860,6 @@ class OpenJTalk:
         Returns:
             List[List[str]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
-        ...
-
 
 class Haqumei:
     """`OpenJTalk` を拡張した G2P エンジン。
@@ -928,10 +907,9 @@ class Haqumei:
         enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。"""
-        ...
 
     @staticmethod
-    def from_dictionary(dict: Dictionary) -> "Haqumei":
+    def from_dictionary(dict: Dictionary) -> Haqumei:
         """既存の Dictionary オブジェクトを使用してインスタンスを初期化します。
 
         Args:
@@ -940,13 +918,13 @@ class Haqumei:
         Returns:
             Haqumei: 初期化されたインスタンス。
         """
-        ...
 
-    def run_frontend(self, text: str) -> List[NjdFeature]:
+    def run_frontend(self, text: str) -> list[NjdFeature]:
         """テキストを解析し、NJD特徴量のリストを返します。"""
-        ...
 
-    def run_frontend_detailed(self, text: str) -> Tuple[List[NjdFeature], List[MecabMorph]]:
+    def run_frontend_detailed(
+        self, text: str
+    ) -> tuple[list[NjdFeature], list[MecabMorph]]:
         """
         テキストを詳細に解析し、NJD特徴量とMeCab形態素情報の両方を返します。
 
@@ -957,9 +935,8 @@ class Haqumei:
             Tuple[List[PyNjdFeature], List[MecabMorph]]
                 NJD特徴量のリストと、詳細な形態素情報のリストのタプル。
         """
-        ...
 
-    def extract_fullcontext(self, text: str) -> List[Label]:
+    def extract_fullcontext(self, text: str) -> list[Label]:
         """フルコンテキストラベルを構造化データとして抽出します。
 
         Args:
@@ -968,9 +945,8 @@ class Haqumei:
         Returns:
             List[Label]: フルコンテキストラベルのリスト。
         """
-        ...
 
-    def extract_fullcontext_string(self, text: str) -> List[str]:
+    def extract_fullcontext_string(self, text: str) -> list[str]:
         """フルコンテキストラベルを抽出します。
 
         Args:
@@ -979,9 +955,8 @@ class Haqumei:
         Returns:
             List[str]: フルコンテキストラベルのリスト。
         """
-        ...
 
-    def g2p(self, text: str) -> List[str]:
+    def g2p(self, text: str) -> list[str]:
         """テキストを音素リストに変換します。
 
         pyopenjtalk のような音素文字列を得るためには、
@@ -993,9 +968,8 @@ class Haqumei:
         Returns:
             List[str]: 音素記号のリスト。
         """
-        ...
 
-    def g2p_detailed(self, text: str) -> List[str]:
+    def g2p_detailed(self, text: str) -> list[str]:
         """より詳細な G2P 変換。
         - 既知語: 通常の音素列 (読点などは `pau`)
         - 未知語: `unk`
@@ -1010,7 +984,6 @@ class Haqumei:
         Returns:
             List[str]: 音素記号のリスト (例: `['k', 'o', 'N', ...]`)。
         """
-        ...
 
     def g2k(self, text: str) -> str:
         """テキストをカタカナ読みに変換します。
@@ -1021,9 +994,8 @@ class Haqumei:
         Returns:
             str: カタカナ文字列。
         """
-        ...
 
-    def g2k_per_word(self, text: str) -> List[str]:
+    def g2k_per_word(self, text: str) -> list[str]:
         """入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         pyopenjtalk と同様に、記号や未知語などは元の表記のまま出力されます。
@@ -1034,9 +1006,8 @@ class Haqumei:
         Returns:
             List[str]: カタカナ文字列のリスト (例: `["コンニチワ"]`)。
         """
-        ...
 
-    def g2p_per_word(self, text: str) -> List[List[str]]:
+    def g2p_per_word(self, text: str) -> list[list[str]]:
         """テキストを単語ごとに区切られた音素リストに変換します。
 
         Args:
@@ -1045,10 +1016,10 @@ class Haqumei:
         Returns:
             List[List[str]]: 単語ごとの音素リストのリスト。
         """
-        ...
 
-
-    def g2p_prosody(self, text: str, format: ProsodyFormat = ProsodyFormat.Default) -> List[str]:
+    def g2p_prosody(
+        self, text: str, format: ProsodyFormat = ProsodyFormat.Default
+    ) -> list[str]:
         """
         入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストに変換します。
 
@@ -1103,9 +1074,8 @@ class Haqumei:
         Returns:
             List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
         """
-        ...
 
-    def g2p_pairs(self, text: str) -> List[WordPhonemePair]:
+    def g2p_pairs(self, text: str) -> list[WordPhonemePair]:
         """テキストを解析し、単語と音素のマッピング情報を返します。
 
         Args:
@@ -1114,9 +1084,8 @@ class Haqumei:
         Returns:
             List[WordPhonemePair]: 単語と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping(self, text: str) -> List[WordPhonemeMap]:
+    def g2p_mapping(self, text: str) -> list[WordPhonemeMap]:
         """入力テキストの形態素ごとの音素マッピングを返します。
         MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
 
@@ -1130,9 +1099,8 @@ class Haqumei:
         Returns:
             List[WordPhonemeMap]: 単語と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_detailed(self, text: str) -> List[WordPhonemeDetail]:
+    def g2p_mapping_detailed(self, text: str) -> list[WordPhonemeDetail]:
         """
         入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
 
@@ -1146,9 +1114,8 @@ class Haqumei:
         Returns:
             List[WordPhonemeDetail]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_prosody(self, text: str) -> List[WordPhonemeProsody]:
+    def g2p_mapping_prosody(self, text: str) -> list[WordPhonemeProsody]:
         """入力テキストを解析し、形態素ごとの詳細な言語情報と、プロソディ記号付き音素をマッピングして取得します。
 
         Args:
@@ -1157,9 +1124,8 @@ class Haqumei:
         Returns:
             List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
         """
-        ...
 
-    def run_frontend_batch(self, texts: List[str]) -> List[List[NjdFeature]]:
+    def run_frontend_batch(self, texts: list[str]) -> list[list[NjdFeature]]:
         """複数のテキストに対して `run_frontend` を実行します。
 
         Args:
@@ -1168,12 +1134,10 @@ class Haqumei:
         Returns:
             List[List[PyNjdFeature]]: 各テキストに対応するNJD特徴量リストのリスト。
         """
-        ...
 
     def run_frontend_detailed_batch(
-        self,
-        texts: List[str]
-    ) -> List[Tuple[List[NjdFeature], List[MecabMorph]]]:
+        self, texts: list[str]
+    ) -> list[tuple[list[NjdFeature], list[MecabMorph]]]:
         """複数のテキストに対して `run_frontend_detailed` を実行します。
 
         Args:
@@ -1183,9 +1147,8 @@ class Haqumei:
             List[Tuple[List[PyNjdFeature], List[MecabMorph]]]:
                 各テキストに対応する（NJD特徴量リスト, MeCab形態素情報リスト）のタプルのリスト。
         """
-        ...
 
-    def g2p_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2p_batch(self, texts: list[str]) -> list[list[str]]:
         """複数のテキストに対して `g2p` を実行します。
 
         Args:
@@ -1194,9 +1157,8 @@ class Haqumei:
         Returns:
             List[List[str]]: 各テキストに対応する音素リストのリスト。
         """
-        ...
 
-    def g2p_detailed_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2p_detailed_batch(self, texts: list[str]) -> list[list[str]]:
         """すべてのトークンを保持する詳細な G2P 変換のバッチ処理。
 
         - 既知語: 通常の音素列 (読点などは `pau`)
@@ -1209,9 +1171,8 @@ class Haqumei:
         Returns:
             List[List[str]]: 各テキストに対応する詳細な音素リストのリスト。
         """
-        ...
 
-    def g2k_batch(self, texts: List[str]) -> List[str]:
+    def g2k_batch(self, texts: list[str]) -> list[str]:
         """カタカナ変換のバッチ処理。
 
         Args:
@@ -1220,9 +1181,8 @@ class Haqumei:
         Returns:
             List[str]: 各テキストに対応するカタカナ文字列のリスト。
         """
-        ...
 
-    def g2k_per_word_batch(self, texts: List[str]) -> List[List[str]]:
+    def g2k_per_word_batch(self, texts: list[str]) -> list[list[str]]:
         """複数の入力テキストを単語（形態素）ごとのカタカナリストに変換します。
 
         Python の GIL を解放してバッチ処理を行います。
@@ -1235,9 +1195,10 @@ class Haqumei:
         Returns:
             List[List[str]]: 単語ごとのカタカナ文字列のリストのリスト。
         """
-        ...
 
-    def g2p_prosody_batch(self, texts: List[str], format: ProsodyFormat = ProsodyFormat.Default) -> List[List[str]]:
+    def g2p_prosody_batch(
+        self, texts: list[str], format: ProsodyFormat = ProsodyFormat.Default
+    ) -> list[list[str]]:
         """
         複数の入力テキストを [ProsodyFormat] の設定をもとにプロソディ記号付き音素リストのリストに変換します。
 
@@ -1292,10 +1253,8 @@ class Haqumei:
         Returns:
             List[List[str]]: プロソディ記号付き音素記号のリストのリスト (例: `[['^', 'a', '[', ...], ...]`)。
         """
-        ...
 
-
-    def g2p_per_word_batch(self, texts: List[str]) -> List[List[List[str]]]:
+    def g2p_per_word_batch(self, texts: list[str]) -> list[list[list[str]]]:
         """単語ごとに分割された音素リストのバッチ処理。
 
         Args:
@@ -1304,9 +1263,8 @@ class Haqumei:
         Returns:
             List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
         """
-        ...
 
-    def g2p_pairs_batch(self, texts: List[str]) -> List[List[WordPhonemePair]]:
+    def g2p_pairs_batch(self, texts: list[str]) -> list[list[WordPhonemePair]]:
         """形態素ごとの音素マッピングのバッチ処理。
 
         Args:
@@ -1315,9 +1273,8 @@ class Haqumei:
         Returns:
             List[List[WordPhonemePair]]: 各テキストに対応するマッピング情報のリスト。
         """
-        ...
 
-    def g2p_mapping_batch(self, texts: List[str]) -> List[List[WordPhonemeMap]]:
+    def g2p_mapping_batch(self, texts: list[str]) -> list[list[WordPhonemeMap]]:
         """形態素ごとの音素マッピング（詳細版）のバッチ処理。
 
         マルチスレッドで処理を行います。
@@ -1328,9 +1285,10 @@ class Haqumei:
         Returns:
             List[List[WordPhonemeMap]]: 各テキストに対応する詳細なマッピング情報のリスト。
         """
-        ...
 
-    def g2p_mapping_detailed_batch(self, texts: List[str]) -> List[List[WordPhonemeDetail]]:
+    def g2p_mapping_detailed_batch(
+        self, texts: list[str]
+    ) -> list[list[WordPhonemeDetail]]:
         """
         入力テキストのリストに対して `g2p_mapping_detailed` を並列に実行します。
 
@@ -1344,9 +1302,10 @@ class Haqumei:
         Returns:
             List[List[WordPhonemeDetail]]: NJD情報と音素のマッピングオブジェクトのリスト。
         """
-        ...
 
-    def g2p_mapping_prosody_batch(self, texts: List[str]) -> List[List[WordPhonemeProsody]]:
+    def g2p_mapping_prosody_batch(
+        self, texts: list[str]
+    ) -> list[list[WordPhonemeProsody]]:
         """複数のテキストに対して `g2p_mapping_prosody` を並行に実行します。
 
         Args:
@@ -1355,9 +1314,8 @@ class Haqumei:
         Returns:
             List[List[WordPhonemeProsody]]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリストのリスト。
         """
-        ...
 
-    def extract_fullcontext_batch(self, texts: List[str]) -> List[List[Label]]:
+    def extract_fullcontext_batch(self, texts: list[str]) -> list[list[Label]]:
         """フルコンテキストラベル抽出のバッチ処理。
 
         Args:
@@ -1366,9 +1324,8 @@ class Haqumei:
         Returns:
             List[List[Label]]: 各テキストに対応するフルコンテキストラベルのリストのリスト。
         """
-        ...
 
-    def extract_fullcontext_string_batch(self, texts: List[str]) -> List[List[str]]:
+    def extract_fullcontext_string_batch(self, texts: list[str]) -> list[list[str]]:
         """フルコンテキストラベル文字列抽出のバッチ処理。
 
         Args:
@@ -1377,8 +1334,6 @@ class Haqumei:
         Returns:
             List[List[str]]: 各テキストに対応するフルコンテキストラベル文字列のリストのリスト。
         """
-        ...
-
 
 def update_global_dictionary(dict: Dictionary) -> None:
     """OpenJTalk で使用されるグローバル辞書を更新 (設定) します。
@@ -1391,11 +1346,9 @@ def update_global_dictionary(dict: Dictionary) -> None:
     Args:
         dict (Dictionary): 設定する辞書オブジェクト。
     """
-    ...
 
 def unset_user_dictionary() -> None:
     """グローバル辞書からユーザー辞書設定を解除します。
 
     システム辞書のみを使用する状態に戻します。
     """
-    ...
