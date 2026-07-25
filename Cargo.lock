@@ -3138,9 +3138,9 @@ dependencies = [
 
 [[package]]
 name = "vibrato-rkyv"
-version = "0.7.12"
+version = "0.7.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f019f0698677f7dee99521fafe837288099963418e34f71217ceb55dde328176"
+checksum = "2abeda109b51b277aa3a0e71ffd1aaed3b7a70f2ba07fce45ef213429e852f76"
 dependencies = [
  "bumpalo",
  "crawdad-rkyv",

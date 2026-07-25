@@ -73,7 +73,6 @@ pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, WordPhonemeProsody};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use vibrato_rkyv::dictionary::PresetDictionaryKind;
 
 use crate::{
     errors::HaqumeiError,
@@ -95,6 +94,7 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
 static KANALIZER_CACHE: LazyLock<Cache<String, String>> = LazyLock::new(|| Cache::new(1000));
 static KANALIZER: LazyLock<Mutex<Kanalizer>> =
     LazyLock::new(|| Mutex::new(Kanalizer::new().expect("Failed to initialize Kanalizer models")));
+#[allow(unused)]
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 type VibratoTask = (String, Sender<Vec<UnidicFeature>>);
@@ -168,19 +168,33 @@ impl Haqumei {
             return Ok(());
         }
 
-        if CACHE_DIR.get().is_none() {
-            let base = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?;
-            CACHE_DIR.get_or_init(|| base.join("haqumei"));
+        #[cfg(feature = "download-dictionary")]
+        {
+            let dict_bytes = include_bytes!(env!("HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH"));
+            let vibrato_dict =
+                unsafe { vibrato_rkyv::Dictionary::from_bytes_unchecked(dict_bytes) }?;
+            self.tokenizer = Some(vibrato_rkyv::Tokenizer::new(vibrato_dict));
         }
-        let cache_dir = CACHE_DIR.get().unwrap();
 
-        let kind = PresetDictionaryKind::UnidicCsj;
-        log::info!("Downloading {} dictionary...", kind.name());
-        let vibrato_dict =
-            vibrato_rkyv::Dictionary::from_preset_with_download(kind, cache_dir.join(kind.name()))?;
-        log::info!("Downloaded {} dictionary.", kind.name());
+        #[cfg(not(feature = "download-dictionary"))]
+        {
+            let kind = include!("../dictionary_kind.rs.part");
 
-        self.tokenizer = Some(vibrato_rkyv::Tokenizer::new(vibrato_dict));
+            if CACHE_DIR.get().is_none() {
+                let base = dirs::cache_dir().ok_or(HaqumeiError::CacheDirectoryNotFound)?;
+                CACHE_DIR.get_or_init(|| base.join("haqumei"));
+            }
+            let cache_dir = CACHE_DIR.get().unwrap();
+
+            log::info!("Downloading {} dictionary...", kind.name());
+            let vibrato_dict = vibrato_rkyv::Dictionary::from_preset_with_download(
+                kind,
+                cache_dir.join(kind.name()),
+            )?;
+            log::info!("Downloaded {} dictionary.", kind.name());
+
+            self.tokenizer = Some(vibrato_rkyv::Tokenizer::new(vibrato_dict));
+        }
 
         Ok(())
     }

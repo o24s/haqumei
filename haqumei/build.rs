@@ -22,6 +22,9 @@ const COMPRESSED_DICTIONARY_HASH: &str =
 const DICTIONARY_HASH: &str = "2e5f5b2c395161046ce06b9458a02b3c4645aacd4aadf10e8762830bcf71dc0b";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
+#[cfg(feature = "download-dictionary")]
+const VIBRATO_RKYV_DICTIONARY_KIND: vibrato_rkyv::dictionary::PresetDictionaryKind = include!("dictionary_kind.rs.part");
+
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let cache_dir = dirs::cache_dir().unwrap().join("haqumei");
     fs::create_dir_all(&cache_dir).unwrap();
@@ -151,6 +154,27 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             compressed_dict_path.display()
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
+
+        let vdict_kind = VIBRATO_RKYV_DICTIONARY_KIND;
+        let compressed_vdict_path =
+            vibrato_rkyv::Dictionary::download_dictionary(vdict_kind, &*CACHE_DIR)
+                .expect("Failed to download vibrato-rkyv dictionary");
+
+        let decompressed_vdict_path = out_dir.join(compressed_vdict_path
+            .with_extension(""));
+
+        if !decompressed_vdict_path.exists() {
+            vibrato_rkyv::Dictionary::decompress_zstd(
+                &compressed_vdict_path,
+                &decompressed_vdict_path,
+            )
+            .expect("Failed to decompress vibrato-rkyv dictionary");
+        }
+
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH={}",
+            decompressed_vdict_path.display()
+        );
     }
 
     let mut defines = vec![
@@ -366,6 +390,10 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             manifest_dir.join("build.rs").display()
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH={}",
+            manifest_dir.join("build.rs").display()
+        );
         return Ok(());
     }
 

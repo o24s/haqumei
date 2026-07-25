@@ -14,6 +14,7 @@ include = [
     "src/*",
     "build.rs",
     "compat.c",
+    "dictionary_kind.rs.part",
     "redirect.c",
     "redirect_cpp.cpp",
     "redirect.h",
@@ -77,9 +78,10 @@ digest-io.workspace = true
 dirs.workspace = true
 glob.workspace = true
 hex.workspace = true
-walkdir.workspace = true
 sha2.workspace = true
 tar.workspace = true
+vibrato-rkyv.workspace = true
+walkdir.workspace = true
 zstd.workspace = true
 
 reqwest = { workspace = true, optional = true }

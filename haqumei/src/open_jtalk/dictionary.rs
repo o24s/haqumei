@@ -2,7 +2,7 @@ use std::{
     ffi::{CString, NulError},
     fs, io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use libc::{c_char, c_int};
@@ -13,7 +13,8 @@ use crate::{
     teardown_cpp_redirect,
 };
 
-static DICT_EXTRACT_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(feature = "embed-dictionary")]
+static DICT_EXTRACT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// `OpenJTalk` が使用する辞書オブジェクト
 #[derive(Debug, Clone)]

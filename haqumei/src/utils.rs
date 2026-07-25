@@ -157,6 +157,7 @@ pub(crate) fn has_odori_chars(surface: &str) -> bool {
 }
 
 #[inline(always)]
+#[allow(unused)]
 pub(crate) fn compute_metadata_key(meta: &Metadata) -> [u8; 32] {
     let mut hasher = Sha256::new();
     #[cfg(unix)]

@@ -71,7 +71,8 @@ pub struct HaqumeiOptions {
     pub predict_kana_english: bool,
 
     /// Unidic を使って、漢字の読みを修正する。
-    /// 有効にした初回実行時には、辞書のダウンロードが発生します。
+    /// デフォルトでは `download-dictionary` feature は有効ですが、
+    /// 無効の場合、初回に実行時の辞書ダウンロードが発生します。
     ///
     /// デフォルトで無効になっています。
     pub use_unidic_yomi: bool,
