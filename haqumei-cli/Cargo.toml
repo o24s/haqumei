@@ -1,6 +1,6 @@
 [package]
 name = "haqumei-cli"
-version = "0.1.15"
+version = "0.1.16"
 edition = "2024"
 description = "Command-line interface for the Haqumei G2P (Grapheme-to-Phoneme) engine."
 readme = "README.md"
