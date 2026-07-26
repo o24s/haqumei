@@ -146,6 +146,7 @@ struct HaqumeiConfigArgs {
 
     /// Unidic を使って漢字の読みを修正する (初回実行時に辞書をダウンロードします)
     #[arg(long)]
+    #[cfg(feature = "unidic-yomi")]
     use_unidic_yomi: bool,
 
     /// アクセント核を1つ前のモーラにずらすルールを無効にする (デフォルトは有効)
@@ -239,6 +240,7 @@ fn main() -> Result<()> {
         modify_filler_accent: !cli.options.no_modify_filler_accent,
         predict_nani: !cli.options.no_predict_nani,
         predict_kana_english: !cli.options.no_predict_kana_english,
+        #[cfg(feature = "unidic-yomi")]
         use_unidic_yomi: cli.options.use_unidic_yomi,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
