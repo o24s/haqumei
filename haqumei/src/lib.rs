@@ -183,7 +183,7 @@ impl Haqumei {
             return Ok(());
         }
 
-        #[cfg(feature = "download-dictionary")]
+        #[cfg(feature = "embed-unidic")]
         {
             let dict_bytes = include_bytes!(env!("HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH"));
             let vibrato_dict =
@@ -191,7 +191,7 @@ impl Haqumei {
             self.tokenizer = Some(vibrato_rkyv::Tokenizer::new(vibrato_dict));
         }
 
-        #[cfg(not(feature = "download-dictionary"))]
+        #[cfg(not(feature = "embed-unidic"))]
         {
             let kind = include!("../dictionary_kind.rs.part");
 

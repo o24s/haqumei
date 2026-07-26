@@ -36,10 +36,11 @@ include = [
 ]
 
 [features]
-default = ["embed-dictionary", "download-dictionary", "unidic-yomi"]
+default = ["embed-dictionary", "download-dictionary", "unidic-yomi", "embed-unidic"]
 embed-dictionary = []
+embed-unidic = ["unidic-yomi", "download-dictionary"]
 build-dictionary = []
-download-dictionary = ["dep:reqwest", "dep:tempfile"]
+download-dictionary = ["embed-dictionary", "dep:reqwest", "dep:tempfile"]
 serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
 unidic-yomi = ["dep:vibrato-rkyv", "dep:crossbeam-channel"]
 

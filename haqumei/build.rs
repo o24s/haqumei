@@ -22,7 +22,7 @@ const COMPRESSED_DICTIONARY_HASH: &str =
 const DICTIONARY_HASH: &str = "2e5f5b2c395161046ce06b9458a02b3c4645aacd4aadf10e8762830bcf71dc0b";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
-#[cfg(all(feature = "download-dictionary", feature = "unidic-yomi"))]
+#[cfg(all(feature = "download-dictionary", feature = "unidic-yomi", feature = "embed-unidic"))]
 const VIBRATO_RKYV_DICTIONARY_KIND: vibrato_rkyv::dictionary::PresetDictionaryKind =
     include!("dictionary_kind.rs.part");
 
@@ -156,7 +156,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
 
-        #[cfg(feature = "unidic-yomi")]
+        #[cfg(feature = "embed-unidic")]
         {
             let vdict_kind = VIBRATO_RKYV_DICTIONARY_KIND;
             let compressed_vdict_path =
@@ -393,10 +393,13 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             manifest_dir.join("build.rs").display()
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
-        println!(
-            "cargo:rustc-env=HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH={}",
-            manifest_dir.join("build.rs").display()
-        );
+        #[cfg(feature = "embed-unidic")]
+        {
+            println!(
+                "cargo:rustc-env=HAQUMEI_EMBED_VIBRATO_RKYV_DICT_PATH={}",
+                manifest_dir.join("build.rs").display()
+            );
+        }
         return Ok(());
     }
 
