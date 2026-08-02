@@ -24,7 +24,7 @@ const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
 #[cfg(all(feature = "download-dictionary", feature = "unidic-yomi", feature = "embed-unidic"))]
 const VIBRATO_RKYV_DICTIONARY_KIND: vibrato_rkyv::dictionary::PresetDictionaryKind =
-    include!("dictionary_kind.rs.part");
+    include!("./dictionary_kind.rs.part");
 
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let cache_dir = dirs::cache_dir().unwrap().join("haqumei");
