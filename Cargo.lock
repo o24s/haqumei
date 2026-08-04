@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei"
-version = "0.8.4"
+version = "0.8.5"
 dependencies = [
  "arc-swap",
  "bindgen",
@@ -1025,7 +1025,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-kanalizer"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "criterion",
  "ndarray",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "haqumei-python"
-version = "0.8.4"
+version = "0.8.5"
 dependencies = [
  "haqumei",
  "haqumei-jlabel",
