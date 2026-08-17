@@ -78,6 +78,18 @@ pub struct HaqumeiOptions {
     #[cfg(feature = "unidic-yomi")]
     pub use_unidic_yomi: bool,
 
+    /// 隣接する形態素で読みが決まる同形異音語を、語ごとの規則で補正する。
+    ///
+    ///   一見さん   -> イッケンさん から イチゲンさん へ
+    ///   皆様方     -> ミナサマカタ から ミナサマガタ へ
+    ///   兵どもが   -> ヘードモが   から ツワモノドモが へ
+    ///
+    /// 条件に合わないときは既定の読みのままです
+    /// (「一見して」は イッケンして のまま)。
+    ///
+    /// デフォルトで有効になっています。
+    pub modify_context_reading: bool,
+
     /// 旧国名 (令制国) に後続する接尾辞「国」の読みを「ノクニ」に補正する。
     ///
     ///   石見国 -> イワミコク から イワミノクニ へ
@@ -410,6 +422,7 @@ impl Default for HaqumeiOptions {
             predict_kana_english: true,
             #[cfg(feature = "unidic-yomi")]
             use_unidic_yomi: false,
+            modify_context_reading: true,
             modify_old_province_yomi: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,

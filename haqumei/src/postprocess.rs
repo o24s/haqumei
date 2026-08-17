@@ -1,3 +1,4 @@
+mod context_reading;
 mod english;
 #[cfg(test)]
 mod tests;
@@ -24,6 +25,7 @@ use crate::{
 };
 #[cfg(feature = "unidic-yomi")]
 use crate::{VIBRATO_CACHE, data::MULTI_READ_KANJI_LIST, features::UnidicFeature};
+pub(crate) use context_reading::modify_context_reading;
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 
 impl Haqumei {

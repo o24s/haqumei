@@ -795,4 +795,53 @@ mod tests {
         assert_eq!(haqumei.g2k("石見国").unwrap(), "イワミコク");
     }
 
+    /// 隣接する形態素で読みが決まる同形異音語の補正
+    #[test]
+    fn test_modify_context_reading() {
+        let mut haqumei = Haqumei::new().unwrap();
+        for (text, expected) in [
+            ("一見さん", "イチゲンサン"),
+            ("一声かけて", "ヒトコエカケテ"),
+            ("一行ごとに", "イチギョウゴトニ"),
+            ("兵どもが", "ツワモノドモガ"),
+            ("阿弥陀仏", "アミダブツ"),
+            ("皆様方", "ミナサマガタ"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+    }
+
+    /// 条件に合わないときは既定の読みのままであること。
+    ///
+    /// 「読み方」「夕方」のように 1 形態素として解析される語は、対象の形態素が
+    /// 単独で現れないため構造的に影響を受けない。
+    #[test]
+    fn test_modify_context_reading_negative() {
+        let mut haqumei = Haqumei::new().unwrap();
+        for (text, expected) in [
+            ("一見して", "イッケンシテ"),
+            ("一声も", "イッセーモ"),
+            ("兵の数", "ヘーノカズ"),
+            ("一行が", "イッコーガ"),
+            ("この方", "コノホー"),
+            ("夕方", "ユーガタ"),
+            ("読み方", "ヨミカタ"),
+            ("念仏", "ネンブツ"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+    }
+
+    /// オプションを無効にすると補正が行われないこと
+    #[test]
+    fn test_modify_context_reading_disabled() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            modify_context_reading: false,
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(haqumei.g2k("一見さん").unwrap(), "イッケンサン");
+        assert_eq!(haqumei.g2k("皆様方").unwrap(), "ミナサマカタ");
+    }
+
 }
