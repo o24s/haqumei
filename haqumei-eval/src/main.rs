@@ -405,9 +405,77 @@ fn evaluate_kana_dataset(
     Ok(())
 }
 
+/// コマンドライン引数と環境変数から設定を読む。
+///
+/// 辞書を切り替えられるようにしてあるのは、上流の辞書更新に追従する際に
+/// 新旧の辞書をそれぞれ評価して差分を見るため。
+/// `haqumei-dict-tool` の `--out-dir` で作ったディレクトリをそのまま渡せる。
+///
+/// ```text
+/// cargo run -p haqumei-eval --release -- --dict-dir compiled_old --suffix _old
+/// cargo run -p haqumei-eval --release -- --dict-dir compiled_new --suffix _new
+/// ```
+struct Config {
+    dict_dir: String,
+    suffix: String,
+}
+
+fn parse_config() -> Result<Config, Box<dyn Error>> {
+    // 既定値は呼び出し位置に依存しないよう、クレートからの相対で解決する
+    // (`haqumei-dict-tool` の既定の出力先と同じ場所を指す)
+    let default_dict_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(DICT_DIR)
+        .to_string_lossy()
+        .into_owned();
+
+    let mut dict_dir = std::env::var("HAQUMEI_EVAL_DICT_DIR").unwrap_or(default_dict_dir);
+    let mut suffix = String::new();
+
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--dict-dir" => {
+                dict_dir = args.next().ok_or("--dict-dir に値がありません")?;
+            }
+            "--suffix" => {
+                suffix = args.next().ok_or("--suffix に値がありません")?;
+            }
+            "-h" | "--help" => {
+                println!(
+                    "Usage: haqumei-eval [--dict-dir <DIR>] [--suffix <SUFFIX>]\n\n\
+                     --dict-dir  コンパイル済み辞書のディレクトリ (既定: {DICT_DIR})\n\
+                     --suffix    レポートファイル名に付ける接尾辞\n\n\
+                     環境変数 HAQUMEI_EVAL_DICT_DIR でも辞書を指定できます。"
+                );
+                std::process::exit(0);
+            }
+            other => return Err(format!("不明な引数です: {other}").into()),
+        }
+    }
+
+    Ok(Config { dict_dir, suffix })
+}
+
+/// `basic5000_report.txt` に `--suffix _old` を与えて `basic5000_report_old.txt` にする。
+fn with_suffix(name: &str, suffix: &str) -> String {
+    if suffix.is_empty() {
+        return name.to_string();
+    }
+    match name.rsplit_once('.') {
+        Some((stem, ext)) => format!("{stem}{suffix}.{ext}"),
+        None => format!("{name}{suffix}"),
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
+    let config = parse_config()?;
+    println!("辞書: {}", config.dict_dir);
+
+    let basic_out = with_suffix(BASIC_OUT, &config.suffix);
+    let rohan_out = with_suffix(ROHAN_OUT, &config.suffix);
+
     let mut haqumei = Haqumei::from_path(
-        DICT_DIR,
+        &config.dict_dir,
         HaqumeiOptions {
             use_unidic_yomi: true,
             normalize_iu: Some(IuPronunciation::Yuu),
@@ -419,11 +487,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut haqumei,
         basic5000::TEXTS,
         basic5000::PHONEMES,
-        BASIC_OUT,
+        &basic_out,
     )?;
 
     let mut haqumei = Haqumei::from_path(
-        DICT_DIR,
+        &config.dict_dir,
         HaqumeiOptions {
             revert_long_vowels: true,
             revert_yotsugana: true,
@@ -431,7 +499,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
     )?;
 
-    evaluate_kana_dataset(&mut haqumei, rohan4600::TEXTS, rohan4600::KANAS, ROHAN_OUT)?;
+    evaluate_kana_dataset(&mut haqumei, rohan4600::TEXTS, rohan4600::KANAS, &rohan_out)?;
 
     Ok(())
 }
