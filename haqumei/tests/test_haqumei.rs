@@ -844,4 +844,34 @@ mod tests {
         assert_eq!(haqumei.g2k("皆様方").unwrap(), "ミナサマカタ");
     }
 
+    /// 辞書が見つからない場合、原因の分かるエラーになること。
+    ///
+    /// ユーザー辞書が見つからない場合に、システム辞書のパスを報告してしまう
+    /// 不具合があったので、どちらのパスが報告されるかも固定する。
+    #[test]
+    fn test_dictionary_not_found_reports_the_missing_path() {
+        let missing_dict = std::path::Path::new("/haqumei-nonexistent-dictionary");
+        match Haqumei::from_path(missing_dict, HaqumeiOptions::default()) {
+            Err(HaqumeiError::DictionaryNotFound { path }) => {
+                assert_eq!(path, missing_dict);
+            }
+            other => panic!("DictionaryNotFound を期待したが {:?}", other.map(|_| ())),
+        }
+
+        // システム辞書のディレクトリは存在するが、ユーザー辞書が無い場合。
+        // ユーザー辞書のパスが報告されなければならない。
+        let existing_dir = std::env::temp_dir();
+        let missing_user_dict = existing_dir.join("haqumei-nonexistent-user-dictionary.dic");
+        match Haqumei::from_path_with_userdict(
+            &existing_dir,
+            &missing_user_dict,
+            HaqumeiOptions::default(),
+        ) {
+            Err(HaqumeiError::DictionaryNotFound { path }) => {
+                assert_eq!(path, missing_user_dict, "ユーザー辞書のパスが報告されていない");
+            }
+            other => panic!("DictionaryNotFound を期待したが {:?}", other.map(|_| ())),
+        }
+    }
+
 }

@@ -25,24 +25,32 @@ pub struct Dictionary {
 
 impl Dictionary {
     /// システム辞書パス、ユーザー辞書パスから [Dictionary] を生成します。
+    ///
+    /// パスは絶対パスに解決してから Mecab に渡します。Mecab は辞書内のファイルを
+    /// 開く際に相対パスを解釈できるとは限らず、またプロセスのカレントディレクトリが
+    /// 変わると同じ [Dictionary] が別の辞書を指しかねないためです。
+    /// 保持する `dict_dir` も解決後のパスになります。
     pub fn from_path<P: AsRef<Path>>(
         dict_dir: P,
         user_dict: Option<P>,
     ) -> Result<Self, HaqumeiError> {
-        let path_to_string = |p: &Path| -> Result<String, HaqumeiError> {
-            p.to_str().map(|s| s.to_string()).ok_or_else(|| {
-                HaqumeiError::InvalidDictionaryPath(p.to_string_lossy().into_owned())
+        // 存在しない場合に Mecab のロード失敗ではなく、原因の分かるエラーを返す
+        let resolve = |p: &Path| -> Result<PathBuf, HaqumeiError> {
+            p.canonicalize().map_err(|_| HaqumeiError::DictionaryNotFound {
+                path: p.to_path_buf(),
             })
         };
 
-        let dict_dir_str = path_to_string(dict_dir.as_ref())?;
-        let user_dict_ref = user_dict.as_ref().map(|p| p.as_ref());
-        let user_dict_str = user_dict_ref.map(path_to_string).transpose()?;
+        let dict_dir = resolve(dict_dir.as_ref())?;
+        let user_dict = user_dict
+            .as_ref()
+            .map(|p| resolve(p.as_ref()))
+            .transpose()?;
 
-        let model = MecabModel::new(&dict_dir_str, user_dict_str.as_deref())?;
+        let model = MecabModel::new(&dict_dir, user_dict.as_deref())?;
         Ok(Self {
             model: Arc::new(model),
-            dict_dir: dict_dir.as_ref().to_path_buf(),
+            dict_dir,
         })
     }
 

@@ -8,6 +8,13 @@ pub(crate) struct Mecab {
 }
 
 impl Mecab {
+    /// モデルを自身で所有する [Mecab] を作る。
+    ///
+    /// 現在は呼び出し元がない。辞書を指定して作る経路はすべて [Dictionary] を
+    /// 保持する `from_model` を通るようになったため (`*_batch` の各ワーカーが
+    /// 同じ辞書からインスタンスを作れるようにするための変更)。
+    /// `Drop` の所有側の分岐と対応しているので、参照用に残してある。
+    #[allow(unused)]
     pub(crate) fn new() -> Result<Self, HaqumeiError> {
         unsafe {
             let mut mecab_uninit = Box::new(MaybeUninit::<ffi::Mecab>::uninit());

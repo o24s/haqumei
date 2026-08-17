@@ -118,6 +118,12 @@ pub struct OpenJTalk {
     pub(crate) njd: Njd,
     pub(crate) jp_common: JpCommon,
     pub(crate) dict: Option<Arc<Dictionary>>,
+    /// グローバル辞書の更新に追従するかどうか。
+    ///
+    /// [OpenJTalk::new] で作った場合はグローバル辞書を使っているので追従する。
+    /// `from_dictionary` や `from_path` で辞書を明示した場合は、
+    /// [update_global_dictionary] で勝手に差し替えられては困るので追従しない。
+    pub(crate) follows_global: bool,
     _marker: PhantomData<Cell<()>>,
 }
 
@@ -174,11 +180,16 @@ impl OpenJTalk {
             njd,
             jp_common,
             dict: Some(initial_dict),
+            follows_global: true,
             _marker: PhantomData,
         })
     }
 
     pub(crate) fn ensure_dictionary_is_latest(&mut self) -> Result<(), HaqumeiError> {
+        if !self.follows_global {
+            return Ok(());
+        }
+
         let latest_dict = GLOBAL_MECAB_DICTIONARY.load();
 
         if let Some(active_dict) = &self.dict
@@ -204,6 +215,7 @@ impl OpenJTalk {
             njd,
             jp_common,
             dict: Some(Arc::new(dict)),
+            follows_global: false,
             _marker: PhantomData,
         })
     }
@@ -219,6 +231,7 @@ impl OpenJTalk {
             njd,
             jp_common,
             dict: Some(dict),
+            follows_global: false,
             _marker: PhantomData,
         })
     }
@@ -240,84 +253,17 @@ impl OpenJTalk {
         dict_dir: P,
         user_dict: Option<Q>,
     ) -> Result<Self, HaqumeiError> {
-        let mecab = Mecab::new()?;
-        let njd = Njd::new()?;
-        let jp_common = JpCommon::new()?;
+        // [Dictionary] を経由することで、パスの解決とプラットフォーム差の吸収を
+        // 一箇所に寄せている。また [Dictionary] を保持しておくことで、`*_batch` の
+        // 各ワーカーがグローバル辞書ではなくこの辞書からインスタンスを作れる。
+        // `user_dict` は所有権を持つ型 (tempfile の `TempPath` など) でも渡せる。
+        // `map` で消費すると drop が走ってファイルが消えることがあるため、借用する。
+        let dict = Dictionary::from_path(
+            dict_dir.as_ref().to_path_buf(),
+            user_dict.as_ref().map(|p| p.as_ref().to_path_buf()),
+        )?;
 
-        let dict_dir = dict_dir.as_ref();
-        let user_dict = user_dict.as_ref();
-
-        if !dict_dir.exists() {
-            return Err(HaqumeiError::DictionaryNotFound {
-                path: dict_dir.to_path_buf(),
-            });
-        }
-
-        if let Some(user_dict) = user_dict
-            && !user_dict.as_ref().exists()
-        {
-            return Err(HaqumeiError::DictionaryNotFound {
-                path: dict_dir.to_path_buf(),
-            });
-        }
-
-        let path_to_cstring = |p: &Path| -> Result<CString, HaqumeiError> {
-            let p = p.canonicalize()?;
-            let path_str = p.as_os_str();
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::ffi::OsStrExt;
-
-                CString::new(path_str.as_bytes()).map_err(|_| {
-                    HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
-                })
-            }
-
-            #[cfg(windows)]
-            {
-                let mut s = path_str.to_str().ok_or_else(|| {
-                    HaqumeiError::InvalidDictionaryPath(path_str.to_string_lossy().to_string())
-                })?;
-
-                if let Some(stripped) = s.strip_prefix(r"\\?\") {
-                    s = stripped;
-                }
-
-                CString::new(s).map_err(|_| HaqumeiError::InvalidDictionaryPath(s.to_string()))
-            }
-        };
-
-        let c_dict_dir = path_to_cstring(dict_dir)?;
-
-        let c_user_dict: Option<CString> = user_dict
-            .as_ref()
-            .map(|p| path_to_cstring(p.as_ref()))
-            .transpose()?;
-
-        let result = unsafe {
-            if let Some(user_dict) = c_user_dict.as_ref().filter(|s| !s.to_bytes().is_empty()) {
-                ffi::Mecab_load_with_userdic(
-                    mecab.inner.as_ptr(),
-                    c_dict_dir.as_ptr() as *mut c_char,
-                    user_dict.as_ptr() as *mut c_char,
-                )
-            } else {
-                ffi::Mecab_load(mecab.inner.as_ptr(), c_dict_dir.as_ptr() as *mut c_char)
-            }
-        };
-
-        if result != 1 {
-            return Err(HaqumeiError::MecabLoadError);
-        }
-
-        Ok(Self {
-            mecab,
-            njd,
-            jp_common,
-            dict: None,
-            _marker: PhantomData,
-        })
+        Self::from_dictionary(dict)
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。

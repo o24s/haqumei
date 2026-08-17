@@ -38,7 +38,13 @@ macro_rules! impl_batch_method_haqumei {
         where
             S: AsRef<str> + Sync,
         {
-                let dict = GLOBAL_MECAB_DICTIONARY.load_full();
+                // インスタンスが辞書を持っている場合はそれを使う。
+                // グローバル辞書を無条件に使うと、`from_path` や `from_dictionary` で
+                // 指定した辞書が黙って無視されてしまう。
+                let dict = match &self.open_jtalk.dict {
+                    Some(dict) => dict.clone(),
+                    None => GLOBAL_MECAB_DICTIONARY.load_full(),
+                };
                 if !dict.model.is_initialized() {
                     return Err(HaqumeiError::GlobalDictionaryNotInitialized);
                 }
@@ -85,7 +91,13 @@ macro_rules! impl_batch_method_openjtalk {
         where
             S: AsRef<str> + Sync,
         {
-            let dict = GLOBAL_MECAB_DICTIONARY.load_full();
+            // インスタンスが辞書を持っている場合はそれを使う。
+            // グローバル辞書を無条件に使うと、`from_path` や `from_dictionary` で
+            // 指定した辞書が黙って無視されてしまう。
+            let dict = match &self.dict {
+                Some(dict) => dict.clone(),
+                None => GLOBAL_MECAB_DICTIONARY.load_full(),
+            };
             if !dict.model.is_initialized() {
                 return Err(HaqumeiError::GlobalDictionaryNotInitialized);
             }
