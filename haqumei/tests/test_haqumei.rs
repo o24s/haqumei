@@ -832,7 +832,11 @@ mod tests {
         }
     }
 
-    /// オプションを無効にすると補正が行われないこと
+    /// オプションを無効にすると補正が行われないこと。
+    ///
+    /// 「補正しない場合の読み」は辞書に依存するので、辞書の版が変わっても
+    /// 規則以外では与えられない読みを対象にする。
+    /// (「一見さん」は辞書側で イチゲン が既定になる版があり、比較に使えない)
     #[test]
     fn test_modify_context_reading_disabled() {
         let mut haqumei = Haqumei::with_options(HaqumeiOptions {
@@ -840,7 +844,8 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        assert_eq!(haqumei.g2k("一見さん").unwrap(), "イッケンサン");
+        assert_eq!(haqumei.g2k("兵どもが").unwrap(), "ヘードモガ");
+        assert_eq!(haqumei.g2k("一声かけて").unwrap(), "イッセーカケテ");
         assert_eq!(haqumei.g2k("皆様方").unwrap(), "ミナサマカタ");
     }
 
