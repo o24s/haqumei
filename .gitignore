@@ -3,6 +3,11 @@
 /pyopenjtalk-plus
 /compiled
 
+# 辞書改善用の作業クレート。
+# ルートの Cargo.toml では members ではなく exclude に置いてあるので、
+# このディレクトリが無い環境でもワークスペースの解決は失敗しない。
+/haqumei-dict-lab
+
 # haqumei-eval の出力
 basic5000.yaml
 basic5000_report*.txt

@@ -11,6 +11,8 @@ members = [
     "haqumei-macros",
     "haqumei-python",
 ]
+# 辞書改善用の作業クレート。
+exclude = ["haqumei-dict-lab"]
 
 [workspace.dependencies]
 anyhow = "1.0.104"
