@@ -179,3 +179,42 @@ fn test_realistic_sentences() {
         );
     }
 }
+
+#[cfg(feature = "unidic-yomi")]
+#[test]
+fn test_split_unidic_feature_respects_quotes() {
+    fn fields(feature: &str) -> Vec<&str> {
+        split_unidic_feature(feature)
+            .into_iter()
+            .map(|r| &feature[r])
+            .collect()
+    }
+
+    // 引用符を含まない通常のケース
+    assert_eq!(fields("名詞,普通名詞,一般,*"), ["名詞", "普通名詞", "一般", "*"]);
+
+    // fConType の値がカンマを含み引用符で囲まれている場合、
+    // 1フィールドとして扱い、以降のフィールド番号がずれないこと
+    let feature = "名詞,普通名詞,助数詞可能,*,*,*,トオリ,通り,通,ドーリ,通,ドーリ,和,\
+                   ト濁,濁音形,*,*,*,\"B1WB2WB3WB4WBjS,B1WB2WB8SjS\",体,ドオリ,ドオリ,\
+                   ドオリ,トオリ,3,C2,*,7202643210551808,26203";
+    let f = fields(feature);
+    assert_eq!(f.len(), 29);
+    assert_eq!(f[9], "ドーリ", "pron");
+    assert_eq!(f[18], "B1WB2WB3WB4WBjS,B1WB2WB8SjS", "fConType は囲みの引用符を含まない");
+    assert_eq!(f[19], "体", "type");
+    assert_eq!(f[20], "ドオリ", "kana");
+    assert_eq!(f[24], "3", "aType");
+    assert_eq!(f[25], "C2", "aConType");
+    assert_eq!(f[28], "26203", "lemma_id");
+
+    // aType 側がカンマを含むケース (例: 形容詞「多い」の "1,2")
+    let feature = "形容詞,一般,*,*,形容詞,終止形-一般,オオイ,多い,多い,オーイ,多い,オーイ,\
+                   和,*,*,*,*,*,*,相,オオイ,オオイ,オオイ,オオイ,\"1,2\",C1,*,\
+                   1241082407035563,4623";
+    let f = fields(feature);
+    assert_eq!(f.len(), 29);
+    assert_eq!(f[20], "オオイ", "kana");
+    assert_eq!(f[24], "1,2", "aType");
+    assert_eq!(f[25], "C1", "aConType");
+}

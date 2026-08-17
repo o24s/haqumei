@@ -216,6 +216,45 @@ pub(crate) fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
     }
 }
 
+/// UniDic の feature 文字列をフィールドごとの範囲に分割する。
+///
+/// `fConType` や `aConType` は値そのものにカンマを含み、CSV の慣習に従って
+/// ダブルクォートで囲まれている (例: `"動詞%F2@0,名詞%F1"`)。
+/// 単純に `,` で分割すると、そこから後ろのフィールド番号が全てずれるため、
+/// クォートの内側の `,` は区切りとして扱わない。
+/// 返す範囲は囲みのダブルクォートを含まない。
+#[cfg(feature = "unidic-yomi")]
+fn split_unidic_feature(feature: &str) -> Vec<Range<usize>> {
+    fn unquote(feature: &str, range: Range<usize>) -> Range<usize> {
+        let field = &feature[range.clone()];
+        if field.len() >= 2 && field.starts_with('"') && field.ends_with('"') {
+            range.start + 1..range.end - 1
+        } else {
+            range
+        }
+    }
+
+    let mut ranges = Vec::with_capacity(29);
+    let bytes = feature.as_bytes();
+    let mut field_start = 0;
+    let mut in_quotes = false;
+
+    // `"` と `,` は ASCII なので、UTF-8 の多バイト列の内部に現れることはない
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'"' => in_quotes = !in_quotes,
+            b',' if !in_quotes => {
+                ranges.push(unquote(feature, field_start..i));
+                field_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    ranges.push(unquote(feature, field_start..bytes.len()));
+
+    ranges
+}
+
 #[cfg(feature = "unidic-yomi")]
 pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFeature> {
     VIBRATO_CACHE.get_with(text.to_string(), || {
@@ -226,13 +265,7 @@ pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFea
             .token_iter()
             .map(|token| {
                 let token = token.to_buf();
-                let mut ranges = Vec::with_capacity(29);
-                let mut start = 0;
-                for part in token.feature.split(',') {
-                    let end = start + part.len();
-                    ranges.push(start..end);
-                    start = end + 1;
-                }
+                let ranges = split_unidic_feature(&token.feature);
 
                 UnidicFeature {
                     surface: token.surface,
@@ -424,6 +457,8 @@ impl Haqumei {
             let node_string = &njd_feature.string;
             let node_orig = &njd_feature.orig;
             let node_char_len = node_string.chars().count();
+            // Open JTalk が接尾辞として確定した読みは、前接語との結合を反映した結果なので保持する。
+            let is_suffix = njd_feature.pos_group1 == "接尾";
 
             while let Some(candidate) = unidic_iter.peek() {
                 if candidate.range_char.end <= current_char_pos {
@@ -441,13 +476,24 @@ impl Haqumei {
                 && candidate.range_char.start == current_char_pos
                 && candidate.surface == *node_orig
             {
+                // 上書きしない場合でも、形態素境界を保つために対応する候補は消費する。
                 let correct_yomi_token = unidic_iter.next().unwrap();
 
-                let reading = correct_yomi_token.pron();
-                pron_to_set = Some(reading.to_string());
-                read_to_set = Some(reading.to_string());
+                // UniDic は「支払時」の「時」を一般名詞のトキとして返すため、接尾辞に対して
+                // 上書きすると Open JTalk が文脈から解決済みのジを失う。
+                // 「その時」のような非自立名詞には従来どおり補正を適用する。
+                if !is_suffix {
+                    // UniDic の pron は長音を「ー」で表す発音形、kana は仮名形。
+                    // [NjdFeature] も pron が「ー」表記・read が仮名表記なので、
+                    // それぞれ対応するフィールドから取る。
+                    pron_to_set = Some(correct_yomi_token.pron().to_string());
+                    read_to_set = Some(correct_yomi_token.kana().to_string());
+                }
             }
             if let Some(pron) = pron_to_set {
+                // 読みを差し替えるとモーラ数が変わりうる (例: ツー 2 モーラ -> ドーリ 3 モーラ)。
+                // mora_size はアクセント句の構築に使われるため、ここで数え直す。
+                njd_feature.mora_size = count_mora(&pron) as i32;
                 njd_feature.pron = pron;
             }
             if let Some(read) = read_to_set {
