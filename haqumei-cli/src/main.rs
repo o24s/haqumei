@@ -149,6 +149,10 @@ struct HaqumeiConfigArgs {
     #[cfg(feature = "unidic-yomi")]
     use_unidic_yomi: bool,
 
+    /// 旧国名に続く接尾辞「国」を「ノクニ」と読む補正を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_modify_old_province_yomi: bool,
+
     /// アクセント核を1つ前のモーラにずらすルールを無効にする (デフォルトは有効)
     #[arg(long)]
     no_retreat_acc_nuc: bool,
@@ -242,6 +246,7 @@ fn main() -> Result<()> {
         predict_kana_english: !cli.options.no_predict_kana_english,
         #[cfg(feature = "unidic-yomi")]
         use_unidic_yomi: cli.options.use_unidic_yomi,
+        modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
         process_odoriji: !cli.options.no_process_odoriji,

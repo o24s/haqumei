@@ -78,6 +78,16 @@ pub struct HaqumeiOptions {
     #[cfg(feature = "unidic-yomi")]
     pub use_unidic_yomi: bool,
 
+    /// 旧国名 (令制国) に後続する接尾辞「国」の読みを「ノクニ」に補正する。
+    ///
+    ///   石見国 -> イワミコク から イワミノクニ へ
+    ///   越後国 -> エチゴコク から エチゴノクニ へ
+    ///
+    /// 「中国」「外国」のように 1 形態素として解析される語は対象外です。
+    ///
+    /// デフォルトで有効になっています。
+    pub modify_old_province_yomi: bool,
+
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
     /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
     ///
@@ -400,6 +410,7 @@ impl Default for HaqumeiOptions {
             predict_kana_english: true,
             #[cfg(feature = "unidic-yomi")]
             use_unidic_yomi: false,
+            modify_old_province_yomi: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
             process_odoriji: true,

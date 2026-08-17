@@ -78,7 +78,7 @@ use crate::{
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     postprocess::{
         modify_acc_after_chaining, modify_english_words, modify_filler_accent,
-        predict_kana_english, process_odori_features, retreat_acc_nuc,
+        modify_old_province_yomi, predict_kana_english, process_odori_features, retreat_acc_nuc,
     },
 };
 #[cfg(feature = "unidic-yomi")]
@@ -942,6 +942,12 @@ impl Haqumei {
         #[cfg(feature = "unidic-yomi")]
         if options.use_unidic_yomi {
             self.modify_kanji_yomi(text, &mut njd_features);
+        }
+
+        // 読みを確定させた後、アクセント関連の補正より前に接辞の読みを解決する
+        // (mora_size が変わるため)
+        if options.modify_old_province_yomi {
+            modify_old_province_yomi(&mut njd_features);
         }
 
         if options.retreat_acc_nuc {

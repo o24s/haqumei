@@ -15,6 +15,7 @@ use vibrato_rkyv::tokenizer::worker::Worker;
 use crate::{
     Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, NjdFeature, OpenJTalk,
     Phoneme, ProsodicPhoneme, UnicodeNormalization,
+    data::OLD_PROVINCE_NAMES,
     errors::HaqumeiError,
     utils::{
         count_mora, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
@@ -213,6 +214,35 @@ pub(crate) fn modify_filler_accent(njd_features: &mut [NjdFeature]) {
             }
             is_after_filler = false;
         }
+    }
+}
+
+/// 旧国名に後続する接尾辞「国」の読みを「コク」から「ノクニ」へ補正する。
+///
+/// 「石見国」は `石見 (名詞,固有名詞) + 国 (名詞,接尾)` に分割され、辞書の
+/// 接尾辞「国」の読みが「コク」であるため、既定では イワミコク になる。
+/// 旧国名の直後に限って「ノクニ」を与えることで イワミノクニ を得る。
+///
+/// 「中国」「外国」「帝国」などは MeCab が 1 形態素として解析するので
+/// 接尾辞条件によって対象から外れる。語幹側の読みには手を入れないため、
+/// 語幹自体が誤読される語 (例: 豊前 = ユタカマエ) は辞書側の修正が必要。
+pub(crate) fn modify_old_province_yomi(njd_features: &mut [NjdFeature]) {
+    const KUNI_READING: &str = "ノクニ";
+
+    for i in 1..njd_features.len() {
+        let curr = &njd_features[i];
+        if curr.string != "国" || curr.pos_group1 != "接尾" {
+            continue;
+        }
+        if !OLD_PROVINCE_NAMES.contains(njd_features[i - 1].string.as_str()) {
+            continue;
+        }
+
+        let curr = &mut njd_features[i];
+        curr.read = KUNI_READING.to_string();
+        curr.pron = KUNI_READING.to_string();
+        // コク (2 モーラ) から ノクニ (3 モーラ) へ変わるため数え直す
+        curr.mora_size = count_mora(KUNI_READING) as i32;
     }
 }
 

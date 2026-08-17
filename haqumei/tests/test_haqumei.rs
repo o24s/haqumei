@@ -755,4 +755,44 @@ mod tests {
         let she = details.iter().find(|d| match_word(&d.word, "she")).unwrap();
         assert_eq!(she.read, "シー", "Failed on 'she'");
     }
+    /// 旧国名に続く接尾辞「国」が「ノクニ」と読まれること
+    #[test]
+    fn test_modify_old_province_yomi() {
+        let mut haqumei = Haqumei::new().unwrap();
+        for (text, expected) in [
+            ("石見国", "イワミノクニ"),
+            ("越後国", "エチゴノクニ"),
+            ("阿波国", "アワノクニ"),
+            ("岩代国", "イワシロノクニ"),
+            ("大和国", "ヤマトノクニ"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+    }
+
+    /// 1 形態素として解析される「〜国」は補正の対象外であること
+    #[test]
+    fn test_modify_old_province_yomi_not_applied() {
+        let mut haqumei = Haqumei::new().unwrap();
+        for (text, expected) in [
+            ("中国", "チューゴク"),
+            ("外国", "ガイコク"),
+            ("帝国", "テーコク"),
+            ("韓国", "カンコク"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+    }
+
+    /// オプションを無効にすると従来どおり「コク」と読むこと
+    #[test]
+    fn test_modify_old_province_yomi_disabled() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            modify_old_province_yomi: false,
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(haqumei.g2k("石見国").unwrap(), "イワミコク");
+    }
+
 }
