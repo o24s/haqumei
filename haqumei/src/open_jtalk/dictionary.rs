@@ -117,7 +117,14 @@ impl Dictionary {
             let metadata_hash = hex::encode(metadata_hasher.finalize());
 
             let meta_cache_dir = cache_dir.join(".cache");
-            let metadata_hash_path = meta_cache_dir.join(format!("{metadata_hash}.sha256"));
+            // マーカーの名前に期待する辞書のハッシュを含める。
+            //
+            // これが無いと、別の辞書で書かれたマーカーによって内容の検証が
+            // 飛ばされ、意図しない辞書がそのまま使われる。`build-dictionary` と
+            // `download-dictionary` は展開先 (`decompressed`) を共有するため、
+            // feature を切り替えて両方をビルドすると実際に起こる。
+            let metadata_hash_path = meta_cache_dir
+                .join(format!("{}-{metadata_hash}.sha256", EXPECTED_DICT_HASH.trim()));
 
             if metadata_hash_path.exists() {
                 return Self::from_path(dict_path, None);

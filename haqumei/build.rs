@@ -439,12 +439,14 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
     println!("cargo:rerun-if-changed={}", dict_src_dir.display());
 
     if dict_hash_path.exists()
+        && compiled_dict_hash_path.exists()
         && dict_src_dir.exists()
         && cached_dict_path.exists()
         && compressed_dict_hash_path.exists()
         && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&cached_dict_path)
         && let Ok(dict_hash) = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])
         && let Ok(saved_dict_hash) = fs::read_to_string(&dict_hash_path)
+        && let Ok(saved_compiled_dict_hash) = fs::read_to_string(&compiled_dict_hash_path)
         && let Ok(saved_compressed_dict_hash) = fs::read_to_string(&compressed_dict_hash_path)
         && saved_dict_hash == dict_hash
         && saved_compressed_dict_hash == compressed_dict_hash
@@ -454,7 +456,11 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             compressed_dict_path.display()
         );
-        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", saved_dict_hash);
+        // 実行時の検証 (Dictionary::from_embedded) は展開後の .dic / .bin を照合する。
+        println!(
+            "cargo:rustc-env=HAQUMEI_DICT_HASH={}",
+            saved_compiled_dict_hash
+        );
         return Ok(());
     }
 
