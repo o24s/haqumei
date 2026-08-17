@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+clap.workspace = true
 csv.workspace = true
 glob.workspace = true
 haqumei = { path = "../haqumei"}

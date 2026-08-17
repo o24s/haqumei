@@ -993,6 +993,7 @@ dependencies = [
 name = "haqumei-dict-tool"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "csv",
  "glob",
  "haqumei",
