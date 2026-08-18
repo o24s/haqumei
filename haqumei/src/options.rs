@@ -137,6 +137,16 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub read_unknown_kanji: bool,
 
+    /// 指示的な漢語接頭辞 (本, 当, 同, 全) のあとでアクセント句を切る。
+    ///
+    ///   本論文 → ホ\]ン | ロンブン,  当ホテル → ト\]ー | ホテル
+    ///
+    /// 無効にすると Open JTalk と同じ挙動 (接頭辞と後続語を同じアクセント句に
+    /// まとめる) になり、接頭辞のアクセント核が句全体を支配します。
+    ///
+    /// デフォルトで有効になっています。
+    pub split_prefix_accent_phrase: bool,
+
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
     /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
     ///
@@ -462,6 +472,7 @@ impl Default for HaqumeiOptions {
             modify_numeral_reading: true,
             restore_rare_syllables: true,
             read_unknown_kanji: true,
+            split_prefix_accent_phrase: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
             process_odoriji: true,

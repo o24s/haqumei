@@ -902,6 +902,7 @@ class Haqumei:
         restore_rare_syllables: bool = True,
         read_unknown_kanji: bool = True,
         modify_numeral_reading: bool = True,
+        split_prefix_accent_phrase: bool = True,
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,

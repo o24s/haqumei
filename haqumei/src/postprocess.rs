@@ -532,6 +532,32 @@ pub(crate) fn modify_english_words(text: &str, njd_features: &mut [NjdFeature]) 
     }
 }
 
+/// 指示的な漢語接頭辞のあとで、アクセント句を切ります。
+///
+///   本論文 → ホ]ン | ロンブン,  当ホテル → ト]ー | ホテル
+///
+/// Open JTalk の規則 (`njd_set_accent_phrase` の Rule 15) は接頭詞自身を句頭に
+/// するだけで、後続の名詞は「名詞 + 名詞」として同じ句に連結される。すると
+/// 接頭辞のアクセント核が句全体を支配して、以降が平坦に潰れてしまう。
+///
+/// 融合する接頭辞 (新製品 → シンセ]ーヒン) と融合しない接頭辞の区別は語彙的で、
+/// 規則では書けない。収集データで後続語が独立した句として実現されていた
+/// 接頭辞だけを閉じた集合として持つ。
+pub(crate) fn split_prefix_accent_phrase(njd_features: &mut [NjdFeature]) {
+    // 後続語を独立したアクセント句にする接頭辞。
+    const INDEPENDENT_PREFIXES: &[&str] = &["本", "当", "同", "全"];
+
+    for i in 1..njd_features.len() {
+        if njd_features[i].chain_flag != 1 {
+            continue;
+        }
+        let prev = &njd_features[i - 1];
+        if prev.pos == "接頭詞" && INDEPENDENT_PREFIXES.contains(&prev.string.as_str()) {
+            njd_features[i].chain_flag = 0;
+        }
+    }
+}
+
 /// 長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールを適用します。
 pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
     if njd_features.is_empty() {

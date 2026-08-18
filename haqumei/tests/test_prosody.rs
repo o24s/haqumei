@@ -108,6 +108,46 @@ mod tests {
     }
 
     #[test]
+    fn test_split_prefix_accent_phrase() {
+        // 指示的な漢語接頭辞は後続語と融合せず、別のアクセント句になる
+        //   本論文 → ホ]ン | ロンブン
+        let mut haqumei = Haqumei::new().unwrap();
+        let mapping = haqumei.g2p_mapping_prosody("本論文").unwrap();
+
+        assert_eq!(mapping[0].word, "本");
+        assert_eq!(mapping[0].phonemes.last(), Some(&ap()));
+        // 平板なので句頭のモーラだけ Low で、2 モーラ目から High になる
+        assert_eq!(
+            mapping[1].phonemes,
+            vec![
+                l(Phoneme::R),
+                l(Phoneme::O),
+                h(Phoneme::Nn),
+                h(Phoneme::B),
+                h(Phoneme::U),
+                h(Phoneme::Nn),
+            ]
+        );
+
+        // 無効にすると Open JTalk と同じ、接頭辞ごとひとつのアクセント句になる
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            split_prefix_accent_phrase: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let mapping = haqumei.g2p_mapping_prosody("本論文").unwrap();
+
+        assert!(mapping.iter().all(|m| !m.phonemes.contains(&ap())));
+        // 接頭辞の核が句全体を支配するので、以降がすべて Low に潰れる
+        assert!(
+            mapping[1]
+                .phonemes
+                .iter()
+                .all(|p| matches!(p, ProsodicPhoneme::Phoneme { pitch: Some(PitchAccent::Low), .. }))
+        );
+    }
+
+    #[test]
     fn test_explicit_punctuation_marks() {
         let mut haqumei = Haqumei::new().unwrap();
         let mapping = haqumei.g2p_mapping_prosody("えっ？嘘！").unwrap();

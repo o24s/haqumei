@@ -164,6 +164,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_modify_numeral_reading: bool,
 
+    /// 指示的な漢語接頭辞 (本, 当, 同, 全) の後のアクセント句の切れ目を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_split_prefix_accent_phrase: bool,
+
     /// アクセント核を1つ前のモーラにずらすルールを無効にする (デフォルトは有効)
     #[arg(long)]
     no_retreat_acc_nuc: bool,
@@ -264,6 +268,7 @@ fn main() -> Result<()> {
         restore_rare_syllables: !cli.options.no_restore_rare_syllables,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
         modify_numeral_reading: !cli.options.no_modify_numeral_reading,
+        split_prefix_accent_phrase: !cli.options.no_split_prefix_accent_phrase,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
         process_odoriji: !cli.options.no_process_odoriji,
