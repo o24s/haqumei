@@ -179,3 +179,58 @@ fn test_realistic_sentences() {
         );
     }
 }
+
+#[test]
+fn test_restore_rare_syllables() {
+    fn f(surface: &str, read: &str, pron: &str) -> NjdFeature {
+        NjdFeature {
+            string: surface.to_string(),
+            pos: "名詞".to_string(),
+            pos_group1: "固有名詞".to_string(),
+            pos_group2: "*".to_string(),
+            pos_group3: "*".to_string(),
+            ctype: "*".to_string(),
+            cform: "*".to_string(),
+            orig: surface.to_string(),
+            read: read.to_string(),
+            pron: pron.to_string(),
+            acc: 0,
+            mora_size: count_mora(pron) as i32,
+            chain_rule: "*".to_string(),
+            chain_flag: -1,
+        }
+    }
+
+    // 辞書が潰した音節を戻す
+    for (surface, pron, want) in [
+        ("ヴィクトリーヌ", "ビク’トリーヌ", "ヴィク’トリーヌ"),
+        ("アイシュヴァルヤ", "アイシュバルヤ", "アイシュヴァルヤ"),
+        ("テュルク", "チュルク", "テュルク"),
+        ("アクスィス", "アクシス", "アクスィス"),
+    ] {
+        let mut v = [f(surface, pron, pron)];
+        restore_rare_syllables(&mut v);
+        assert_eq!(v[0].pron, want, "入力: {surface}");
+    }
+
+    // 潰れた形のほうが定着している語は触らない。
+    // ホンジュラス は デュ -> ジュ で、復元表に載せていない
+    for (surface, pron) in [
+        ("ホンデュラス", "ホンジュラス"),
+        ("バースディ", "バースデイ"),
+        ("テイスト", "テイスト"),
+        ("キウイ", "キウイ"),
+        // クァ 行は復元表に載せていない。ウルグアイ / グアテマラ /
+        // クオリティ のように、大書きの形が日本語として定着している
+        ("ウルグァイ", "ウルグアイ"),
+    ] {
+        let mut v = [f(surface, pron, pron)];
+        restore_rare_syllables(&mut v);
+        assert_eq!(v[0].pron, pron, "入力: {surface}");
+    }
+
+    // 表層形と発音が途中で食い違う語は、全体を諦める
+    let mut v = [f("エヌ・エイチ・ヴィ", "エヌエイチブイ", "エヌエイチブイ")];
+    restore_rare_syllables(&mut v);
+    assert_eq!(v[0].pron, "エヌエイチブイ");
+}

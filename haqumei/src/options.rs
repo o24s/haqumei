@@ -104,6 +104,21 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub modify_numeral_reading: bool,
 
+    /// 辞書が潰した稀な音節を、表層形から復元する。
+    ///
+    ///   ヴィクトリーヌ   ビクトリーヌ  から ヴィクトリーヌ へ
+    ///   アイシュヴァルヤ アイシュバルヤ から アイシュヴァルヤ へ
+    ///
+    /// 音素層は `ヴィ` `テュ` などを表現できるのに、辞書のエントリが
+    /// ba 行へ寄せているために出力できていないのを戻します。
+    ///
+    /// 潰れた形のほうが定着している語 (ホンジュラス / テイスト / バースデイ)
+    /// は対象外です。
+    ///
+    /// 無効にすると Open JTalk と同じ出力になります。
+    /// デフォルトで有効になっています。
+    pub restore_rare_syllables: bool,
+
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
     /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
@@ -445,6 +460,7 @@ impl Default for HaqumeiOptions {
             modify_context_reading: true,
             modify_old_province_yomi: true,
             modify_numeral_reading: true,
+            restore_rare_syllables: true,
             read_unknown_kanji: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,

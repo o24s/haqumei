@@ -152,6 +152,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_modify_old_province_yomi: bool,
 
+    /// 辞書が潰した稀な音節 (ヴィ / テュ など) の復元を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_restore_rare_syllables: bool,
+
     /// 辞書に無い漢字へのフォールバック読みを無効にする (デフォルトは有効)
     #[arg(long)]
     no_read_unknown_kanji: bool,
@@ -257,6 +261,7 @@ fn main() -> Result<()> {
         predict_kana_english: !cli.options.no_predict_kana_english,
         modify_context_reading: !cli.options.no_modify_context_reading,
         modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
+        restore_rare_syllables: !cli.options.no_restore_rare_syllables,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
         modify_numeral_reading: !cli.options.no_modify_numeral_reading,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,

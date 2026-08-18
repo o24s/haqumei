@@ -899,6 +899,7 @@ class Haqumei:
         predict_nani: bool = False,
         modify_context_reading: bool = True,
         modify_old_province_yomi: bool = True,
+        restore_rare_syllables: bool = True,
         read_unknown_kanji: bool = True,
         modify_numeral_reading: bool = True,
         retreat_acc_nuc: bool = True,
