@@ -191,7 +191,10 @@ fn test_split_unidic_feature_respects_quotes() {
     }
 
     // 引用符を含まない通常のケース
-    assert_eq!(fields("名詞,普通名詞,一般,*"), ["名詞", "普通名詞", "一般", "*"]);
+    assert_eq!(
+        fields("名詞,普通名詞,一般,*"),
+        ["名詞", "普通名詞", "一般", "*"]
+    );
 
     // fConType の値がカンマを含み引用符で囲まれている場合、
     // 1フィールドとして扱い、以降のフィールド番号がずれないこと
@@ -201,7 +204,10 @@ fn test_split_unidic_feature_respects_quotes() {
     let f = fields(feature);
     assert_eq!(f.len(), 29);
     assert_eq!(f[9], "ドーリ", "pron");
-    assert_eq!(f[18], "B1WB2WB3WB4WBjS,B1WB2WB8SjS", "fConType は囲みの引用符を含まない");
+    assert_eq!(
+        f[18], "B1WB2WB3WB4WBjS,B1WB2WB8SjS",
+        "fConType は囲みの引用符を含まない"
+    );
     assert_eq!(f[19], "体", "type");
     assert_eq!(f[20], "ドオリ", "kana");
     assert_eq!(f[24], "3", "aType");

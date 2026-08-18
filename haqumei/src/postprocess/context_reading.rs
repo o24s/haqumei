@@ -59,6 +59,7 @@ struct Rule {
 /// 語ごとの規則。上から順に評価し、最初に一致したものを適用する。
 ///
 /// 各規則の根拠と、確認した負の対照をコメントに残す。
+#[rustfmt::skip]
 const RULES: &[Rule] = &[
     // 「一見さん」= イチゲンさん (初めての客)。
     // 負の対照: 「一見して分かる」は直後が「し」なので発火しない。
@@ -378,8 +379,9 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
                 Cue::NextIn(candidates) => njd_features
                     .get(i + 1)
                     .is_some_and(|next| candidates.contains(&next.string.as_str())),
-                Cue::PrevIn(candidates) => i > 0
-                    && candidates.contains(&njd_features[i - 1].string.as_str()),
+                Cue::PrevIn(candidates) => {
+                    i > 0 && candidates.contains(&njd_features[i - 1].string.as_str())
+                }
                 Cue::PrevViaNo(candidates) => {
                     i > 1
                         && njd_features[i - 1].string == "の"

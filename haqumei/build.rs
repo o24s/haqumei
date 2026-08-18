@@ -22,7 +22,11 @@ const COMPRESSED_DICTIONARY_HASH: &str =
 const DICTIONARY_HASH: &str = "2e5f5b2c395161046ce06b9458a02b3c4645aacd4aadf10e8762830bcf71dc0b";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
-#[cfg(all(feature = "download-dictionary", feature = "unidic-yomi", feature = "embed-unidic"))]
+#[cfg(all(
+    feature = "download-dictionary",
+    feature = "unidic-yomi",
+    feature = "embed-unidic"
+))]
 const VIBRATO_RKYV_DICTIONARY_KIND: vibrato_rkyv::dictionary::PresetDictionaryKind =
     include!("./dictionary_kind.rs.part");
 

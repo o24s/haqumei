@@ -48,10 +48,7 @@ pub(crate) fn modify_fraction_denominator(njd_features: &mut [NjdFeature]) {
             feature.read = new_pron.clone();
             feature.pron = new_pron;
             feature.mora_size = count_mora(&feature.pron) as i32;
-        } else if feature.string == "分"
-            && i > 0
-            && njd_features[i - 1].pos_group1 == "数"
-        {
+        } else if feature.string == "分" && i > 0 && njd_features[i - 1].pos_group1 == "数" {
             // 算用数字が別形態素になり「分」が単独で現れる場合
             let feature = &mut njd_features[i];
             feature.read = "ブン".to_string();

@@ -1,9 +1,9 @@
 mod context_reading;
 mod english;
 mod numeral;
-mod unknown_kanji;
 #[cfg(test)]
 mod tests;
+mod unknown_kanji;
 mod utils;
 
 use std::borrow::Cow;
@@ -78,10 +78,7 @@ impl Haqumei {
         for f in njd_features.iter_mut() {
             let orig = f.orig.as_str();
 
-            if option.kanji_only()
-                && !orig.contains('言')
-                && !orig.contains('云')
-            {
+            if option.kanji_only() && !orig.contains('言') && !orig.contains('云') {
                 continue;
             }
 

@@ -84,9 +84,7 @@ impl PyHaqumei {
                 IuPronunciation::KanjiIu => Some(::haqumei::IuPronunciation::KanjiIu),
                 IuPronunciation::KanjiYuu => Some(::haqumei::IuPronunciation::KanjiYuu),
                 IuPronunciation::YuuBase => Some(::haqumei::IuPronunciation::YuuBase),
-                IuPronunciation::KanjiYuuBase => {
-                    Some(::haqumei::IuPronunciation::KanjiYuuBase)
-                }
+                IuPronunciation::KanjiYuuBase => Some(::haqumei::IuPronunciation::KanjiYuuBase),
                 IuPronunciation::None_ => None,
             },
             modify_filler_accent,

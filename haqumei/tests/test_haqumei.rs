@@ -1017,10 +1017,12 @@ mod tests {
             HaqumeiOptions::default(),
         ) {
             Err(HaqumeiError::DictionaryNotFound { path }) => {
-                assert_eq!(path, missing_user_dict, "ユーザー辞書のパスが報告されていない");
+                assert_eq!(
+                    path, missing_user_dict,
+                    "ユーザー辞書のパスが報告されていない"
+                );
             }
             other => panic!("DictionaryNotFound を期待したが {:?}", other.map(|_| ())),
         }
     }
-
 }

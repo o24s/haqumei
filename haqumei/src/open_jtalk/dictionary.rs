@@ -36,9 +36,10 @@ impl Dictionary {
     ) -> Result<Self, HaqumeiError> {
         // 存在しない場合に Mecab のロード失敗ではなく、原因の分かるエラーを返す
         let resolve = |p: &Path| -> Result<PathBuf, HaqumeiError> {
-            p.canonicalize().map_err(|_| HaqumeiError::DictionaryNotFound {
-                path: p.to_path_buf(),
-            })
+            p.canonicalize()
+                .map_err(|_| HaqumeiError::DictionaryNotFound {
+                    path: p.to_path_buf(),
+                })
         };
 
         let dict_dir = resolve(dict_dir.as_ref())?;
@@ -123,8 +124,10 @@ impl Dictionary {
             // 飛ばされ、意図しない辞書がそのまま使われる。`build-dictionary` と
             // `download-dictionary` は展開先 (`decompressed`) を共有するため、
             // feature を切り替えて両方をビルドすると実際に起こる。
-            let metadata_hash_path = meta_cache_dir
-                .join(format!("{}-{metadata_hash}.sha256", EXPECTED_DICT_HASH.trim()));
+            let metadata_hash_path = meta_cache_dir.join(format!(
+                "{}-{metadata_hash}.sha256",
+                EXPECTED_DICT_HASH.trim()
+            ));
 
             if metadata_hash_path.exists() {
                 return Self::from_path(dict_path, None);
