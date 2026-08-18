@@ -18,7 +18,7 @@ exclude = ["haqumei-dict-lab"]
 anyhow = "1.0.104"
 arc-swap = "1.9.2"
 bindgen = "0.72.1"
-cc = "1.4.2"
+cc = "1.4.3"
 clap = { version = "4.6.6", features = ["derive"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 csv = "1.4.0"
@@ -34,7 +34,7 @@ haqumei-macros = { version = "0.1.4", path = "haqumei-macros" }
 hex = "0.4.3"
 libc = "0.2.189"
 log = "0.4.33"
-moka = { version = "0.12.15", features = ["sync"] }
+moka = { version = "0.12.16", features = ["sync"] }
 ndarray = "0.17.2"
 ort = { version = "=2.0.0-rc.13", default-features = false, features = [
     "api-27",
