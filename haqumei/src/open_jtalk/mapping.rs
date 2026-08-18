@@ -962,7 +962,7 @@ impl OpenJTalk {
 
                 // 数字の縮約は空白をまたぐ (「1　0」の morph は １ / 　 / ０ で、
                 // NJD はこれを「十」1 つに縮約する)。消費した ignored な morph を
-                // ここで出さないと、mapping から空白が消えて入力を覆えなくなる。
+                // ここで出さないと、mapping から空白が消えて入力全体を復元できなくなる。
                 // 縮約後は元の位置が復元できないので、まとめて直後に置く。
                 for m in &morphs[consumed_from..morph_idx] {
                     if m.is_ignored {

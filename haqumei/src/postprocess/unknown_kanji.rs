@@ -57,7 +57,7 @@ pub(crate) fn read_unknown_kanji(njd_features: &mut [NjdFeature]) {
             continue;
         }
 
-        // READINGS は正書法の読みなので、発音は長音を畳んでから入れる
+        // READINGS は正書法の読みなので、発音は長音を `ー` に直してから入れる
         feature.pron = read_to_pron(&reading);
         feature.read = reading;
         // 記号のままだとポーズとして扱われるので、名詞に戻す

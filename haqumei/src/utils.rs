@@ -114,7 +114,7 @@ pub(crate) fn is_single_kanji_feature(feaure: &NjdFeature) -> bool {
         && is_kanji(feaure.orig.chars().next().unwrap())
 }
 
-/// 片仮名 1 文字かどうかを判定する。長音記号と繰り返し記号を含める。
+/// カタカナ 1 文字かどうかを判定する。長音記号と繰り返し記号を含める。
 ///
 /// 範囲は `ァ`(U+30A1) から `ヴ`(U+30F4) までで、`ヵ` `ヶ` `ヷ`〜`ヺ` は
 /// この範囲の外にある。外来語の判定に使うので `ー` (U+30FC) と
@@ -124,7 +124,7 @@ pub(crate) const fn is_katakana(c: char) -> bool {
     matches!(c, 'ァ'..='ヴ' | 'ー' | 'ヽ' | 'ヾ')
 }
 
-/// 片仮名だけで構成された語か。
+/// カタカナだけで構成された語か。
 #[inline]
 pub(crate) fn is_katakana_word(s: &str) -> bool {
     !s.is_empty() && s.chars().all(is_katakana)
@@ -179,7 +179,7 @@ fn mora_vowel(mora: &str) -> Option<char> {
 
 /// 正書法の読み (`read`) を発音 (`pron`) に直す。
 ///
-/// 辞書は長音を `ー` で書くので、長音になる連母音を畳む。
+/// 辞書は長音を `ー` で書くので、連母音のうち長音になるものを `ー` に置き換える。
 ///
 ///   トウ -> トー,  シュウ -> シュー,  エイ -> エー,  トオリ -> トーリ
 ///

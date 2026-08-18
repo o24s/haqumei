@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_split_prefix_accent_phrase() {
-        // 指示的な漢語接頭辞は後続語と融合せず、別のアクセント句になる
+        // 一部の漢語接頭辞は後続語と融合せず、別のアクセント句になる
         //   本論文 → ホ]ン | ロンブン
         let mut haqumei = Haqumei::new().unwrap();
         let mapping = haqumei.g2p_mapping_prosody("本論文").unwrap();
@@ -138,13 +138,14 @@ mod tests {
         let mapping = haqumei.g2p_mapping_prosody("本論文").unwrap();
 
         assert!(mapping.iter().all(|m| !m.phonemes.contains(&ap())));
-        // 接頭辞の核が句全体を支配するので、以降がすべて Low に潰れる
-        assert!(
-            mapping[1]
-                .phonemes
-                .iter()
-                .all(|p| matches!(p, ProsodicPhoneme::Phoneme { pitch: Some(PitchAccent::Low), .. }))
-        );
+        // 接頭辞の核が句全体を支配するので、以降がすべて Low になる
+        assert!(mapping[1].phonemes.iter().all(|p| matches!(
+            p,
+            ProsodicPhoneme::Phoneme {
+                pitch: Some(PitchAccent::Low),
+                ..
+            }
+        )));
     }
 
     #[test]
