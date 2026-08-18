@@ -101,7 +101,6 @@ $ haqumei-cli "テスト" --mode mapping-detailed --format json
 
 - `--dict-dir <DIR>`: カスタム辞書のディレクトリパス
 - `--user-dict <FILE>`: ユーザー辞書 (.csv) のパス
-- `--use-unidic-yomi`: Unidic を使って漢字の読みを修正する (初回実行時に辞書をダウンロードします)
 - `--normalize-unicode <none|nfc|nfkc>`: Unicode正規化の方法を指定
 - `--normalize-iu <iu|yuu|kanji-iu|kanji-yuu>`: 「言う」の発音正規化方式を指定
 - `--use-read-as-pron`: 読み (`read`) を発音 (`pron`) の代わりに使用し、長音の自動変換などを無効化する

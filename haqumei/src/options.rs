@@ -70,14 +70,6 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub predict_kana_english: bool,
 
-    /// Unidic を使って、漢字の読みを修正する。
-    /// デフォルトでは `download-dictionary` feature は有効ですが、
-    /// 無効の場合、初回に実行時の辞書ダウンロードが発生します。
-    ///
-    /// デフォルトで無効になっています。
-    #[cfg(feature = "unidic-yomi")]
-    pub use_unidic_yomi: bool,
-
     /// 隣接する形態素で読みが決まる同形異音語を、語ごとの規則で補正する。
     ///
     ///   一見さん   -> イッケンさん から イチゲンさん へ
@@ -450,8 +442,6 @@ impl Default for HaqumeiOptions {
             modify_filler_accent: true,
             predict_nani: true,
             predict_kana_english: true,
-            #[cfg(feature = "unidic-yomi")]
-            use_unidic_yomi: false,
             modify_context_reading: true,
             modify_old_province_yomi: true,
             modify_numeral_reading: true,

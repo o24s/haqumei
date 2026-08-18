@@ -897,7 +897,6 @@ class Haqumei:
         normalize_iu: IuPronunciation = IuPronunciation.None_,
         modify_filler_accent: bool = True,
         predict_nani: bool = False,
-        use_unidic_yomi: bool = False,
         modify_context_reading: bool = True,
         modify_old_province_yomi: bool = True,
         read_unknown_kanji: bool = True,

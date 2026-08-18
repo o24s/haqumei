@@ -477,7 +477,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut haqumei = Haqumei::from_path(
         &config.dict_dir,
         HaqumeiOptions {
-            use_unidic_yomi: true,
             normalize_iu: Some(IuPronunciation::YuuBase),
             ..Default::default()
         },

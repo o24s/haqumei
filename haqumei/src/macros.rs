@@ -50,9 +50,6 @@ macro_rules! impl_batch_method_haqumei {
                 }
                 let options = self.options;
 
-                #[cfg(feature = "unidic-yomi")]
-                let tokenizer = self.tokenizer.clone(); // かなり無料
-
                 texts
                     .par_iter()
                     .map_init(
@@ -61,10 +58,6 @@ macro_rules! impl_batch_method_haqumei {
                             .expect("Failed to initialize OpenJTalk worker");
                         Haqumei {
                             open_jtalk: ojt,
-                            #[cfg(feature = "unidic-yomi")]
-                            tokenizer: tokenizer.clone(),
-                            #[cfg(feature = "unidic-yomi")]
-                            rx: None,
                             options,
                         }
                     },

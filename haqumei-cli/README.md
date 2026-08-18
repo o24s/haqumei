@@ -101,7 +101,6 @@ You can finely control the behavior of `haqumei`'s text processing and toggle sp
 
 - `--dict-dir <DIR>`: Path to a custom dictionary directory.
 - `--user-dict <FILE>`: Path to a user dictionary (.csv).
-- `--use-unidic-yomi`: Use Unidic to correct Kanji readings (downloads the dictionary on the first run).
 - `--normalize-unicode <none|nfc|nfkc>`: Specify the Unicode normalization method.
 - `--normalize-iu <iu|yuu|kanji-iu|kanji-yuu>`: Specify the pronunciation normalization for the verb "言う" (iu / yuu).
 - `--use-read-as-pron`: Use reading (`read`) instead of pronunciation (`pron`), disabling automatic long vowel conversions.

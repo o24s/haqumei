@@ -9,10 +9,6 @@ license = "Apache-2.0"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["command-line-utilities", "text-processing"]
 
-[features]
-default = ["unidic-yomi"]
-unidic-yomi = ["haqumei/unidic-yomi", "haqumei/embed-unidic"]
-
 [dependencies]
 haqumei = { version = "0.8.3", path = "../haqumei", features = ["embed-dictionary", "download-dictionary", "serde"], default-features = false }
 clap.workspace = true

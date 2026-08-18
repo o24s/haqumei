@@ -1,3 +1,0 @@
-[submodule "vendor/vibrato-rkyv"]
-	path = haqumei/vendor/vibrato-rkyv
-	url = https://github.com/stellanomia/vibrato-rkyv.git

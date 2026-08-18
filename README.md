@@ -492,7 +492,6 @@ Phoneme Error Rate (S+D+I / N_expected): **1.17%** (Substitute=2117, Delete=527,
 `HaqumeiOptions`:
 ```rust
 HaqumeiOptions {
-  use_unidic_yomi: true,
   normalize_iu: Some(IuPronunciation::Yuu),
   ..Default::default()
 }
@@ -522,8 +521,6 @@ Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
 | **haqumei** (Default) | 1.303 s | 244k chars/s | **1.81x** |
 | **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
-| **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
-| **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
 The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk).
 
@@ -533,8 +530,8 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
 
 - **Throughput Variation by Input Structure**:  
   Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. This efficiency stems from an implementation that directly extracts labels from Open JTalk's internal structures, combined with minimal FFI overhead. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
-- **Difference Between Default and Heavy**:  
-  In the table, "Default" represents the configuration using `Haqumei::new` as is, while "Heavy" shows the results when `predict_nani` and `use_unidic_yomi` are enabled in [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
+- **"Default" in the table**:  
+  The configuration using `Haqumei::new` as is.
 
 ## Building with a Custom Embedded Dictionary
 

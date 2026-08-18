@@ -12,9 +12,6 @@ use std::ops::Range;
 use haqumei_kanalizer::{ConvertOptions, MaxLength};
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 
-#[cfg(feature = "unidic-yomi")]
-use vibrato_rkyv::tokenizer::worker::Worker;
-
 use crate::{
     Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, NjdFeature, OpenJTalk,
     Phoneme, ProsodicPhoneme, UnicodeNormalization,
@@ -25,8 +22,6 @@ use crate::{
         split_kana_mora,
     },
 };
-#[cfg(feature = "unidic-yomi")]
-use crate::{VIBRATO_CACHE, data::MULTI_READ_KANJI_LIST, features::UnidicFeature};
 pub(crate) use context_reading::modify_context_reading;
 pub(crate) use numeral::{modify_fraction_denominator, modify_placeholder_maru};
 pub(crate) use unknown_kanji::read_unknown_kanji;
@@ -249,75 +244,6 @@ pub(crate) fn modify_old_province_yomi(njd_features: &mut [NjdFeature]) {
     }
 }
 
-/// UniDic の feature 文字列をフィールドごとの範囲に分割する。
-///
-/// `fConType` や `aConType` は値そのものにカンマを含み、CSV の慣習に従って
-/// ダブルクォートで囲まれている (例: `"動詞%F2@0,名詞%F1"`)。
-/// 単純に `,` で分割すると、そこから後ろのフィールド番号が全てずれるため、
-/// クォートの内側の `,` は区切りとして扱わない。
-/// 返す範囲は囲みのダブルクォートを含まない。
-#[cfg(feature = "unidic-yomi")]
-fn split_unidic_feature(feature: &str) -> Vec<Range<usize>> {
-    fn unquote(feature: &str, range: Range<usize>) -> Range<usize> {
-        let field = &feature[range.clone()];
-        if field.len() >= 2 && field.starts_with('"') && field.ends_with('"') {
-            range.start + 1..range.end - 1
-        } else {
-            range
-        }
-    }
-
-    let mut ranges = Vec::with_capacity(29);
-    let bytes = feature.as_bytes();
-    let mut field_start = 0;
-    let mut in_quotes = false;
-
-    // `"` と `,` は ASCII なので、UTF-8 の多バイト列の内部に現れることはない
-    for (i, &b) in bytes.iter().enumerate() {
-        match b {
-            b'"' => in_quotes = !in_quotes,
-            b',' if !in_quotes => {
-                ranges.push(unquote(feature, field_start..i));
-                field_start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    ranges.push(unquote(feature, field_start..bytes.len()));
-
-    ranges
-}
-
-#[cfg(feature = "unidic-yomi")]
-pub(crate) fn vibrato_analysis(worker: &mut Worker, text: &str) -> Vec<UnidicFeature> {
-    VIBRATO_CACHE.get_with(text.to_string(), || {
-        worker.reset_sentence(text);
-        worker.tokenize();
-
-        worker
-            .token_iter()
-            .map(|token| {
-                let token = token.to_buf();
-                let ranges = split_unidic_feature(&token.feature);
-
-                UnidicFeature {
-                    surface: token.surface,
-                    feature: token.feature,
-                    range_char: token.range_char,
-                    range_byte: token.range_byte,
-                    lex_type: token.lex_type,
-                    word_id: token.word_id,
-                    left_id: token.left_id,
-                    right_id: token.right_id,
-                    word_cost: token.word_cost,
-                    total_cost: token.total_cost,
-                    feature_ranges: ranges,
-                }
-            })
-            .collect()
-    })
-}
-
 /// 1字アルファベット: 処理しない
 /// 2字アルファベット: 子音 + A E I O U Y または A I O U + 子音 または A I O U + A I O U
 ///                 のときだけ処理、それ以外はアクロニムとみなしておく
@@ -468,124 +394,6 @@ impl Haqumei {
             }
         }
     }
-
-    #[cfg(feature = "unidic-yomi")]
-    pub(crate) fn modify_kanji_yomi(&mut self, text: &str, njd_features: &mut [NjdFeature]) {
-        let tokens: Vec<UnidicFeature> = if let Some(rx) = self.rx.take() {
-            rx.recv().unwrap_or_default()
-        } else {
-            VIBRATO_CACHE.get(text).unwrap_or_else(|| {
-                let mut worker = self.tokenizer.as_ref().unwrap().new_worker();
-                vibrato_analysis(&mut worker, text)
-            })
-        };
-
-        if tokens.is_empty() {
-            return;
-        }
-
-        // vibrato は元テキストの文字位置で範囲を返すので、NJD 側もその位置で追う。
-        //
-        // NJD の形態素の文字数を足していくと位置がずれる。NJD は数字を正規化
-        // するため (「２００万」= 4 文字 -> 二 百 万 = 3 文字)、そこで 1 文字ずれ、
-        // 以降の照合がすべて外れて補正が黙って効かなくなる。表層形が元テキストと
-        // 一致するかを毎回確かめ、ずれたら近傍で再同期する。
-        let text_chars: Vec<char> = text.chars().collect();
-        let mut unidic_iter = tokens.into_iter().peekable();
-        let mut current_char_pos = 0;
-        for njd_feature in njd_features {
-            let node_string = &njd_feature.string;
-            let node_orig = &njd_feature.orig;
-            let node_char_len = node_string.chars().count();
-
-            // 元テキストのどこに当たるかを確かめる。正規化された形態素 (二 百 万)
-            // は元テキストに現れないので見つからない。その場合は位置を動かさずに
-            // 次の形態素へ送り、元テキストに現れる形態素で位置を取り戻す
-            let node_chars: Vec<char> = node_string.chars().collect();
-            let aligned_offset = starts_with_at(&text_chars, current_char_pos, &node_chars)
-                .then_some(0)
-                .or_else(|| resync_offset(&text_chars, current_char_pos, &node_chars));
-            let Some(offset) = aligned_offset else {
-                continue;
-            };
-            current_char_pos += offset;
-            // Open JTalk が接尾辞として確定した読みは、前接語との結合を反映した結果なので保持する。
-            let is_suffix = njd_feature.pos_group1 == "接尾";
-
-            while let Some(candidate) = unidic_iter.peek() {
-                if candidate.range_char.end <= current_char_pos {
-                    unidic_iter.next();
-                } else {
-                    break;
-                }
-            }
-
-            let mut pron_to_set: Option<String> = None;
-            let mut read_to_set: Option<String> = None;
-
-            if MULTI_READ_KANJI_LIST.contains(node_orig.as_str())
-                && let Some(candidate) = unidic_iter.peek()
-                && candidate.range_char.start == current_char_pos
-                && candidate.surface == *node_orig
-            {
-                // 上書きしない場合でも、形態素境界を保つために対応する候補は消費する。
-                let correct_yomi_token = unidic_iter.next().unwrap();
-
-                // UniDic は「支払時」の「時」を一般名詞のトキとして返すため、接尾辞に対して
-                // 上書きすると Open JTalk が文脈から解決済みのジを失う。
-                // 「その時」のような非自立名詞には従来どおり補正を適用する。
-                if !is_suffix {
-                    // UniDic の pron は長音を「ー」で表す発音形、kana は仮名形。
-                    // [NjdFeature] も pron が「ー」表記・read が仮名表記なので、
-                    // それぞれ対応するフィールドから取る。
-                    pron_to_set = Some(correct_yomi_token.pron().to_string());
-                    read_to_set = Some(correct_yomi_token.kana().to_string());
-                }
-            }
-            if let Some(pron) = pron_to_set {
-                // 読みを差し替えるとモーラ数が変わりうる (例: ツー 2 モーラ -> ドーリ 3 モーラ)。
-                // mora_size はアクセント句の構築に使われるため、ここで数え直す。
-                njd_feature.mora_size = count_mora(&pron) as i32;
-                njd_feature.pron = pron;
-            }
-            if let Some(read) = read_to_set {
-                njd_feature.read = read;
-            }
-
-            current_char_pos += node_char_len;
-        }
-    }
-}
-
-/// `haystack` の `at` の位置から `needle` が始まるか。
-#[cfg(feature = "unidic-yomi")]
-fn starts_with_at(haystack: &[char], at: usize, needle: &[char]) -> bool {
-    haystack.len() >= at + needle.len() && haystack[at..at + needle.len()] == *needle
-}
-
-/// ずれた位置を取り戻すための、`needle` が現れる位置までの距離。
-///
-/// 正規化で長さが変わるのは数字の並びのような局所的な範囲なので、探索は近傍に
-/// 限る (10 桁の数字は 17 文字程度の漢数字になるため、それを覆う幅を取る)。
-///
-/// **窓の中に候補が 2 つ以上あるときは再同期しない。** 別の出現に飛びつくと、
-/// 関係のない語へ補正を当ててしまう。位置を失ったままなら補正が効かないだけで
-/// 済むので、迷ったら諦める方を選ぶ。
-#[cfg(feature = "unidic-yomi")]
-fn resync_offset(haystack: &[char], from: usize, needle: &[char]) -> Option<usize> {
-    /// 数字の並びが正規化で伸び縮みする幅として十分な範囲
-    const WINDOW: usize = 32;
-
-    let mut found = None;
-    for offset in 1..=WINDOW {
-        if starts_with_at(haystack, from + offset, needle) {
-            if found.is_some() {
-                return None;
-            }
-            found = Some(offset);
-        }
-    }
-    found
 }
 
 pub(crate) fn modify_english_words(text: &str, njd_features: &mut [NjdFeature]) {

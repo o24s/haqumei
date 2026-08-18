@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-haqumei = { path = "../haqumei", features = ["embed-dictionary", "download-dictionary", "unidic-yomi"], default-features = false }
+haqumei = { path = "../haqumei", features = ["embed-dictionary", "download-dictionary"], default-features = false }
 haqumei-jlabel.workspace = true
 pyo3 = { workspace = true, features = ["extension-module"] }
 

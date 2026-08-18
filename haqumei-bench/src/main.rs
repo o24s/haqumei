@@ -21,11 +21,6 @@ fn bench_g2p(c: &mut Criterion) {
         b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
     });
 
-    haqumei.options.use_unidic_yomi = true;
-    group.bench_function("MultiThread (Heavy Options)", |b| {
-        b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
-    });
-
     let mut ojt = OpenJTalk::new().unwrap();
     group.bench_function("OpenJTalk (Batch)", |b| {
         b.iter(|| {

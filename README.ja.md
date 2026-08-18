@@ -55,7 +55,7 @@
   - [ROHAN](#rohan)
 - [ベンチマーク](#ベンチマーク)
   - [注意点](#注意点)
-  - [Heavy について](#heavy-について)
+  - [各機能の性能特性](#各機能の性能特性)
 - [カスタム辞書の埋め込みビルド](#カスタム辞書の埋め込みビルド)
   - [Cargo の Feature を変更する](#cargo-の-feature-を変更する)
   - [辞書ソースの準備と環境変数の設定](#辞書ソースの準備と環境変数の設定)
@@ -499,7 +499,6 @@ Phoneme Error Rate (S+D+I / N_expected): **1.17%** (Substitute=2117, Delete=527,
 `HaqumeiOptions`:
 ```rust
 HaqumeiOptions {
-  use_unidic_yomi: true,
   normalize_iu: Some(IuPronunciation::Yuu),
   ..Default::default()
 }
@@ -529,8 +528,6 @@ HaqumeiOptions {
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
 | **haqumei** (Default) | 1.303 s | 244k chars/s | 1.81x |
 | **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
-| **haqumei** (Heavy) | 2.101 s | 151k chars/s | 1.12x |
-| **haqumei** (`g2p_batch`, Heavy) | 0.268 s | 1.18M chars/s | 8.80x |
 
 ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
 
@@ -544,16 +541,10 @@ HaqumeiOptions {
   これは G2P処理 が Open JTalk 内部の構造体から、直接ラベルを取り出すように実装されていたり、FFI のオーバーヘッドが少ないためであると考えられます。  
   大量の文章を処理する場合は、極端に細かく改行せずにある程度の長さでバッチ処理に渡すのが最も効率的です。
 
-- Default, Heavy の違い:  
-  表中のDefault は `Haqumei::new` をそのまま使用しており、  
-  Heavyは [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) の `predict_nani`, `use_unidic_yomi` を有効にした場合の計測です。
+- 表中の Default:  
+  `Haqumei::new` をそのまま使用した場合の計測です。
 
-### Heavy について
-
-#### `use_unidic_yomi` オプション
-
-`use_unidic_yomi` オプションが有効であるとき、Unidic を使った読み補正のために Mecab と並行して [vibrato-rkyv](https://github.com/o24s/vibrato-rkyv) を動かす関係で、複数のワーカースレッドがバックグラウンドで処理を行う設計になっています。  
-そのため、若干の解析速度の低下が見られます。
+### 各機能の性能特性
 
 #### `predict_nani` 機能
 
@@ -569,7 +560,6 @@ HaqumeiOptions {
 フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べてほぼ同じスループットです。
 
 しかし、`pyopenjtalk-plus` は、ROHAN において Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
-(Unidic 補正で有意に精度が向上することが分かれば、より攻めた最適化をしたり、また `pyopenjtalk-plus` と同様に Sudachi を使うかもしれません。)  
 
 ## カスタム辞書の埋め込みビルド
 

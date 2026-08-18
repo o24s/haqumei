@@ -35,7 +35,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = CliProsodyFormat::Default)]
     prosody_format: CliProsodyFormat,
 
-    /// 詳細なログ (Unidic辞書のダウンロード状況やOpenJTalkの警告など) を表示します。
+    /// 詳細なログ (OpenJTalk の警告など) を表示します。
     #[arg(short, long)]
     verbose: bool,
 
@@ -143,11 +143,6 @@ struct HaqumeiConfigArgs {
     /// Kanalizer を使って、英語の読み予測を無効にする (デフォルトは有効)
     #[arg(long)]
     no_predict_kana_english: bool,
-
-    /// Unidic を使って漢字の読みを修正する (初回実行時に辞書をダウンロードします)
-    #[arg(long)]
-    #[cfg(feature = "unidic-yomi")]
-    use_unidic_yomi: bool,
 
     /// 隣接する形態素で読みが決まる同形異音語の補正を無効にする (デフォルトは有効)
     #[arg(long)]
@@ -260,8 +255,6 @@ fn main() -> Result<()> {
         modify_filler_accent: !cli.options.no_modify_filler_accent,
         predict_nani: !cli.options.no_predict_nani,
         predict_kana_english: !cli.options.no_predict_kana_english,
-        #[cfg(feature = "unidic-yomi")]
-        use_unidic_yomi: cli.options.use_unidic_yomi,
         modify_context_reading: !cli.options.no_modify_context_reading,
         modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
