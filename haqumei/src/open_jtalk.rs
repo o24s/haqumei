@@ -2,7 +2,7 @@ pub mod dictionary;
 mod jpcommon;
 mod jpcommon_label;
 mod jpcommon_push_word;
-mod jpcommon_rule;
+pub(crate) mod jpcommon_rule;
 mod mapping;
 mod mecab;
 mod model;
@@ -15,7 +15,7 @@ use crate::errors::HaqumeiError;
 use crate::open_jtalk::{
     jpcommon::JpCommon,
     model::MecabModel,
-    njd::{Njd, apply_plus_rules, njd_to_features},
+    njd::{Njd, apply_plus_rules, njd_to_features, restore_unknown_word_pos},
 };
 use crate::phoneme::Phoneme;
 use crate::utils::{default_is_non_pause_symbol, get_known_symbol_feature};
@@ -1109,9 +1109,13 @@ impl OpenJTalk {
         I: IntoIterator,
         I::Item: AsRef<str> + 'a,
     {
-        let c_strings: Vec<CString> = mecab_features
+        let raw: Vec<String> = mecab_features
             .into_iter()
-            .map(|s| CString::new(s.as_ref()))
+            .map(|s| s.as_ref().to_string())
+            .collect();
+        let c_strings: Vec<CString> = raw
+            .iter()
+            .map(|s| CString::new(s.as_str()))
             .collect::<Result<Vec<_>, _>>()?;
 
         if c_strings.is_empty() {
@@ -1131,6 +1135,8 @@ impl OpenJTalk {
         }
 
         let mut features = njd_to_features(&self.njd);
+        let raw_refs: Vec<&str> = raw.iter().map(String::as_str).collect();
+        restore_unknown_word_pos(&mut features, &raw_refs);
         apply_plus_rules(&mut features);
 
         Self::features_to_njd(&features, &mut self.njd)?;

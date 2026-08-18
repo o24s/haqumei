@@ -78,8 +78,7 @@ use crate::{
         modify_acc_after_chaining, modify_context_reading, modify_english_words,
         modify_filler_accent, modify_fraction_denominator, modify_old_province_yomi,
         modify_placeholder_maru, predict_kana_english, process_odori_features, read_unknown_kanji,
-        restore_rare_syllables,
-        retreat_acc_nuc,
+        restore_rare_syllables, retreat_acc_nuc,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};

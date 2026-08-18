@@ -4,6 +4,10 @@ use std::{
     ptr::NonNull,
 };
 
+use rustc_hash::FxHashMap;
+
+use crate::utils::split_kana_mora;
+
 use crate::{
     errors::HaqumeiError,
     features::NjdFeature,
@@ -162,4 +166,98 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
             next_njd.chain_flag = 1;
         }
     }
+}
+
+/// 未知語が `njd_set_pronunciation` でフィラーに変更されたのを、MeCab の品詞に戻す。
+///
+/// Open JTalk は「読みを持たない語が仮名として読めたらフィラーにする」という
+/// 処理を持つ。(`njd_set_pronunciation.c`)
+/// 言い淀み (「えーと」「あのー」) を想定した規則だが、未知のカタカナ語がすべてこれに落ちる。
+///
+/// ```text
+/// MeCab  クルツ,名詞,固有名詞,組織,*,*,*,*   <- unk.def の品詞
+/// NJD    pos=フィラー-* acc=0              <- 上書きされる
+/// ```
+///
+/// フィラーは慣例として平板なのでアクセントが 0 になり、しかも品詞が変わるため
+/// アクセント句の作られ方まで変わる。MeCab は正しい品詞を持っているので戻す。
+///
+/// 本物の言い淀みは辞書 (`fillers.csv`) に載っていて読みを持つため、この処理の
+/// 対象にならない。ここで見るのは列数が短い未知語の feature だけである。
+///
+/// さらに表層形が片仮名の語に限る。英字の未知語がフィラーになることに
+/// [`crate::postprocess::modify_english_words`] が依存しており、そちらは
+/// 別の経路 (Kanalizer) で読みを与えるため、触ってはいけない。
+///
+/// # アクセント
+///
+/// 品詞を戻しただけでは核が 0 (平板) のままなので、外来語のアクセント規則
+/// 「後ろから 3 モーラ目」を当てる。特殊拍 (長音・撥音・促音・小書き) には
+/// 核が立たないので、その場合は 1 つ前へずらす。
+pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_features: &[&str]) {
+    /// 既知語の feature は 12 列以上、未知語は読みを持たないので短い
+    const KNOWN_FIELD_COUNT: usize = 12;
+
+    let mut unknown: FxHashMap<&str, [&str; 4]> = FxHashMap::default();
+    for feature in mecab_features {
+        let fields: Vec<&str> = feature.split(',').collect();
+        if fields.len() >= KNOWN_FIELD_COUNT || fields.len() < 5 {
+            continue;
+        }
+        unknown.insert(
+            fields[0],
+            [
+                fields[1],
+                *fields.get(2).unwrap_or(&"*"),
+                *fields.get(3).unwrap_or(&"*"),
+                *fields.get(4).unwrap_or(&"*"),
+            ],
+        );
+    }
+    if unknown.is_empty() {
+        return;
+    }
+
+    for feature in features.iter_mut() {
+        if feature.pos != "フィラー" {
+            continue;
+        }
+        if !is_katakana_word(&feature.string) {
+            continue;
+        }
+        let Some(pos) = unknown.get(feature.string.as_str()) else {
+            continue;
+        };
+        feature.pos = pos[0].to_string();
+        feature.pos_group1 = pos[1].to_string();
+        feature.pos_group2 = pos[2].to_string();
+        feature.pos_group3 = pos[3].to_string();
+        feature.acc = loanword_accent(&feature.pron);
+    }
+}
+
+/// 表層形が片仮名だけで構成されているか。
+fn is_katakana_word(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| matches!(c, 'ァ'..='ヴ' | 'ー'))
+}
+
+/// 外来語のアクセント核の位置を「後ろから 3 モーラ目」で求める。
+///
+/// 3 モーラ以下の語は頭高になる。核の来る位置が特殊拍 (長音・撥音・促音・
+/// 小書き仮名) のときは、そこに核が立てないので 1 つ前へずらす。
+fn loanword_accent(pron: &str) -> i32 {
+    let moras = split_kana_mora(pron);
+    if moras.len() <= 3 {
+        return 1;
+    }
+    let mut index = moras.len() - 3;
+    while index > 0 && is_special_mora(moras[index]) {
+        index -= 1;
+    }
+    index as i32 + 1
+}
+
+/// 核が立てない特殊拍か。
+fn is_special_mora(mora: &str) -> bool {
+    matches!(mora, "ー" | "ン" | "ッ")
 }
