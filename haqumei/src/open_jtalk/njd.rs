@@ -6,7 +6,7 @@ use std::{
 
 use rustc_hash::FxHashMap;
 
-use crate::utils::split_kana_mora;
+use crate::utils::{is_katakana_word, split_kana_mora};
 
 use crate::{
     errors::HaqumeiError,
@@ -234,11 +234,6 @@ pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_featur
         feature.pos_group3 = pos[3].to_string();
         feature.acc = loanword_accent(&feature.pron);
     }
-}
-
-/// 表層形が片仮名だけで構成されているか。
-fn is_katakana_word(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| matches!(c, 'ァ'..='ヴ' | 'ー'))
 }
 
 /// 外来語のアクセント核の位置を「後ろから 3 モーラ目」で求める。

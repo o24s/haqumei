@@ -26,7 +26,7 @@
 //! 語などが該当する)。
 
 use crate::NjdFeature;
-use crate::utils::count_mora;
+use crate::utils::{count_mora, is_katakana_word};
 
 /// 辞書が一貫して潰している音節と、潰れた形の対。
 ///
@@ -57,13 +57,6 @@ const RESTORE: &[(&str, &str)] = &[
     ("グゥ", "グウ"),
     ("クゥ", "クウ"),
 ];
-
-/// 表層形が片仮名だけで構成されているか (外来語かどうかの目安)。
-fn is_katakana_word(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| matches!(c, 'ァ'..='ヴ' | 'ー' | 'ヽ' | 'ヾ'))
-}
 
 /// 表層形と発音を先頭から突き合わせ、復元した発音を返す。
 ///
