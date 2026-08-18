@@ -68,8 +68,22 @@ impl NaniPredictor {
         let model_inputs = ort::inputs!["input" => enc_tensor_ref];
 
         let model_outputs = self.model_session.run(model_inputs)?;
-        let (_, prediction_data) = model_outputs[0].try_extract_tensor::<i64>()?;
 
-        Ok(prediction_data.first().copied().unwrap_or(0))
+        // モデルはクラス確率だけを返すので、最大のクラスを選ぶ。
+        //
+        // しラベルの生成は ONNX Runtime のバージョンに
+        // よって解釈が変わりうるため、明示された確率から判定する。
+        // (pyopenjtalk-plus が ONNX Runtime 1.26 以降で判定が変わる問題を
+        // 踏んで、ラベル出力と ZipMap を持たない形へ再エクスポートしている)
+        let (_, probabilities) = model_outputs[0].try_extract_tensor::<f32>()?;
+
+        let best = probabilities
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            .map(|(index, _)| index as i64)
+            .unwrap_or(0);
+
+        Ok(best)
     }
 }
