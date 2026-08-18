@@ -75,7 +75,7 @@ impl PyHaqumei {
                 IuPronunciation::Yuu => Some(::haqumei::IuPronunciation::Yuu),
                 IuPronunciation::KanjiIu => Some(::haqumei::IuPronunciation::KanjiIu),
                 IuPronunciation::KanjiYuu => Some(::haqumei::IuPronunciation::KanjiYuu),
-IuPronunciation::YuuBase => Some(::haqumei::IuPronunciation::YuuBase),
+                IuPronunciation::YuuBase => Some(::haqumei::IuPronunciation::YuuBase),
                 IuPronunciation::KanjiYuuBase => {
                     Some(::haqumei::IuPronunciation::KanjiYuuBase)
                 }
