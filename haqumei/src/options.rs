@@ -463,4 +463,35 @@ pub enum IuPronunciation {
     /// 漢字表記 (`言う`, `云う`) が含まれる場合のみ「ユウ」に統一し、
     /// 平仮名表記 (`いう`, `そういう`) は辞書の解析結果をそのまま使用します。
     KanjiYuu,
+    /// 「う」で終わる形だけを「ユウ」に統一します。活用形は辞書の解析結果を
+    /// そのまま使います (`言う` -> `ユウ`、`言わない` -> `イワナイ`)。
+    ///
+    /// [`IuPronunciation::Yuu`] は「ゆった」「ゆわない」まで含めて話者のレジスタ
+    /// 全体を再現しますが、現代の標準的な発音は「言う」だけが `ユー` で、
+    /// ほかの活用形は `イ` 段です。
+    /// 朗読音声の書き起こしもこれに一致します
+    /// (jsut-label / jvs_nonpara_kana で `言わ` の正解は 14 文すべて `イワ`)。
+    YuuBase,
+    /// [`IuPronunciation::YuuBase`] を漢字表記に限定したものです。
+    KanjiYuuBase,
+}
+
+impl IuPronunciation {
+    /// 「う」で終わる形だけを対象にするか。
+    pub(crate) const fn base_only(self) -> bool {
+        matches!(self, Self::YuuBase | Self::KanjiYuuBase)
+    }
+
+    /// 置換後の仮名。
+    pub(crate) const fn to_kana(self) -> &'static str {
+        match self {
+            Self::Iu | Self::KanjiIu => "イ",
+            Self::Yuu | Self::KanjiYuu | Self::YuuBase | Self::KanjiYuuBase => "ユ",
+        }
+    }
+
+    /// 漢字表記だけを対象にするか。
+    pub(crate) const fn kanji_only(self) -> bool {
+        matches!(self, Self::KanjiIu | Self::KanjiYuu | Self::KanjiYuuBase)
+    }
 }

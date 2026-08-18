@@ -514,6 +514,46 @@ mod tests {
     }
 
     #[test]
+    fn test_g2p_iu_normalize_yuu_base() {
+        let mut haqumei = Haqumei::with_options(HaqumeiOptions {
+            normalize_iu: Some(IuPronunciation::YuuBase),
+            ..Default::default()
+        })
+        .unwrap();
+
+        // 「う」で終わる形だけが ユウ になる
+        assert!(haqumei.g2k("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("そういう事").unwrap().contains("ソーユウ"));
+        assert!(haqumei.g2k("物言う株主").unwrap().contains("モノユウ"));
+        assert!(
+            haqumei
+                .g2k("アッと言う間に")
+                .unwrap()
+                .contains("アットユウ")
+        );
+
+        // 活用形は辞書の解析結果のまま。IuPronunciation::Yuu との違いはここだけで、
+        // 現代の標準的な発音では「言う」以外は イ 段である
+        assert!(haqumei.g2k("言って").unwrap().contains("イッテ"));
+        assert!(haqumei.g2k("言えば").unwrap().contains("イエバ"));
+        assert!(haqumei.g2k("言おう").unwrap().contains("イオー"));
+        assert!(haqumei.g2k("言わない").unwrap().contains("イワナイ"));
+
+        // 除外規則は Yuu と同じ
+        assert!(haqumei.g2k("正当な理由").unwrap().contains("リユー"));
+        assert!(haqumei.g2k("髪を結う").unwrap().contains("ユウ"));
+
+        // 漢字限定版は平仮名を触らない
+        haqumei.options.normalize_iu = Some(IuPronunciation::KanjiYuuBase);
+        assert!(haqumei.g2k("言う").unwrap().contains("ユウ"));
+        assert!(haqumei.g2k("言わない").unwrap().contains("イワナイ"));
+        assert_eq!(
+            haqumei.g2k("そういう事").unwrap(),
+            Haqumei::new().unwrap().g2k("そういう事").unwrap()
+        );
+    }
+
+    #[test]
     fn test_g2p_iu_normalize_exclusion() {
         let mut haqumei = Haqumei::new().unwrap();
 

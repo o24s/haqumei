@@ -217,6 +217,8 @@ enum IuPronMode {
     Yuu,
     KanjiIu,
     KanjiYuu,
+    YuuBase,
+    KanjiYuuBase,
 }
 
 impl From<IuPronMode> for IuPronunciation {
@@ -226,6 +228,8 @@ impl From<IuPronMode> for IuPronunciation {
             IuPronMode::Yuu => IuPronunciation::Yuu,
             IuPronMode::KanjiIu => IuPronunciation::KanjiIu,
             IuPronMode::KanjiYuu => IuPronunciation::KanjiYuu,
+            IuPronMode::YuuBase => IuPronunciation::YuuBase,
+            IuPronMode::KanjiYuuBase => IuPronunciation::KanjiYuuBase,
         }
     }
 }

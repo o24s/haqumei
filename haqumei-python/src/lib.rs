@@ -116,6 +116,8 @@ pub enum IuPronunciation {
     Yuu = 2,
     KanjiIu = 3,
     KanjiYuu = 4,
+    YuuBase = 5,
+    KanjiYuuBase = 6,
 }
 
 #[pyclass(name = "Dictionary", module = "haqumei")]

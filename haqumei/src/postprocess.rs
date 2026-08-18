@@ -74,7 +74,7 @@ impl Haqumei {
         for f in njd_features.iter_mut() {
             let orig = f.orig.as_str();
 
-            if matches!(option, IuPronunciation::KanjiIu | IuPronunciation::KanjiYuu)
+            if option.kanji_only()
                 && !orig.contains('言')
                 && !orig.contains('云')
             {
@@ -144,14 +144,14 @@ fn replace_iu(njd_feature: &mut NjdFeature, range: Range<usize>, option: IuPronu
 
     debug_assert_eq!(range.end - range.start, 3);
 
-    match option {
-        IuPronunciation::Iu | IuPronunciation::KanjiIu => {
-            bytes[range].copy_from_slice("イ".as_bytes());
-        }
-        IuPronunciation::Yuu | IuPronunciation::KanjiYuu => {
-            bytes[range].copy_from_slice("ユ".as_bytes());
-        }
+    // 「う」で終わる形だけを対象にする場合、置換する位置の次のモーラが `ウ` で
+    // あることを確かめる。`orig` は原形なので「言わない」でもここに来てしまい、
+    // 確かめないと `ユワナイ` になる。
+    if option.base_only() && bytes.get(range.end..range.end + 3) != Some("ウ".as_bytes()) {
+        return;
     }
+
+    bytes[range].copy_from_slice(option.to_kana().as_bytes());
 }
 
 #[inline(always)]

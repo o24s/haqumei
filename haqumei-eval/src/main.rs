@@ -478,7 +478,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &config.dict_dir,
         HaqumeiOptions {
             use_unidic_yomi: true,
-            normalize_iu: Some(IuPronunciation::Yuu),
+            normalize_iu: Some(IuPronunciation::YuuBase),
             ..Default::default()
         },
     )?;
