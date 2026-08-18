@@ -234,3 +234,78 @@ fn test_restore_rare_syllables() {
     restore_rare_syllables(&mut v);
     assert_eq!(v[0].pron, "エヌエイチブイ");
 }
+
+/// 「等」は直前の品詞細分類 1 で ラ / トー / ナド に分かれる。
+///
+/// 辞書の版によって「等」自体が `名詞-一般` にも `名詞-接尾` にもなり、
+/// 「こと」が `非自立` か `一般` かも変わる。埋め込み辞書に左右されないよう、
+/// 規則そのものに直接あてる。
+#[test]
+fn test_modify_context_reading_nado() {
+    fn f(string: &str, pos: &str, pos_group1: &str, pron: &str) -> NjdFeature {
+        NjdFeature {
+            string: string.to_string(),
+            pos: pos.to_string(),
+            pos_group1: pos_group1.to_string(),
+            pos_group2: "*".to_string(),
+            pos_group3: "*".to_string(),
+            ctype: "*".to_string(),
+            cform: "*".to_string(),
+            orig: string.to_string(),
+            read: pron.to_string(),
+            pron: pron.to_string(),
+            acc: 1,
+            mora_size: count_mora(pron) as i32,
+            chain_rule: "*".to_string(),
+            chain_flag: -1,
+        }
+    }
+
+    for (pos, pos_group1, expected) in [
+        // 代名詞の後は ラ
+        ("名詞", "代名詞", "ラ"),
+        // 自立した名詞の後は トー
+        ("名詞", "一般", "トー"),
+        ("名詞", "サ変接続", "トー"),
+        ("名詞", "固有名詞", "トー"),
+        ("名詞", "接尾", "トー"),
+        // 非自立名詞は句を名詞化しているだけなので ナド のまま
+        ("名詞", "非自立", "ナド"),
+        // 活用語の後も ナド のまま
+        ("動詞", "自立", "ナド"),
+        ("助動詞", "*", "ナド"),
+        ("形容詞", "自立", "ナド"),
+        // 数詞は 一等 / 三等 の助数詞なので触らない
+        ("名詞", "数", "ナド"),
+    ] {
+        let mut features = [
+            f("前", pos, pos_group1, "マエ"),
+            f("等", "名詞", "一般", "ナド"),
+        ];
+        modify_context_reading(&mut features);
+
+        let label = format!("{pos}-{pos_group1}");
+        assert_eq!(features[1].pron, expected, "直前が {label}");
+        assert_eq!(features[1].read, expected, "直前が {label}");
+        // ナド は 2 モーラ、ラ は 1 モーラなので数え直されていること
+        assert_eq!(
+            features[1].mora_size,
+            count_mora(expected) as i32,
+            "直前が {label}"
+        );
+    }
+
+    // 文頭の「等」は直前が無いので触らない
+    let mut features = [f("等", "名詞", "一般", "ナド")];
+    modify_context_reading(&mut features);
+    assert_eq!(features[0].pron, "ナド");
+
+    // 辞書の版によっては「等」が 名詞-接尾 として出る。対象側の品詞細分類で
+    // 絞ると素通りしてしまうので、そちらでも規則が効くこと
+    let mut features = [
+        f("これ", "名詞", "代名詞", "コレ"),
+        f("等", "名詞", "接尾", "トー"),
+    ];
+    modify_context_reading(&mut features);
+    assert_eq!(features[1].pron, "ラ");
+}
