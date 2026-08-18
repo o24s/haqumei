@@ -339,7 +339,7 @@ const RULES: &[Rule] = &[
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "ツキ",
     },
-    // 「金車」のような複合語の 金 は キン。単独は カネ (コストで既定にした)。(16 / 4)
+    // 「金車」のような複合語の 金 は キン。単独は カネ。(16 / 4)
     Rule {
         surface: "金",
         pos_group1: Some("一般"),
@@ -359,6 +359,23 @@ const RULES: &[Rule] = &[
         pos_group1: None,
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "コー",
+    },
+    // 「同じ様に」の 様 は ヨー。「田中様」「王様」の接尾辞は サマ。
+    //
+    // 「この様に」「以下の様に」は 様 が非自立名詞になり元から ヨー だが、
+    // 「同じ様に」だけは人名の接尾辞と解析されて サマ になる。
+    Rule {
+        surface: "様",
+        pos_group1: None,
+        cue: Cue::PrevIn(&["同じ"]),
+        reading: "ヨー",
+    },
+    // 「如何ですか」の 如何 は イカガ。「如何なる」「如何にも」は イカ。
+    Rule {
+        surface: "如何",
+        pos_group1: None,
+        cue: Cue::NextIn(&["で", "です", "でし", "でしょ"]),
+        reading: "イカガ",
     },
 ];
 

@@ -547,7 +547,10 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
         let mut haqumei = Haqumei::new().unwrap();
 
         for (text, expected) in [
-            ("1　0", vec![("十", vec!["j", "u", "u"]), ("\u{3000}", vec!["sp"])]),
+            (
+                "1　0",
+                vec![("十", vec!["j", "u", "u"]), ("\u{3000}", vec!["sp"])],
+            ),
             (
                 "1　00",
                 vec![("百", vec!["hy", "a", "k", "u"]), ("\u{3000}", vec!["sp"])],
@@ -584,5 +587,4 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             assert_eq!(actual, expected, "入力: {text}");
         }
     }
-
 }
