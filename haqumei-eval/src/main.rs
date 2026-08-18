@@ -9,12 +9,15 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 use data::{basic5000, rohan4600};
 
 const IGNORE_PAU: bool = true;
 const DICT_DIR: &str = "../compiled";
 
+/// レポートの既定の出力先。
+const OUT_DIR: &str = "../reports";
 const BASIC_OUT: &str = "basic5000_report.txt";
 const ROHAN_OUT: &str = "rohan4600_kana_report.txt";
 
@@ -115,7 +118,7 @@ fn evaluate_phoneme_dataset(
     haqumei: &mut Haqumei,
     texts: &[&str],
     phonemes: &[&[&str]],
-    out_path: &str,
+    out_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let f = File::create(out_path)?;
     let mut w = BufWriter::new(f);
@@ -313,7 +316,7 @@ fn evaluate_kana_dataset(
     haqumei: &mut Haqumei,
     texts: &[&str],
     gold_kanas: &[&str],
-    out_path: &str,
+    out_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let f = File::create(out_path)?;
     let mut w = BufWriter::new(f);
@@ -418,6 +421,7 @@ fn evaluate_kana_dataset(
 struct Config {
     dict_dir: String,
     suffix: String,
+    out_dir: PathBuf,
 }
 
 fn parse_config() -> Result<Config, Box<dyn Error>> {
@@ -430,6 +434,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
     let mut dict_dir = std::env::var("HAQUMEI_EVAL_DICT_DIR").unwrap_or(default_dict_dir);
     let mut suffix = String::new();
+    let mut out_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(OUT_DIR);
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -440,11 +445,15 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
             "--suffix" => {
                 suffix = args.next().ok_or("--suffix に値がありません")?;
             }
+            "--out-dir" => {
+                out_dir = PathBuf::from(args.next().ok_or("--out-dir に値がありません")?);
+            }
             "-h" | "--help" => {
                 println!(
-                    "Usage: haqumei-eval [--dict-dir <DIR>] [--suffix <SUFFIX>]\n\n\
+                    "Usage: haqumei-eval [--dict-dir <DIR>] [--suffix <SUFFIX>] [--out-dir <DIR>]\n\n\
                      --dict-dir  コンパイル済み辞書のディレクトリ (既定: {DICT_DIR})\n\
-                     --suffix    レポートファイル名に付ける接尾辞\n\n\
+                     --suffix    レポートファイル名に付ける接尾辞\n\
+                     --out-dir   レポートの出力先 (既定: {OUT_DIR})\n\n\
                      環境変数 HAQUMEI_EVAL_DICT_DIR でも辞書を指定できます。"
                 );
                 std::process::exit(0);
@@ -453,7 +462,11 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         }
     }
 
-    Ok(Config { dict_dir, suffix })
+    Ok(Config {
+        dict_dir,
+        suffix,
+        out_dir,
+    })
 }
 
 /// `basic5000_report.txt` に `--suffix _old` を与えて `basic5000_report_old.txt` にする。
@@ -471,8 +484,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = parse_config()?;
     println!("辞書: {}", config.dict_dir);
 
-    let basic_out = with_suffix(BASIC_OUT, &config.suffix);
-    let rohan_out = with_suffix(ROHAN_OUT, &config.suffix);
+    std::fs::create_dir_all(&config.out_dir)?;
+    let basic_out = config.out_dir.join(with_suffix(BASIC_OUT, &config.suffix));
+    let rohan_out = config.out_dir.join(with_suffix(ROHAN_OUT, &config.suffix));
+    println!("レポート: {}", config.out_dir.display());
 
     let mut haqumei = Haqumei::from_path(
         &config.dict_dir,
