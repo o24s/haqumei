@@ -835,6 +835,34 @@ mod tests {
         assert_eq!(haqumei.g2k("石見国").unwrap(), "イワミコク");
     }
 
+    /// 数詞まわりの読みの補正
+    #[test]
+    fn test_modify_numeral_reading() {
+        let mut haqumei = Haqumei::new().unwrap();
+        for (text, expected) in [
+            // 分母の「分」は ブン。1 形態素の「三分」も、算用数字で分かれる場合も
+            ("三分の一の確率", "サンブンノイチノカクリツ"),
+            ("3分の1の人", "サンブンノイチノヒト"),
+            // 2 つ以上続く「〇」は伏字なので マル
+            ("〇〇株式会社御中", "マルマルカブシキガイシャオンチュー"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+
+        // 「四分」の語幹の読みは辞書の版に依存する (シブン / ヨンプン) ので、
+        // 規則が与える「ブン」だけを見る
+        assert!(haqumei.g2k("四分の三").unwrap().contains("ブンノ"));
+
+        // 後ろが「の + 数詞」でなければ時間量・割合の読みのまま
+        assert_eq!(haqumei.g2k("五分で着く").unwrap(), "ゴブデツク");
+        assert_eq!(haqumei.g2k("五分五分だ").unwrap(), "ゴブゴブダ");
+        // 単独の「〇」は数詞のまま
+        assert_eq!(haqumei.g2k("〇円").unwrap(), "レーエン");
+
+        haqumei.options.modify_numeral_reading = false;
+        assert_eq!(haqumei.g2k("三分の一").unwrap(), "サンブノイチ");
+    }
+
     /// 辞書に無い漢字へのフォールバック読み
     #[test]
     fn test_read_unknown_kanji() {

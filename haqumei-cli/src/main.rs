@@ -161,6 +161,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_read_unknown_kanji: bool,
 
+    /// 数詞まわりの読みの補正を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_modify_numeral_reading: bool,
+
     /// アクセント核を1つ前のモーラにずらすルールを無効にする (デフォルトは有効)
     #[arg(long)]
     no_retreat_acc_nuc: bool,
@@ -261,6 +265,7 @@ fn main() -> Result<()> {
         modify_context_reading: !cli.options.no_modify_context_reading,
         modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
+        modify_numeral_reading: !cli.options.no_modify_numeral_reading,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
         process_odoriji: !cli.options.no_process_odoriji,

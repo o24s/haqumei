@@ -901,6 +901,7 @@ class Haqumei:
         modify_context_reading: bool = True,
         modify_old_province_yomi: bool = True,
         read_unknown_kanji: bool = True,
+        modify_numeral_reading: bool = True,
         retreat_acc_nuc: bool = True,
         modify_acc_after_chaining: bool = True,
         process_odoriji: bool = True,

@@ -100,6 +100,18 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub modify_old_province_yomi: bool,
 
+    /// 数詞まわりの読みを補正するかどうか
+    ///
+    /// - 分数の分母に来る「分」を `ブン` と読みます
+    ///   (`三分の一` -> `サンブンノイチ`)。時間量の `フン`/`プン` や割合の `ブ` は
+    ///   後ろに「の + 数詞」が続かないので影響を受けません
+    /// - 2 つ以上続く「〇」を伏字として `マル` と読みます
+    ///   (`〇〇株式会社` -> `マルマルカブシキガイシャ`)。単独の「〇円」は
+    ///   数詞のままです
+    ///
+    /// デフォルトで有効になっています。
+    pub modify_numeral_reading: bool,
+
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
     /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
@@ -442,6 +454,7 @@ impl Default for HaqumeiOptions {
             use_unidic_yomi: false,
             modify_context_reading: true,
             modify_old_province_yomi: true,
+            modify_numeral_reading: true,
             read_unknown_kanji: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
