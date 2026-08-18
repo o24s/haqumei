@@ -88,9 +88,18 @@ pub(crate) const fn dan(c: char) -> Option<Dan> {
     }
 }
 
+/// 漢字かどうかを判定する。
+///
+/// CJK 統合漢字の基本ブロックだけでなく、拡張 A、互換漢字、拡張 B 以降 (SIP) も
+/// 含める。人名や地名には基本ブロックの外の字が普通に現れるため
+/// (`𠮷` は U+20BB7)、狭く取ると取りこぼす。
 #[inline(always)]
-pub(crate) fn is_kanji(c: char) -> bool {
-    ('\u{4E00}'..='\u{9FFF}').contains(&c)
+pub(crate) const fn is_kanji(c: char) -> bool {
+    matches!(c,
+        '\u{3400}'..='\u{4DBF}'    // CJK 統合漢字 拡張 A
+        | '\u{4E00}'..='\u{9FFF}'  // CJK 統合漢字
+        | '\u{F900}'..='\u{FAFF}'  // CJK 互換漢字
+        | '\u{20000}'..='\u{3FFFF}') // 拡張 B 以降 (互換漢字補助を含む)
 }
 
 #[inline(always)]

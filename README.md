@@ -595,6 +595,15 @@ Haqumei, excluding `haqumei-jlabel` and `haqumei-kanalizer`, is distributed unde
     [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk).
   - License: The dictionary data is covered by the license notices in `haqumei/dictionary/COPYING`.
 
+- Bundled Kanji Reading Fallback Data
+  - Origin: The data in `haqumei/data/unihan` is generated from the `kJapanese` field of the
+    [Unihan Database](https://www.unicode.org/charts/unihan.html). It provides a per-character
+    reading fallback, used to keep kanji missing from the dictionary from appearing verbatim in the
+    kana output (see `HaqumeiOptions::read_unknown_kanji`).
+  - License: UNICODE LICENSE V3. This license applies only to the data located in
+    `haqumei/data/unihan`, and does not apply to the rest of this project. In accordance with
+    redistribution requirements, the full text is included in `haqumei/data/unihan/LICENSE`.
+
 - Bundled `haqumei-jlabel` Source Code
   - Origin: The code contained in the `haqumei-jlabel` directory is based on the
     [jpreprocess/jlabel](https://github.com/jpreprocess/jlabel) repository.

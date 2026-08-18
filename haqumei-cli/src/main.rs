@@ -157,6 +157,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_modify_old_province_yomi: bool,
 
+    /// 辞書に無い漢字へのフォールバック読みを無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_read_unknown_kanji: bool,
+
     /// アクセント核を1つ前のモーラにずらすルールを無効にする (デフォルトは有効)
     #[arg(long)]
     no_retreat_acc_nuc: bool,
@@ -256,6 +260,7 @@ fn main() -> Result<()> {
         use_unidic_yomi: cli.options.use_unidic_yomi,
         modify_context_reading: !cli.options.no_modify_context_reading,
         modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
+        read_unknown_kanji: !cli.options.no_read_unknown_kanji,
         retreat_acc_nuc: !cli.options.no_retreat_acc_nuc,
         modify_acc_after_chaining: !cli.options.no_modify_acc_after_chaining,
         process_odoriji: !cli.options.no_process_odoriji,

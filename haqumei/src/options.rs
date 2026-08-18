@@ -100,6 +100,24 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub modify_old_province_yomi: bool,
 
+    /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
+    ///
+    /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
+    /// `g2k` などでは辞書に無い漢字が表層形のままカナ列に混入する。
+    /// (`騸馬` -> `騸馬`、`嗅神経` -> `嗅シンケー`)
+    /// 辞書が単独で読める漢字は 約 3,100 字しかないので、それ以外はすべてこうなる。
+    ///
+    /// 有効にすると、そうした語に 1 文字ずつ読みを与える
+    /// (`騸馬` -> `センバ`)。1 字 1 読みの近似なので正しい読みになるとは
+    /// 限らないが (`悪魔憑き` -> `アクマヒョウキ`)、漢字の混入は無くなる。
+    ///
+    /// 読みの出典とライセンスは `haqumei/data/unihan/README.md` を参照。
+    ///
+    /// 無効にすると pyopenjtalk と同じ挙動 (表層形をそのまま出力) になる。
+    ///
+    /// デフォルトで有効になっています。
+    pub read_unknown_kanji: bool,
+
     /// 長母音、重母音、撥音がアクセント核に来た場合に、
     /// ひとつ前のモーラにアクセント核がズレるルールを適用する。
     ///
@@ -424,6 +442,7 @@ impl Default for HaqumeiOptions {
             use_unidic_yomi: false,
             modify_context_reading: true,
             modify_old_province_yomi: true,
+            read_unknown_kanji: true,
             retreat_acc_nuc: true,
             modify_acc_after_chaining: true,
             process_odoriji: true,

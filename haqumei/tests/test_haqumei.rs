@@ -835,6 +835,36 @@ mod tests {
         assert_eq!(haqumei.g2k("石見国").unwrap(), "イワミコク");
     }
 
+    /// 辞書に無い漢字へのフォールバック読み
+    #[test]
+    fn test_read_unknown_kanji() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        // 辞書に無い漢字が表層形のまま混入しないこと
+        for (text, expected) in [
+            ("騸馬", "センバ"),
+            ("嚳", "コク"),
+            ("多禰国", "タネコク"),
+            ("嗅神経", "キュウシンケー"),
+        ] {
+            assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
+        }
+
+        // 句読点は記号として表層形のまま残ること (格下げされた未知語と区別できている)
+        assert_eq!(
+            haqumei.g2k("こんにちは、世界。").unwrap(),
+            "コンニチワ、セカイ。"
+        );
+        // 辞書が読める語は影響を受けないこと。とくに旧字体の複合語は、
+        // 入力段階で新字体に直すと壊れるので触っていない
+        assert_eq!(haqumei.g2k("醫學部に進む").unwrap(), "イガクブニススム");
+        assert_eq!(haqumei.g2k("医学部に進む").unwrap(), "イガクブニススム");
+
+        // 無効にすると pyopenjtalk と同じく表層形がそのまま出ること
+        haqumei.options.read_unknown_kanji = false;
+        assert_eq!(haqumei.g2k("騸馬").unwrap(), "騸馬");
+    }
+
     /// 隣接する形態素で読みが決まる同形異音語の補正
     #[test]
     fn test_modify_context_reading() {

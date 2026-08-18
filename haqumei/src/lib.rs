@@ -78,7 +78,8 @@ use crate::{
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
     postprocess::{
         modify_acc_after_chaining, modify_english_words, modify_filler_accent,
-        modify_context_reading, modify_old_province_yomi, predict_kana_english, process_odori_features, retreat_acc_nuc,
+        modify_context_reading, modify_old_province_yomi, predict_kana_english, process_odori_features,
+        read_unknown_kanji, retreat_acc_nuc,
     },
 };
 #[cfg(feature = "unidic-yomi")]
@@ -951,6 +952,11 @@ impl Haqumei {
         }
         if options.modify_old_province_yomi {
             modify_old_province_yomi(&mut njd_features);
+        }
+        // 辞書に無い漢字への読みの付与は、他の補正がすべて読みを決めたあとに行う。
+        // ここまでで読みが付かなかったものだけが対象になる
+        if options.read_unknown_kanji {
+            read_unknown_kanji(&mut njd_features);
         }
 
         if options.retreat_acc_nuc {

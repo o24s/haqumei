@@ -12,6 +12,7 @@ keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
 include = [
     "src/*",
+    "data/**",
     "build.rs",
     "compat.c",
     "dictionary_kind.rs.part",
