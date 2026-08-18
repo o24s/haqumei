@@ -44,6 +44,10 @@ enum Cue {
     /// 連濁は「直前に語が直接くっついているか」で決まるので、表層形を列挙する
     /// のではなく品詞で見る。助詞を挟む場合は複合語ではないので発火しない。
     PrevPosIn(&'static [&'static str]),
+    /// 直前の形態素の品詞細分類 1 が、いずれかに一致する。
+    ///
+    /// 名詞のうち代名詞だけを分けたい、のように品詞では粗すぎるときに使う。
+    PrevPosGroup1In(&'static [&'static str]),
 }
 
 struct Rule {
@@ -377,6 +381,34 @@ const RULES: &[Rule] = &[
         cue: Cue::NextIn(&["で", "です", "でし", "でしょ"]),
         reading: "イカガ",
     },
+    // 「等」の読みは直前が何かで三分される。収集データでの内訳は
+    //
+    //   代名詞 + 等           -> ラ    391 件 (それ等 / これ等 / われ等)
+    //   自立した名詞 + 等     -> トー  105 件 (機器等 / 部品等 / 主蒸気系等)
+    //   活用語・形式名詞 + 等 -> ナド  101 件 (した等 / ない等 / こと等)
+    //
+    // で、既定の ナド は前の 2 つの文脈では負けている。接尾の ラ と トー は
+    // 文脈 ID が同じなのでコストでは分けられない (どちらを安くしても全用例で
+    // 一斉に決まる)。ここで分ける。
+    //
+    // 「こと」「もの」のような非自立名詞は句を名詞化しているだけなので、
+    // 活用語と同じく ナド の側に残す。そのため直前の品詞細分類 1 を正の側で
+    // 列挙する。数詞を入れないのは 一等 / 三等 が助数詞だからである。
+    //
+    // 辞書の状態によって「等」自体が 名詞-一般 にも 名詞-接尾 にもなるので、
+    // 対象側の品詞細分類は問わない。
+    Rule {
+        surface: "等",
+        pos_group1: None,
+        cue: Cue::PrevPosGroup1In(&["代名詞"]),
+        reading: "ラ",
+    },
+    Rule {
+        surface: "等",
+        pos_group1: None,
+        cue: Cue::PrevPosGroup1In(&["一般", "サ変接続", "固有名詞", "接尾"]),
+        reading: "トー",
+    },
 ];
 
 /// 隣接する形態素で読みが決まる語を補正する。
@@ -406,6 +438,9 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
                 }
                 Cue::PrevPosIn(candidates) => {
                     i > 0 && candidates.contains(&njd_features[i - 1].pos.as_str())
+                }
+                Cue::PrevPosGroup1In(candidates) => {
+                    i > 0 && candidates.contains(&njd_features[i - 1].pos_group1.as_str())
                 }
             }
         }) else {
