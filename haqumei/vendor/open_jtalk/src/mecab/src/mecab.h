@@ -228,6 +228,14 @@ struct mecab_node_t {
   unsigned char         isbest;
 
   /**
+   * dictionary index in tokenizer load order.
+   * 0 is the system dictionary, 1..N identify user dictionaries in the order
+   * supplied by --userdic, and MECAB_NO_DICTIONARY_INDEX identifies a
+   * non-dictionary control or unknown node.
+   */
+  unsigned char         dictionary_index;
+
+  /**
    * forward accumulative log summation.
    * This value is only available when MECAB_MARGINAL_PROB is passed.
    */
@@ -281,6 +289,11 @@ enum {
    * Virtual node representing a end of the N-best enumeration.
    */
   MECAB_EON_NODE = 4
+};
+
+/** Dictionary provenance assigned to nodes not read from a dictionary. */
+enum {
+  MECAB_NO_DICTIONARY_INDEX = 255
 };
 
 /**
@@ -482,6 +495,11 @@ extern "C" {
    * C wrapper of MeCab::Tagger::parse(MeCab::Lattice *lattice)
    */
   MECAB_DLL_EXTERN int           mecab_parse_lattice(mecab_t *mecab, mecab_lattice_t *lattice);
+
+  /**
+   * Rebuild one-best path from existing lattice nodes.
+   */
+  MECAB_DLL_EXTERN int           mecab_lattice_rebuild_best(mecab_t *mecab, mecab_lattice_t *lattice);
 
   /**
    * C wrapper of MeCab::Tagger::parse(const char *str)

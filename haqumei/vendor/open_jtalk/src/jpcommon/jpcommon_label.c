@@ -538,9 +538,10 @@ static void JPCommonLabel_insert_pause(JPCommonLabel * label)
                                          label->phoneme_tail, NULL, NULL);
          label->phoneme_tail = label->phoneme_tail->next;
       } else {
-         // NOTE: 空の Label へは pau を追加しない
-         fprintf(stderr,
-                 "WARNING: JPCommonLabel_insert_pause() in jpcommon_label.c: First mora should not be short pause.\n");
+         // NOTE: 文頭の括弧や引用符に由来する短ポーズは音声上の先行要素がないため追加しない
+         // 比較的高頻度で発生するエラーでうるさいのでコメントアウト
+         // fprintf(stderr,
+         //    "WARNING: JPCommonLabel_insert_pause() in jpcommon_label.c: First mora should not be short pause.\n");
       }
 
       // NOTE: フラグを消費する

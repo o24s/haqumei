@@ -228,7 +228,7 @@ BOOL Mecab_analysis(Mecab *m, const char *str)
    }
 
    /* lattice->clear() はここでは呼ばない。
-      _run_mecab_unified() が Mecab_analysis() 後に lattice ノードを走査するため、
+      OpenJTalk.run_mecab_detailed() が Mecab_analysis() 後に lattice ノードを走査するため、
       lattice の解放は Mecab_refresh() に委譲する。
       元のコードでは lattice->clear() をここで呼んでいたが、
       clear() は end_nodes_ を空にするため、その後の mecab_lattice_get_bos_node() が

@@ -451,6 +451,7 @@ void NJDNode_load(NJDNode * node, const char *str)
    int index_read;
    int index_pron;
    int index_acc;
+   int is_orig_aligned;
    NJDNode *prev = NULL;
 
    if (strlen(str) >= MAXBUFLEN * 6) {
@@ -531,6 +532,40 @@ void NJDNode_load(NJDNode * node, const char *str)
    }
 
    /* parse chained word */
+   /* NOTE: 最終ノードは活用によって `orig` と表層が異なるため、その手前の `orig`
+      トークンだけが表層の先頭と一致すれば、残りの表層を最終ノードに割り当てられる
+      外部のユーザー辞書から不正な複数アクセント句が渡され、この前提が崩れた場合、
+      従来処理は表層の終端より後ろを読み、ゴミ文字列や UTF-8 デコード失敗を起こす
+      不正な辞書を正当な入力として扱う分岐ではなく、NJD のメモリ安全性を保つため、
+      先頭ノードに表層全体を入れ、以降は `orig` トークンで代用する */
+   is_orig_aligned = 1;
+   for (i = 0, j = 0; buff_orig[i] != '\0'; i++)
+      if (buff_orig[i] == ':')
+         j++;
+   if (j != count - 1)
+      is_orig_aligned = 0;
+
+   index_orig = 0;
+   index_string = 0;
+   for (i = 0; is_orig_aligned == 1 && i + 1 < count; i++) {
+      get_token_from_string(buff_orig, &index_orig, buff, ':');
+      if (buff[0] == '\0' ||
+          strncmp(&buff_string[index_string], buff, strlen(buff)) != 0) {
+         is_orig_aligned = 0;
+         break;
+      }
+      index_string += strlen(buff);
+   }
+   if (is_orig_aligned == 1 && buff_string[index_string] == '\0')
+      is_orig_aligned = 0;
+
+   /* 不正な辞書エントリを特定できるよう、表層と原形を含む警告を標準エラー出力へ記録する */
+   if (is_orig_aligned == 0)
+      fprintf(stderr,
+              "WARNING: NJDNode_load() in njd_node.c: Chained orig does not match the surface prefix "
+              "(surface: \"%s\", orig: \"%s\"). Using a safe fallback.\n",
+              buff_string, buff_orig);
+
    index_string = 0;
    index_orig = 0;
    index_read = 0;
@@ -555,11 +590,19 @@ void NJDNode_load(NJDNode * node, const char *str)
       get_token_from_string(buff_orig, &index_orig, buff, ':');
       NJDNode_set_orig(node, buff);
       /* string */
-      if (i + 1 < count) {
-         NJDNode_set_string(node, buff);
-         index_string += strlen(buff);
+      if (is_orig_aligned == 1) {
+         if (i + 1 < count) {
+            NJDNode_set_string(node, buff);
+            index_string += strlen(buff);
+         } else {
+            NJDNode_set_string(node, &buff_string[index_string]);
+         }
+      } else if (i == 0) {
+         /* 表層を句境界で切れないため、先頭 sub-word が表層全体を保持する */
+         NJDNode_set_string(node, buff_string);
       } else {
-         NJDNode_set_string(node, &buff_string[index_string]);
+         /* 2個目以降の sub-word は読み (orig トークン) を表層の代替として使う */
+         NJDNode_set_string(node, buff);
       }
       /* read */
       get_token_from_string(buff_read, &index_read, buff, ':');

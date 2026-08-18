@@ -159,6 +159,7 @@ class TaggerImpl: public Tagger {
   bool                  open(const ModelImpl &model);
 
   bool                  parse(Lattice *lattice) const;
+  bool                  rebuildBestFromExistingNodes(Lattice *lattice) const;
 
   void                  set_request_type(int request_type);
   int                   request_type() const;
@@ -556,6 +557,14 @@ bool TaggerImpl::parse(Lattice *lattice) const {
 #endif
 
   return model()->viterbi()->analyze(lattice);
+}
+
+bool TaggerImpl::rebuildBestFromExistingNodes(Lattice *lattice) const {
+#ifdef HAVE_ATOMIC_OPS
+  scoped_reader_lock l(model()->mutex());
+#endif
+
+  return model()->viterbi()->rebuildBestFromExistingNodes(lattice);
 }
 
 const char *TaggerImpl::parse(const char *str) {
@@ -1032,7 +1041,21 @@ void LatticeImpl::set_feature_constraint(size_t begin_pos, size_t end_pos,
 
   feature_constraint_[begin_pos] = feature;
 }
+
 }  // namespace
+
+// Keep the lattice cost-injection C API outside the anonymous namespace so
+// its external C linkage is unambiguous from both the declaration and placement.
+extern "C" int mecab_lattice_rebuild_best(mecab_t *mecab,
+                                          mecab_lattice_t *lattice) {
+  if (!mecab || !lattice) {
+    return 0;
+  }
+
+  return static_cast<int>(
+      reinterpret_cast<TaggerImpl *>(mecab)->rebuildBestFromExistingNodes(
+          reinterpret_cast<Lattice *>(lattice)));
+}
 
 Tagger *Tagger::create(int argc, char **argv) {
   return createTagger(argc, argv);
