@@ -536,4 +536,53 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ]
         );
     }
+
+    /// 数字の縮約が空白をまたぐとき、その空白が mapping から消えないこと。
+    ///
+    /// 「1　0」の morph は １ / 　 / ０ で、NJD はこれを「十」1 つに縮約する。
+    /// 数字ブロックの内側にある空白は、外側にあるとき (「２0　ｉｔ」) と違って
+    /// ループ先頭の ignored 回収に拾われないため、取りこぼしていた。
+    #[test]
+    fn test_mapping_digit_contraction_keeps_inner_space() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        for (text, expected) in [
+            ("1　0", vec![("十", vec!["j", "u", "u"]), ("\u{3000}", vec!["sp"])]),
+            (
+                "1　00",
+                vec![("百", vec!["hy", "a", "k", "u"]), ("\u{3000}", vec!["sp"])],
+            ),
+            (
+                "1　0円",
+                vec![
+                    ("十", vec!["j", "u", "u"]),
+                    ("\u{3000}", vec!["sp"]),
+                    ("円", vec!["e", "N"]),
+                ],
+            ),
+            // 数字ブロックの外側にある空白は元から拾えていた (退行防止)
+            (
+                "２0　ｉｔ",
+                vec![
+                    ("二", vec!["n", "i"]),
+                    ("十", vec!["j", "u", "u"]),
+                    ("\u{3000}", vec!["sp"]),
+                    ("ｉｔ", vec!["i", "cl", "t", "o"]),
+                ],
+            ),
+        ] {
+            let mapping = haqumei.g2p_mapping(text).unwrap();
+            let actual: Vec<(&str, Vec<&str>)> = mapping
+                .iter()
+                .map(|d| {
+                    (
+                        d.word.as_str(),
+                        d.phonemes.iter().map(|s| s.as_str()).collect(),
+                    )
+                })
+                .collect();
+            assert_eq!(actual, expected, "入力: {text}");
+        }
+    }
+
 }
