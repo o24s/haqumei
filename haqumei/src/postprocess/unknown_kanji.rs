@@ -24,7 +24,7 @@
 //! `悪魔憑き` は `アクマヒョウキ` になり、正しい `アクマツキ` にはならない。
 
 use crate::NjdFeature;
-use crate::utils::{count_mora, is_kanji};
+use crate::utils::{count_mora, is_kanji, read_to_pron};
 
 /// 漢字から読みを引く表。出典とライセンスは `haqumei/data/unihan/README.md`。
 static READINGS: phf::Map<char, &'static str> = include!("../../data/unihan/readings.rs");
@@ -57,8 +57,9 @@ pub(crate) fn read_unknown_kanji(njd_features: &mut [NjdFeature]) {
             continue;
         }
 
-        feature.read = reading.clone();
-        feature.pron = reading;
+        // READINGS は正書法の読みなので、発音は長音を畳んでから入れる
+        feature.pron = read_to_pron(&reading);
+        feature.read = reading;
         // 記号のままだとポーズとして扱われるので、名詞に戻す
         feature.pos = "名詞".to_string();
         feature.pos_group1 = "一般".to_string();

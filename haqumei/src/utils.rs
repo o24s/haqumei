@@ -159,6 +159,51 @@ pub(crate) fn split_kana_mora(text: &str) -> Vec<&str> {
     result
 }
 
+/// モーラの母音を返す。`ン` `ッ` `ー` のように母音を持たないものは `None`。
+fn mora_vowel(mora: &str) -> Option<char> {
+    // 拗音を含むモーラは小書き文字が母音を決めるので、末尾の文字で見る。
+    Some(match mora.chars().next_back()? {
+        'ア' | 'カ' | 'サ' | 'タ' | 'ナ' | 'ハ' | 'マ' | 'ヤ' | 'ラ' | 'ワ' | 'ガ' | 'ザ'
+        | 'ダ' | 'バ' | 'パ' | 'ャ' | 'ァ' => 'a',
+        'イ' | 'キ' | 'シ' | 'チ' | 'ニ' | 'ヒ' | 'ミ' | 'リ' | 'ヰ' | 'ギ' | 'ジ' | 'ヂ'
+        | 'ビ' | 'ピ' | 'ィ' => 'i',
+        'ウ' | 'ク' | 'ス' | 'ツ' | 'ヌ' | 'フ' | 'ム' | 'ユ' | 'ル' | 'グ' | 'ズ' | 'ヅ'
+        | 'ブ' | 'プ' | 'ヴ' | 'ュ' | 'ゥ' => 'u',
+        'エ' | 'ケ' | 'セ' | 'テ' | 'ネ' | 'ヘ' | 'メ' | 'レ' | 'ヱ' | 'ゲ' | 'ゼ' | 'デ'
+        | 'ベ' | 'ペ' | 'ェ' => 'e',
+        'オ' | 'コ' | 'ソ' | 'ト' | 'ノ' | 'ホ' | 'モ' | 'ヨ' | 'ロ' | 'ヲ' | 'ゴ' | 'ゾ'
+        | 'ド' | 'ボ' | 'ポ' | 'ョ' | 'ォ' => 'o',
+        _ => return None,
+    })
+}
+
+/// 正書法の読み (`read`) を発音 (`pron`) に直す。
+///
+/// 辞書は長音を `ー` で書くので、長音になる連母音を畳む。
+///
+///   トウ -> トー,  シュウ -> シュー,  エイ -> エー,  トオリ -> トーリ
+///
+/// ア段・イ段の後の `イ` は長音にならないので、そのまま残す (カイ / タイ)。
+pub(crate) fn read_to_pron(read: &str) -> String {
+    let mut out = String::with_capacity(read.len());
+    let mut vowel = None;
+    for mora in split_kana_mora(read) {
+        if matches!(
+            (vowel, mora),
+            (Some('o'), "ウ" | "オ") | (Some('u'), "ウ") | (Some('e'), "イ")
+        ) {
+            // 長音は直前の母音を引き継ぐので `vowel` は据え置く
+            out.push('ー');
+            continue;
+        }
+        out.push_str(mora);
+        if mora != "ー" {
+            vowel = mora_vowel(mora);
+        }
+    }
+    out
+}
+
 /// 文字列のモーラ数を数える。
 #[inline]
 pub(crate) fn count_mora(text: &str) -> usize {
