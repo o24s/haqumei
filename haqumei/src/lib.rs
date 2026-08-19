@@ -78,7 +78,7 @@ use crate::{
         modify_acc_after_chaining, modify_context_reading, modify_english_words,
         modify_filler_accent, modify_fraction_denominator, modify_old_province_yomi,
         modify_placeholder_maru, predict_kana_english, process_odori_features, read_unknown_kanji,
-        restore_rare_syllables, retreat_acc_nuc, split_prefix_accent_phrase,
+        restore_loanword_kana, retreat_acc_nuc, split_prefix_accent_phrase,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -819,8 +819,8 @@ impl Haqumei {
         }
         // 辞書に無い漢字への読みの付与は、他の補正がすべて読みを決めたあとに行う。
         // ここまでで読みが付かなかったものだけが対象になる
-        if options.restore_rare_syllables {
-            restore_rare_syllables(&mut njd_features);
+        if options.restore_loanword_kana {
+            restore_loanword_kana(&mut njd_features);
         }
         if options.read_unknown_kanji {
             read_unknown_kanji(&mut njd_features);

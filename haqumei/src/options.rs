@@ -104,7 +104,7 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub modify_numeral_reading: bool,
 
-    /// 辞書が別の音節に置き換えている稀な音節を、表層形から復元する。
+    /// 辞書が別の仮名に置き換えている外来語表記の仮名を、表層形から復元する。
     ///
     ///   ヴィクトリーヌ   ビクトリーヌ  から ヴィクトリーヌ へ
     ///   アイシュヴァルヤ アイシュバルヤ から アイシュヴァルヤ へ
@@ -117,7 +117,7 @@ pub struct HaqumeiOptions {
     ///
     /// 無効にすると Open JTalk と同じ出力になります。
     /// デフォルトで有効になっています。
-    pub restore_rare_syllables: bool,
+    pub restore_loanword_kana: bool,
 
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
@@ -472,7 +472,7 @@ impl Default for HaqumeiOptions {
             modify_context_reading: true,
             modify_old_province_yomi: true,
             modify_numeral_reading: true,
-            restore_rare_syllables: true,
+            restore_loanword_kana: true,
             read_unknown_kanji: true,
             split_prefix_accent_phrase: true,
             retreat_acc_nuc: true,

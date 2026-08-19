@@ -181,7 +181,7 @@ fn test_realistic_sentences() {
 }
 
 #[test]
-fn test_restore_rare_syllables() {
+fn test_restore_loanword_kana() {
     fn f(surface: &str, read: &str, pron: &str) -> NjdFeature {
         NjdFeature {
             string: surface.to_string(),
@@ -201,7 +201,7 @@ fn test_restore_rare_syllables() {
         }
     }
 
-    // 辞書が別の音節に置き換えているものを戻す
+    // 辞書が別の仮名に置き換えているものを戻す
     for (surface, pron, want) in [
         ("ヴィクトリーヌ", "ビク’トリーヌ", "ヴィク’トリーヌ"),
         ("アイシュヴァルヤ", "アイシュバルヤ", "アイシュヴァルヤ"),
@@ -209,7 +209,7 @@ fn test_restore_rare_syllables() {
         ("アクスィス", "アクシス", "アクスィス"),
     ] {
         let mut v = [f(surface, pron, pron)];
-        restore_rare_syllables(&mut v);
+        restore_loanword_kana(&mut v);
         assert_eq!(v[0].pron, want, "入力: {surface}");
     }
 
@@ -225,13 +225,13 @@ fn test_restore_rare_syllables() {
         ("ウルグァイ", "ウルグアイ"),
     ] {
         let mut v = [f(surface, pron, pron)];
-        restore_rare_syllables(&mut v);
+        restore_loanword_kana(&mut v);
         assert_eq!(v[0].pron, pron, "入力: {surface}");
     }
 
     // 表層形と発音が途中で食い違う語は、全体を諦める
     let mut v = [f("エヌ・エイチ・ヴィ", "エヌエイチブイ", "エヌエイチブイ")];
-    restore_rare_syllables(&mut v);
+    restore_loanword_kana(&mut v);
     assert_eq!(v[0].pron, "エヌエイチブイ");
 }
 
