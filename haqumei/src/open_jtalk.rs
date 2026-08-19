@@ -3,6 +3,7 @@ mod jpcommon;
 mod jpcommon_label;
 mod jpcommon_push_word;
 pub(crate) mod jpcommon_rule;
+mod lattice;
 mod mapping;
 mod mecab;
 mod model;
@@ -35,6 +36,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 pub use dictionary::{Dictionary, MecabDictIndexCompiler};
+pub use lattice::LatticeNode;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

@@ -1,7 +1,7 @@
 mod context_reading;
 mod english;
-mod numeral;
 mod loanword_kana;
+mod numeral;
 #[cfg(test)]
 mod tests;
 mod unknown_kanji;
@@ -24,8 +24,8 @@ use crate::{
     },
 };
 pub(crate) use context_reading::modify_context_reading;
-pub(crate) use numeral::{modify_fraction_denominator, modify_placeholder_maru};
 pub(crate) use loanword_kana::restore_loanword_kana;
+pub(crate) use numeral::{modify_fraction_denominator, modify_placeholder_maru};
 pub(crate) use unknown_kanji::read_unknown_kanji;
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 

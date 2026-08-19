@@ -63,7 +63,8 @@ use moka::sync::Cache;
 
 pub use features::NjdFeature;
 pub use open_jtalk::{
-    MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary, update_global_dictionary,
+    LatticeNode, MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary,
+    update_global_dictionary,
 };
 pub use options::*;
 pub use phoneme::Phoneme;
