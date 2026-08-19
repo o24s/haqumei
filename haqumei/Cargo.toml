@@ -13,6 +13,8 @@ categories = ["text-processing", "parsing"]
 include = [
     "src/*",
     "data/**",
+    "LICENSE-pyopenjtalk",
+    "dictionary/COPYING",
     "build.rs",
     "compat.c",
     "redirect.c",
@@ -23,6 +25,7 @@ include = [
     "vendor/open_jtalk/src/bin/**",
     "vendor/open_jtalk/src/jpcommon/**",
     "vendor/open_jtalk/src/mecab/**",
+    "vendor/open_jtalk/src/COPYING",
     "vendor/open_jtalk/src/mecab2njd/**",
     "vendor/open_jtalk/src/njd/**",
     "vendor/open_jtalk/src/njd2jpcommon/**",

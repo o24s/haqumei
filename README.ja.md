@@ -51,6 +51,7 @@
   - [`g2p_prosody_with_options` の仕様](#g2p_prosody_with_options-の仕様)
   - [`g2p_mapping_prosody` の仕様](#g2p_mapping_prosody-の仕様)
 - [精度](#精度)
+  - [再現方法](#再現方法)
   - [jsut-label](#jsut-label)
   - [ROHAN](#rohan)
 - [ベンチマーク](#ベンチマーク)
@@ -66,13 +67,16 @@
 
 ## 特徴 (Features)
 
-- Word-Phoneme Mapping APIs: 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features))
-- プロソディ情報の取得: プロソディ記号付き音素列と、入力テキストに対してロスの少ないマッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。)
-- より詳細な音素ラベル: 撥音・促音に対する条件異音 (allophone) 解決によって、専用の音素ラベルとして導入された異音の取得をいくつかの選択肢から設定できます。 (詳細は、[ここ](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) を参照してください。)
-- パフォーマンス: Rustによるネイティブ実装により、高速な処理を実現しています。([ベンチマーク](#ベンチマーク))
-- 精度: `haqumei-kanalizer` による英単語読み推定やその他の補正に加えて、[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) で実装された多くの手法を取り入れ、精度が改善されています。 ([精度](#精度))
-- 並行処理: `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。
-- 多様なオプション: [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html) を用いることで、条件異音の音素ラベル導入、Unicode 正規化、読み方についての柔軟な変更が可能です。
+| | |
+| :--- | :--- |
+| **Word-Phoneme Mapping APIs** | 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features)) |
+| **プロソディ情報の取得** | プロソディ記号付き音素列と、構造化されたプロソディー情報をもつ単語と音素列マッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。) |
+| **より詳細な音素ラベル** | 撥音・促音に対する条件異音 (allophone) 解決によって、専用の音素ラベルとして導入された異音の取得をいくつかの選択肢から設定できます。 (詳細は、[ここ](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) を参照してください。) |
+| **パフォーマンス** | Rustによるネイティブ実装によって高速な処理を実現しています。([ベンチマーク](#ベンチマーク)) |
+| **精度** | 辞書とロジックの改善を重ね、[jsut-label](https://github.com/prj-beatrice/jsut-label) で PER 0.87% と、 [ROHAN](https://github.com/mmorise/rohan4600) で CER 0.81% を達成しています。 [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書と精度改善手法に基づいてさらなる変更を加えています。 ([精度](#精度)) |
+| **未知語フォールバック** | 通常は未知語となってしまう英単語の `haqumei-kanalizer` による読み推定や、辞書にマッチしなかった漢字を音読みするフォールバック、カタカナによって構成される単語のアクセント補正が実装されています。 |
+| **並行処理** | `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。 |
+| **多様なオプション** | [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html) を用いることで、条件異音の音素ラベル導入、Unicode 正規化、読み方についての柔軟な変更が可能です。 |
 
 コード例は [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples) にあります。
 
@@ -490,23 +494,73 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 精度
 
-`haqumei-eval` クレートを用いた、JSUT corpus の Basic5000 に対するアノテーションである、jsut-label のフォーク [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label) の音素エラー率(PER)と、[ROHAN](https://github.com/mmorise/rohan4600) のカタカナエラー率(Katakana Error Rate)を示します。
+[japanese-g2p-benchmark](https://github.com/o24s/japanese-g2p-benchmark) による計測です。
+
+JSUT corpus の basic5000 に対するアノテーションである、jsut-label のフォーク [prj-beatrice/jsut-label](https://github.com/prj-beatrice/jsut-label) の音素エラー率 (PER) と、[ROHAN](https://github.com/mmorise/rohan4600) のカタカナエラー率 (Katakana Error Rate, KER) を示します。
+
+| G2P | jsut-label (PER) | ROHAN (KER) |
+| :--- | ---: | ---: |
+| pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
+| pyopenjtalk-plus 0.4.1.post9 | 1.09% | 1.60% |
+| **haqumei 0.9.0** | **0.87%** | **0.81%** |
+
+\* 素の `pyopenjtalk` には長音と四つ仮名を元の表記のまま書き出す手段が無いため、
+出力を ROHAN の表記に揃えられません。この差の大半は読みの誤りではなく表記の違いです。
+
+オプションは、それぞれの G2P がもつオプションから、そのコーパスの註釈方針に合うものを選んでいます。  
+すべてのオプションによる総当たり精度は、以下の「全オプションの結果」を参照してください。
+
+<details>
+<summary>全オプションの結果</summary>
+
+| G2P | options | jsut-label (PER) | ROHAN (KER) |
+| :--- | :--- | ---: | ---: |
+| pyopenjtalk | - | 1.31%\* | 5.02% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10%\* | 4.63% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10%\* | 4.63% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.62% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.09%\* | 4.65% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.64% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.11%\* | 4.66% |
+| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.81% |
+| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 1.00%\* | 3.82% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.87% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.96%\* | 3.88% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.84% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.87%\* | 3.85% |
+
+`-` は測っていないことを表します。表記を戻す設定 (`revert_long_vowels` /
+`revert_yotsugana`) が意味を持つのは、長音記号を使わない ROHAN だけです。
+そのため、有効にした行では jsut-label を走らせていません。
+
+</details>
+
+### 再現方法
+
+```bash
+git clone https://github.com/o24s/japanese-g2p-benchmark
+cd japanese-g2p-benchmark
+uv run init.py
+uv run python run_all.py --datasets phoneme,no_lvs --sources jsut-label,rohan4600
+```
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **1.17%** (Substitute=2117, Delete=527, Insert=831, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **0.87%** (Substitute=1636, Delete=395, Insert=554, N=297843)
 
 `HaqumeiOptions`:
 ```rust
 HaqumeiOptions {
-  normalize_iu: Some(IuPronunciation::Yuu),
+  normalize_iu: Some(IuPronunciation::YuuBase),
   ..Default::default()
 }
 ```
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): **1.64%** (Substitute=1689, Delete=493, Insert=288, N=150637)
+Katakana Error Rate (S+D+I / N_expected): **0.81%** (Substitute=824, Delete=154, Insert=246, N=150637)
 
 `HaqumeiOptions`:
 ```rust
@@ -554,13 +608,6 @@ HaqumeiOptions {
 
 「吾輩は猫である」 (800個近くの"何"を含む) を用いたベンチマーク(`haqumei-bench`)でも、デフォルトの `Haqumei` とその `predict_nani` を有効にした比較は、平均的には非常に小さい誤差に収まったために、実際にはボトルネックではありません。  
 
-#### `pyopenjtalk-plus` との比較
-
-前提として、Sudachi や ONNX モデルによる読み補正やその他の改善を取り入れた `pyopenjtalk-plus` は、  
-フォーク元の [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) と比べてほぼ同じスループットです。
-
-しかし、`pyopenjtalk-plus` は、ROHAN において Haqumei より精度が少し高く、公平性を欠くためパフォーマンスの比較対象としていません。  
-
 ## カスタム辞書の埋め込みビルド
 
 `haqumei` はデフォルトで、ビルド時に辞書をダウンロードしてバイナリに埋め込みます。
@@ -595,15 +642,17 @@ Windows (PowerShell) の場合:
 
 ## 辞書
 
-Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) に含まれる辞書を使用しています。
+Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) に含まれる辞書を改変して使用しています。
 
 ## ライセンス
 
-`haqumei-jlabel` を除く Haqumei の Rust コードは、Apache License 2.0 の条件に基づいて配布されています。
+`haqumei-jlabel` と `haqumei-kanalizer` を除く Haqumei は、Apache License 2.0 の条件に基づいて配布されています。
+
+`haqumei` のロジックには、[tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) を移植実装したものを含んでおり、`tsukumijima/pyopenjtalk-plus` に配置された [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk) のライセンスを表明するファイルを同様に同梱しますが、`tsukumijima/pyopenjtalk-plus` の上流に対して新たに追加されたコードのライセンスを表明するわけではありません。
 
 ### 同梱ソフトウェアのライセンスと由来
 
-Haqumei は、G2P を提供するために、改変された Open JTalk の C/C++ コードを含んでいます。この同梱コードの由来とライセンスは以下の通りです。
+`haqumei` には、Grapheme-to-Phoneme (G2P) 機能を提供するために、Open JTalk の改変版に由来する C/C++ ソースコードおよび辞書データが含まれています。これら同梱されているコードの由来およびライセンスは以下の通りです。
 
 - 同梱されている Open JTalk ソースコード
   - 由来: `vendor/open_jtalk` ディレクトリに含まれるコードは、[tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) リポジトリに基づいています。これは、Open JTalkの拡張版に、さまざまなコミュニティフォーク (VOICEVOXプロジェクトなど) による改善を統合したものです。
@@ -623,6 +672,19 @@ Haqumei は、G2P を提供するために、改変された Open JTalk の C/C+
   - ライセンス: UNICODE LICENSE V3。このライセンスは `haqumei/data/unihan` にあるデータにのみ
     適用され、このプロジェクトの他の部分には適用されません。再配布要件に従い、全文は
     `haqumei/data/unihan/LICENSE` に含まれています。
+
+- バンドルされた「何」の読み推定モデル
+  - 由来: `haqumei/yomi_model` の ONNX モデルは、
+    [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk) で実装された
+    「何」の読み推定ロジックを、
+    [tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus)
+    において ONNX に変換されたものです。`include_bytes!` によってバイナリに埋め込まれます。
+  - ライセンス: n5-suzuki/pyopenjtalk のリポジトリのルートには、フォーク元である
+    [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk) の MIT ライセンス表記が
+    置かれています。一方で、`pyopenjtalk` から新たに追加されたロジックおよび変換されたモデルを対象とした個別の
+    ライセンス表明は見つけられませんでした。`haqumei` に同梱される `LICENSE-pyopenjtalk` は、
+    このモデルのライセンス表明を行うものではありません。
+
 - バンドルされた `haqumei-jlabel` ソースコード
   - 由来: `haqumei-jlabel` ディレクトリに含まれるコードは、
     [jpreprocess/jlabel](https://github.com/jpreprocess/jlabel) リポジトリをベースとしています。
@@ -630,6 +692,13 @@ Haqumei は、G2P を提供するために、改変された Open JTalk の C/C+
     `haqumei-jlabel` ディレクトリ内のコードにのみ適用され、本プロジェクトの他の部分には適用されません。再配布に関する要件に従い、BSD 3-Clause License の全文は
     `haqumei-jlabel/LICENSE` ファイルに含められています。
 
+- バンドルされた `haqumei-kanalizer` クレート
+  - 由来: `haqumei-kanalizer` に同梱されている ONNX モデルは
+    [VOICEVOX/kanalizer](https://github.com/VOICEVOX/kanalizer) をベースとしており、
+    重みは [VOICEVOX/kanalizer-model](https://huggingface.co/VOICEVOX/kanalizer-model)
+    のものを [o24s/kanalizer-onnx](https://github.com/o24s/kanalizer-onnx) で変換しています。
+  - ライセンス: `haqumei-kanalizer` クレート全体 (Rust コードと同梱の重みの両方) は
+    MIT License の下でライセンスされています。
 
 ## 謝辞
 
