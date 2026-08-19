@@ -54,6 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let src_dir = Path::new(src_dir_str);
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);
+    #[cfg(feature = "generate-bindings")]
     let target = std::env::var("TARGET").unwrap();
 
     let watch_files = [
@@ -68,6 +69,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("cargo:rerun-if-changed={}", path);
     }
 
+    // libclang が要るのは bindgen を回すときだけである
+    #[cfg(feature = "generate-bindings")]
     if target.contains("msvc") && std::env::var("LIBCLANG_PATH").is_err() {
         let error_msg = r#"
 ==============================================================================
@@ -312,52 +315,7 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
 
     let dict_indexer_path = build_dict_indexer(src_dir, out_dir, &defines, &include_dirs)?;
 
-    // println!("cargo:warning=Generating bindings for openjtalk...");
-
-    let mut bindgen_builder = bindgen::Builder::default()
-        .header("wrapper.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .blocklist_item("FP_NAN")
-        .blocklist_item("FP_INFINITE")
-        .blocklist_item("FP_ZERO")
-        .blocklist_item("FP_SUBNORMAL")
-        .blocklist_item("FP_NORMAL")
-        .allowlist_function("mecab_.*")
-        .allowlist_function("Mecab_.*")
-        .allowlist_function("JPCommon.*")
-        .allowlist_function("NJD.*")
-        .allowlist_function("njd2jpcommon")
-        .allowlist_function("njd_set_.*")
-        .allowlist_function("mecab2njd")
-        .allowlist_function("text2mecab")
-        .allowlist_type("mecab_.*")
-        .allowlist_type("Mecab.*")
-        .allowlist_type("JPCommon.*")
-        .allowlist_type("NJD.*")
-        .allowlist_var("text2mecab_.*")
-        .allowlist_var("MECAB_.*")
-        .clang_arg(format!("-I{}", src_dir_str));
-
-    for dir in &include_dirs {
-        bindgen_builder = bindgen_builder.clang_arg(format!("-I{}", src_dir.join(dir).display()));
-    }
-
-    for (key, value) in &defines {
-        let arg = if let Some(val) = value {
-            format!("-D{}={}", key, val)
-        } else {
-            format!("-D{}", key)
-        };
-        bindgen_builder = bindgen_builder.clang_arg(arg);
-    }
-
-    let bindings = bindgen_builder
-        .generate()
-        .expect("Unable to generate bindings");
-
-    bindings
-        .write_to_file(out_dir.join("bindings.rs"))
-        .expect("Couldn't write bindings to file");
+    generate_bindings(src_dir, src_dir_str, &include_dirs, &defines)?;
 
     if is_docs_rs {
         println!(
@@ -638,4 +596,103 @@ fn calculate_hash_for_extensions(
     }
 
     Ok(hex::encode(hasher.0.finalize()))
+}
+
+
+/// `src/generated/bindings.rs` を作り直す。
+///
+/// `vendor/open_jtalk` のヘッダを変えたときに再生成する。
+///
+/// ```text
+/// cargo build -p haqumei --features generate-bindings
+/// ```
+#[cfg(not(feature = "generate-bindings"))]
+fn generate_bindings(
+    _src_dir: &Path,
+    _src_dir_str: &str,
+    _include_dirs: &[&str],
+    _defines: &[(&str, Option<&str>)],
+) -> Result<(), Box<dyn Error>> {
+    Ok(())
+}
+
+#[cfg(feature = "generate-bindings")]
+fn generate_bindings(
+    src_dir: &Path,
+    src_dir_str: &str,
+    include_dirs: &[&str],
+    defines: &[(&str, Option<&str>)],
+) -> Result<(), Box<dyn Error>> {
+    let mut bindgen_builder = bindgen::Builder::default()
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .blocklist_item("FP_NAN")
+        .blocklist_item("FP_INFINITE")
+        .blocklist_item("FP_ZERO")
+        .blocklist_item("FP_SUBNORMAL")
+        .blocklist_item("FP_NORMAL")
+        .allowlist_function("mecab_.*")
+        .allowlist_function("Mecab_.*")
+        .allowlist_function("JPCommon.*")
+        .allowlist_function("NJD.*")
+        .allowlist_function("njd2jpcommon")
+        .allowlist_function("njd_set_.*")
+        .allowlist_function("mecab2njd")
+        .allowlist_function("text2mecab")
+        .allowlist_type("mecab_.*")
+        .allowlist_type("Mecab.*")
+        .allowlist_type("JPCommon.*")
+        .allowlist_type("NJD.*")
+        .allowlist_var("text2mecab_.*")
+        .allowlist_var("MECAB_.*")
+        // 生成物を 1 ファイルで全ターゲットに使えるようにするための設定。
+        //
+        // `FILE*` を受け取る関数 (`*_fprint`) があるため、放っておくと libc の
+        // 内部構造体まで生成される。`opaque_type` ではサイズが書き込まれ、その
+        // サイズは libc ごとに違う。ポインタとしてしか使わないので型ごと外し、
+        // 中身を持たない型を自前で置く。
+        .blocklist_type("FILE")
+        .blocklist_type("_IO_.*")
+        // libc の内部 typedef (`__off_t` `__uint64_t` など)。`FILE` を外すと
+        // 参照元が消えて孤児になるが、定義だけは残る。どれが残るかは環境の
+        // libc に依存するので、生成物が環境ごとに変わってしまう。
+        .blocklist_type("__.*")
+        .raw_line("/// `*_fprint` 系が受け取る `FILE*` のための不透明型。")
+        .raw_line("/// 実体を作らずポインタとしてのみ扱うため、中身は持たない。")
+        .raw_line("#[repr(C)]")
+        .raw_line("#[derive(Debug, Copy, Clone)]")
+        .raw_line("pub struct FILE {")
+        .raw_line("    _data: [u8; 0],")
+        .raw_line("    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,")
+        .raw_line("}")
+        // `size_t` は `usize` にする。固定幅で出るとターゲットに追従しない
+        .size_t_is_usize(true)
+        // レイアウト検査テストはターゲット固有のサイズを書き込むので出さない
+        .layout_tests(false)
+        .clang_arg(format!("-I{src_dir_str}"));
+
+    for dir in include_dirs {
+        bindgen_builder = bindgen_builder.clang_arg(format!("-I{}", src_dir.join(dir).display()));
+    }
+
+    for (key, value) in defines {
+        let arg = match value {
+            Some(val) => format!("-D{key}={val}"),
+            None => format!("-D{key}"),
+        };
+        bindgen_builder = bindgen_builder.clang_arg(arg);
+    }
+
+    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("generated")
+        .join("bindings.rs");
+
+    bindgen_builder
+        .generate()
+        .expect("Unable to generate bindings")
+        .write_to_file(&out)
+        .expect("Couldn't write bindings to file");
+
+    Ok(())
 }

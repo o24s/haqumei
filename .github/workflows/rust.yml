@@ -40,13 +40,6 @@ jobs:
           cache-on-failure: true
           cache-bin: false
 
-      - name: Set LIBCLANG_PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $llvmPath = (Get-Command clang).Source | Split-Path -Parent
-          echo "LIBCLANG_PATH=$llvmPath" >> $env:GITHUB_ENV
-
       - name: Set up Clang Runtime Path (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -64,3 +57,36 @@ jobs:
 
       - name: Run tests on ${{ matrix.os }}
         run: cargo test --verbose -p haqumei --no-default-features --features "embed-dictionary download-dictionary"
+
+  bindings:
+    name: Check generated bindings
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          cache-on-failure: true
+          cache-bin: false
+
+      - name: Install libclang
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      # Forgetting to regenerate after a header change leaves the declarations
+      # and the implementation out of sync, and the build still succeeds.
+      - name: Regenerate bindings
+        run: cargo build -p haqumei --features generate-bindings
+
+      - name: Fail if the committed bindings are stale
+        run: |
+          if ! git diff --exit-code -- haqumei/src/generated/bindings.rs; then
+            echo "::error::haqumei/src/generated/bindings.rs is out of date."
+            echo "::error::Run: cargo build -p haqumei --features generate-bindings"
+            exit 1
+          fi

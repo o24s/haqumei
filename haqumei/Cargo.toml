@@ -41,6 +41,8 @@ embed-dictionary = []
 build-dictionary = []
 download-dictionary = ["embed-dictionary", "dep:reqwest", "dep:tempfile"]
 serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
+# vendor/open_jtalk を変更したときに src/generated/bindings.rs を作り直す。
+generate-bindings = ["dep:bindgen"]
 
 
 [dependencies]
@@ -71,7 +73,7 @@ zstd.workspace = true
 serde = { workspace = true, optional = true }
 
 [build-dependencies]
-bindgen.workspace = true
+bindgen = { workspace = true, optional = true }
 cc.workspace = true
 digest-io.workspace = true
 dirs.workspace = true
