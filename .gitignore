@@ -1,7 +1,7 @@
 /target
 /python
 /pyopenjtalk-plus
-/compiled
+/compiled*
 
 # 辞書改善用の作業クレート。
 # ルートの Cargo.toml では members ではなく exclude に置いてあるので、
