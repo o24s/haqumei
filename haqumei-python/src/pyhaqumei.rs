@@ -21,8 +21,12 @@ use crate::{
 impl PyHaqumei {
     #[allow(clippy::too_many_arguments)]
     #[new]
+    // `normalize_unicode` の後ろはキーワード専用にする。既定値付きの真偽値が
+    // 20 個以上並ぶので、位置で渡せる形にしておくと、間に 1 つ足しただけで
+    // 利用者の呼び出しが黙ってずれる。
     #[pyo3(signature = (
         normalize_unicode = UnicodeNormalization::None_,
+        *,
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
@@ -33,6 +37,7 @@ impl PyHaqumei {
         modify_context_reading = true,
         modify_old_province_yomi = true,
         restore_loanword_kana = true,
+        protect_user_dict_readings = false,
         read_unknown_kanji = true,
         modify_numeral_reading = true,
         split_prefix_accent_phrase = true,
@@ -58,6 +63,7 @@ impl PyHaqumei {
         modify_context_reading: bool,
         modify_old_province_yomi: bool,
         restore_loanword_kana: bool,
+        protect_user_dict_readings: bool,
         read_unknown_kanji: bool,
         modify_numeral_reading: bool,
         split_prefix_accent_phrase: bool,
@@ -95,6 +101,7 @@ impl PyHaqumei {
             modify_context_reading,
             modify_old_province_yomi,
             restore_loanword_kana,
+            protect_user_dict_readings,
             read_unknown_kanji,
             modify_numeral_reading,
             split_prefix_accent_phrase,

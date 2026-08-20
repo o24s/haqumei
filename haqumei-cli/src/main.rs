@@ -152,6 +152,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_modify_old_province_yomi: bool,
 
+    /// ユーザー辞書が与えた読みを後段の補正から守る (デフォルトは無効)
+    #[arg(long)]
+    protect_user_dict_readings: bool,
+
     /// 外来語表記の仮名 (ヴィ / テュ など) の復元を無効にする (デフォルトは有効)
     #[arg(long)]
     no_restore_loanword_kana: bool,
@@ -266,6 +270,7 @@ fn main() -> Result<()> {
         modify_context_reading: !cli.options.no_modify_context_reading,
         modify_old_province_yomi: !cli.options.no_modify_old_province_yomi,
         restore_loanword_kana: !cli.options.no_restore_loanword_kana,
+        protect_user_dict_readings: cli.options.protect_user_dict_readings,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
         modify_numeral_reading: !cli.options.no_modify_numeral_reading,
         split_prefix_accent_phrase: !cli.options.no_split_prefix_accent_phrase,

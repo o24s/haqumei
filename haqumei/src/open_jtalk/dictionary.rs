@@ -206,6 +206,20 @@ pub enum DictCompilerError {
     IoError(#[from] io::Error),
 }
 
+/// 辞書ディレクトリをコンパイルし、同じディレクトリへ書き出します。
+///
+/// `path` にある `*.csv` / `*.def` から `sys.dic` などを作ります。MeCab の辞書は
+/// もとの CSV とコンパイル結果を同じディレクトリに置くので、それに合わせています。
+///
+/// 出力先を分けたい場合や、ユーザー辞書を作る場合は
+/// [`MecabDictIndexCompiler`] を直接使ってください。
+pub fn build_mecab_dictionary<P: AsRef<Path>>(path: P) -> Result<(), DictCompilerError> {
+    MecabDictIndexCompiler::new()
+        .dict_dir(&path)
+        .out_dir(&path)
+        .run()
+}
+
 /// Mecab 辞書をビルドするコンパイラ。
 #[derive(Debug)]
 pub struct MecabDictIndexCompiler {

@@ -187,8 +187,8 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
 /// 対象にならない。ここで見るのは列数が短い未知語の feature だけである。
 ///
 /// さらに表層形がカタカナの語に限る。英字の未知語がフィラーになることに
-/// [`crate::postprocess::modify_english_words`] が依存しており、そちらは
-/// 別の経路 (Kanalizer) で読みを与えるため、触ってはいけない。
+/// [`crate::postprocess::modify_english_words`] が依存しており、英字の語には
+/// Kanalizer が別の経路で読みを与えるため、触ってはいけない。
 ///
 /// # アクセント
 ///
@@ -239,8 +239,11 @@ pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_featur
 
 /// 外来語のアクセント核の位置を「後ろから 3 モーラ目」で求める。
 ///
-/// 3 モーラ以下の語は頭高になる。核の来る位置が特殊拍 (長音・撥音・促音・
-/// 小書き仮名) のときは、そこに核が立てないので 1 つ前へずらす。
+/// 3 モーラ以下の語は頭高になる。核の来る位置が特殊拍のときは、そこに核が
+/// 立てないので 1 つ前へずらす。
+///
+/// 小書き仮名は [`crate::utils::split_kana_mora`] が直前の仮名と 1 モーラに
+/// まとめるので、ここには単独で現れない。
 fn loanword_accent(pron: &str) -> i32 {
     let moras = split_kana_mora(pron);
     if moras.len() <= 3 {
@@ -254,6 +257,9 @@ fn loanword_accent(pron: &str) -> i32 {
 }
 
 /// 核が立てない特殊拍か。
+///
+/// 長音・撥音・促音の 3 つ。
+/// 二重母音の副音 (`アイ` の `イ`) を特殊拍に数える立場もあるが、裏付けを取れていない。
 fn is_special_mora(mora: &str) -> bool {
     matches!(mora, "ー" | "ン" | "ッ")
 }

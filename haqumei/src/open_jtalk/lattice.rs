@@ -25,9 +25,12 @@
 //! # }
 //! ```
 
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
+use std::ops::Range;
 
+#[cfg(doc)]
+use crate::MecabMorph;
+use crate::cursor::CharCursor;
 use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::open_jtalk::OpenJTalk;
@@ -44,14 +47,12 @@ pub struct LatticeNode {
     /// MeCab が出力した特徴量文字列。
     pub feature: String,
 
-    /// 解析対象の文字列における開始位置 (バイト)。
+    /// 解析対象の文字列における位置 (文字単位、半開区間)。
     ///
     /// 入力そのものではなく、`text2mecab` が正規化したあとの文字列を指す。
-    /// 候補どうしが重なっているかどうかを見るのに使う。
-    pub begin: usize,
-
-    /// 表層形のバイト長。
-    pub length: usize,
+    /// 候補どうしが重なっているかどうかを見るのに使う。単位は
+    /// [`MecabMorph::char_span`] と揃えてある。
+    pub char_span: Range<usize>,
 
     /// left-id.def で定義された左文脈 ID。
     pub left_id: u16,
@@ -158,17 +159,28 @@ impl OpenJTalk {
         let size = unsafe { ffi::mecab_lattice_get_size(lattice) };
         let eos = unsafe { ffi::mecab_lattice_get_eos_node(lattice) };
 
+        // `size` は解析対象のバイト長。ノードは同じ位置から複数始まるので、
+        // 前にも後ろにも進めるカーソルで位置を文字単位に直す
+        let bytes_len = size;
+        let mut cursor =
+            CharCursor::new(unsafe { std::slice::from_raw_parts(sentence, bytes_len) });
+
         // 後ろ向きの累積コスト。EOS から見て、そのノードの右側だけを足した値。
         //
         // `mecab_path_t::cost` は接続コストと右側ノードの単語コストの両方を含む
-        // (MeCab の connector->cost() 由来) ので、右側の分はここで数え切っている。
+        // (MeCab の connector->cost() 由来) ので、右側のノードの単語コストも
+        // この値に含まれる。
         // 前向き (`node.cost`) は MeCab が解析中に全ノードへ書き込んでいるため、
         // 足し合わせても二重にならない。
-        let mut backward: HashMap<*const ffi::mecab_node_t, i64> = HashMap::new();
-        backward.insert(eos as *const _, 0);
+        //
+        // ノードの id は 1 文ごとに 0 から連番で振られ (`Allocator::newNode` が
+        // `id_++`)、`clear()` で戻るので密になる。そのまま添字に使えば、ポインタを
+        // 鍵にしたハッシュ表より速く、確保も 1 回で済む。
+        let mut backward: Vec<i64> = Vec::new();
+        set_backward(&mut backward, unsafe { (*eos).id } as usize, 0);
 
-        // 位置を後ろから前へ見る。ある位置に始まるノードの右隣は必ず後ろの位置に
-        // 始まるので、この順なら右側が先に埋まっている。
+        // ある位置に始まるノードの右隣は必ず後ろの位置に始まるので、位置を後ろから
+        // 前へ見ていけば、右側は先に埋まっている。
         for pos in (0..=size).rev() {
             let mut node = unsafe { ffi::mecab_lattice_get_begin_nodes(lattice, pos) };
             while !node.is_null() {
@@ -176,14 +188,14 @@ impl OpenJTalk {
                 let mut path = unsafe { (*node).rpath };
                 while !path.is_null() {
                     let rnode = unsafe { (*path).rnode };
-                    if let Some(rest) = backward.get(&(rnode as *const _)) {
+                    if let Some(rest) = get_backward(&backward, unsafe { (*rnode).id } as usize) {
                         let total = i64::from(unsafe { (*path).cost }) + rest;
                         best = Some(best.map_or(total, |b: i64| b.min(total)));
                     }
                     path = unsafe { (*path).rnext };
                 }
                 if let Some(best) = best {
-                    backward.insert(node as *const _, best);
+                    set_backward(&mut backward, unsafe { (*node).id } as usize, best);
                 }
                 node = unsafe { (*node).bnext };
             }
@@ -204,7 +216,7 @@ impl OpenJTalk {
                     node = unsafe { (*node).bnext };
                     continue;
                 }
-                let Some(rest) = backward.get(&(node as *const _)).copied() else {
+                let Some(rest) = get_backward(&backward, unsafe { (*node).id } as usize) else {
                     // EOS へ到達できないノード。経路を作れないので飛ばす
                     node = unsafe { (*node).bnext };
                     continue;
@@ -228,10 +240,16 @@ impl OpenJTalk {
                         .into_owned()
                 };
 
-                let begin = if surface_ptr.is_null() {
-                    pos
+                // sentence と同じバッファを指すノードだけ位置に直す。
+                // 外部で確保されたノードの surface はこの範囲の外を指しうる
+                let char_span = if !surface_ptr.is_null()
+                    && (surface_ptr as usize) >= sentence as usize
+                    && (surface_ptr as usize) - sentence as usize + length <= bytes_len
+                {
+                    let byte_start = (surface_ptr as usize) - sentence as usize;
+                    cursor.char_at(byte_start)..cursor.char_at(byte_start + length)
                 } else {
-                    (surface_ptr as usize).saturating_sub(sentence as usize)
+                    0..0
                 };
                 #[allow(clippy::useless_conversion)]
                 let delta = i64::from(unsafe { (*node).cost }) + rest - total;
@@ -239,8 +257,7 @@ impl OpenJTalk {
                 out.push(LatticeNode {
                     surface,
                     feature,
-                    begin,
-                    length,
+                    char_span,
                     left_id: unsafe { (*node).lcAttr },
                     right_id: unsafe { (*node).rcAttr },
                     pos_id: unsafe { (*node).posid },
@@ -258,3 +275,28 @@ impl OpenJTalk {
         out
     }
 }
+
+/// 後ろ向きの累積コストを置く場所が無ければ広げる。
+///
+/// 最初に入れるのは EOS で、その id は 1 文の中で最大になる。そこで必要な
+/// 大きさになるので、以降は広げ直さない。
+fn set_backward(backward: &mut Vec<i64>, id: usize, value: i64) {
+    if backward.len() <= id {
+        backward.resize(id + 1, UNREACHED);
+    }
+    backward[id] = value;
+}
+
+/// 後ろ向きの累積コストを引く。EOS へ到達できないノードは `None`。
+fn get_backward(backward: &[i64], id: usize) -> Option<i64> {
+    match backward.get(id) {
+        Some(&v) if v != UNREACHED => Some(v),
+        _ => None,
+    }
+}
+
+/// EOS へ到達できないことを表す値。
+///
+/// 走査の途中はまだ決まっていないノードも同じ値だが、走査を終えた時点で残って
+/// いるものは、そこから EOS までの経路が無いノードである。
+const UNREACHED: i64 = i64::MAX;

@@ -891,6 +891,7 @@ class Haqumei:
     def __init__(
         self,
         normalize_unicode: UnicodeNormalization = UnicodeNormalization.None_,
+        *,
         use_read_as_pron: bool = False,
         revert_long_vowels: bool = False,
         revert_yotsugana: bool = False,
@@ -901,6 +902,7 @@ class Haqumei:
         modify_context_reading: bool = True,
         modify_old_province_yomi: bool = True,
         restore_loanword_kana: bool = True,
+        protect_user_dict_readings: bool = False,
         read_unknown_kanji: bool = True,
         modify_numeral_reading: bool = True,
         split_prefix_accent_phrase: bool = True,

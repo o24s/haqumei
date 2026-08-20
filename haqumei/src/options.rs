@@ -119,6 +119,29 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効になっています。
     pub restore_loanword_kana: bool,
 
+    /// ユーザー辞書が与えた読みを、後段の補正から守るかどうか
+    ///
+    /// 有効にすると、ユーザー辞書から引かれた形態素の `read` / `pron` /
+    /// `mora_size` を保護します。
+    ///
+    /// ユーザー辞書に読みを書いても、後段の補正がそれを書き換えることがあります。
+    /// このオプションは、書いた読みをそのまま残すためのものです。
+    ///
+    ///   ユーザー辞書に 十分,...,ジップン と書いた場合
+    ///     無効: ジュウブン (文脈読みの補正が働く)
+    ///     有効: ジップン
+    ///
+    /// 守るかどうかは表層形ではなく位置で決まり、ユーザー辞書から引かれた形態素と
+    /// 重なる範囲だけが対象になります。そのため、同じ表層形が同じ文に現れても、
+    /// システム辞書から引かれたほうは守られません。
+    ///
+    /// `use_read_as_pron` / `revert_long_vowels` / `revert_yotsugana` /
+    /// `normalize_iu` は表記の慣習を選ぶオプションで、呼び出し側の明示的な
+    /// 指定なので対象外です。アクセントも対象外です。
+    ///
+    /// デフォルトでは無効です。
+    pub protect_user_dict_readings: bool,
+
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
     /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
@@ -473,6 +496,7 @@ impl Default for HaqumeiOptions {
             modify_old_province_yomi: true,
             modify_numeral_reading: true,
             restore_loanword_kana: true,
+            protect_user_dict_readings: false,
             read_unknown_kanji: true,
             split_prefix_accent_phrase: true,
             retreat_acc_nuc: true,

@@ -8,36 +8,7 @@ mod ffi {
     include!("generated/bindings.rs");
 }
 
-unsafe extern "C" {
-    fn setup_cpp_redirect();
-    fn teardown_cpp_redirect();
-}
-
-/// This function is intended to be called from C code via FFI.
-///
-/// # Safety
-///
-/// The caller must ensure that:
-/// - `msg` is a valid pointer to a null-terminated C string.
-/// - The memory pointed to by `msg` is accessible and not modified concurrently during this call.
-#[unsafe(no_mangle)]
-unsafe extern "C" fn haqumei_rust_print(msg: *const libc::c_char, is_stderr: libc::c_int) {
-    unsafe {
-        if msg.is_null() {
-            return;
-        }
-        let c_str = std::ffi::CStr::from_ptr(msg);
-        let s = c_str.to_string_lossy();
-        let s = s.trim_end();
-
-        if is_stderr != 0 {
-            log::warn!("[OpenJTalk] {}", s);
-        } else {
-            log::info!("[OpenJTalk] {}", s);
-        }
-    }
-}
-
+mod cursor;
 mod data;
 pub mod errors;
 pub mod features;
@@ -49,6 +20,7 @@ pub mod options;
 pub mod phoneme;
 mod postprocess;
 pub mod prosody;
+mod redirect_log;
 pub mod utils;
 pub mod word_phoneme;
 
@@ -61,20 +33,23 @@ pub use haqumei_jlabel::Label;
 use haqumei_kanalizer::Kanalizer;
 use moka::sync::Cache;
 
+use std::collections::HashMap;
+
 pub use features::NjdFeature;
 pub use open_jtalk::{
-    LatticeNode, MecabDictIndexCompiler, MecabMorph, OpenJTalk, unset_user_dictionary,
-    update_global_dictionary,
+    LatticeNode, MecabDictIndexCompiler, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk,
+    njd_char_spans, unset_user_dictionary, update_global_dictionary,
 };
 pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
+pub(crate) use redirect_log::{setup_cpp_redirect, teardown_cpp_redirect};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, WordPhonemeProsody};
 
 use crate::{
     errors::HaqumeiError,
     nani_predict::NaniPredictor,
-    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY},
+    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY, reading_protection::protected_indices},
     postprocess::{
         modify_acc_after_chaining, modify_context_reading, modify_english_words,
         modify_filler_accent, modify_fraction_denominator, modify_old_province_yomi,
@@ -94,7 +69,8 @@ static KANALIZER: LazyLock<Mutex<Kanalizer>> =
 
 /// Open JTalk をバインディングした G2P エンジン。
 ///
-/// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
+/// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書をベースに、様々な変更を加えています。
+/// 詳細は README を参照してください。
 ///
 /// [Haqumei::with_options], [HaqumeiOptions] を使うことで、出力をカスタマイズできます。
 pub struct Haqumei {
@@ -733,9 +709,14 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let njd_features = self.open_jtalk.run_frontend(text)?;
+        if self.options.protect_user_dict_readings {
+            let (njd_features, morphs) = self.open_jtalk.run_frontend_detailed(text)?;
+            let protected = protected_indices(&njd_features, &morphs);
+            return self.apply_postprocessing(text, njd_features, &protected, &morphs);
+        }
 
-        self.apply_postprocessing(text, njd_features)
+        let njd_features = self.open_jtalk.run_frontend(text)?;
+        self.apply_postprocessing(text, njd_features, &HashMap::new(), &[])
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -755,7 +736,15 @@ impl Haqumei {
 
         let (njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
 
-        Ok((self.apply_postprocessing(text, njd_features)?, mecab_morphs))
+        let protected = if self.options.protect_user_dict_readings {
+            protected_indices(&njd_features, &mecab_morphs)
+        } else {
+            HashMap::new()
+        };
+        Ok((
+            self.apply_postprocessing(text, njd_features, &protected, &mecab_morphs)?,
+            mecab_morphs,
+        ))
     }
 
     /// テキストから [haqumei_jlabel::Label] のリストとしてフルコンテキストラベルを抽出する。
@@ -792,8 +781,25 @@ impl Haqumei {
         &mut self,
         text: &str,
         mut njd_features: Vec<NjdFeature>,
+        protected: &HashMap<usize, usize>,
+        morphs: &[MecabMorph],
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let options = self.options;
+
+        // ユーザー辞書が与えた読みを、位置とともに控えつつ、読みを決める補正が
+        // 終わったところで書き戻す。補正の 1 つ 1 つに条件を書かないので、
+        // 補正が増えても手を入れずに済む。
+        //
+        // また、添字ではなく位置で持つのは、補正が形態素を足したり消したりするため。
+        // `njd_char_spans` を前後で 2 回使えば、そのずれに影響されない。
+        let saved: HashMap<usize, (String, String, i32)> = protected
+            .iter()
+            .filter_map(|(&start, &idx)| {
+                njd_features
+                    .get(idx)
+                    .map(|f| (start, (f.read.clone(), f.pron.clone(), f.mora_size)))
+            })
+            .collect();
 
         if options.modify_filler_accent {
             modify_filler_accent(&mut njd_features);
@@ -825,6 +831,31 @@ impl Haqumei {
         }
         if options.read_unknown_kanji {
             read_unknown_kanji(&mut njd_features);
+        }
+
+        // アクセントの補正は mora_size を見るので、書き戻すならその前でなければならない。
+        //
+        // このあとの `revert_pron_to_read` と `normalize_iu` は表記の慣習を選ぶ
+        // オプションで、呼び出し側の明示的な指定なので守らない。
+        if !saved.is_empty() {
+            // 形態素の数が変わっていなければ添字も動いていないとは言い切れないので、再計算する。
+            for (idx, span) in njd_char_spans(&njd_features, morphs)
+                .into_iter()
+                .enumerate()
+            {
+                // 位取りとして差し込まれた形態素は元の文字を持たず、区間が空になる。
+                // 開始位置は隣の形態素と同じなので、除かないと隣の読みを書き込む
+                if span.start == span.end {
+                    continue;
+                }
+                if let Some((read, pron, mora_size)) = saved.get(&span.start)
+                    && let Some(f) = njd_features.get_mut(idx)
+                {
+                    f.read = read.clone();
+                    f.pron = pron.clone();
+                    f.mora_size = *mora_size;
+                }
+            }
         }
 
         if options.split_prefix_accent_phrase {
@@ -958,59 +989,4 @@ impl Haqumei {
         /// フルコンテキストラベル抽出のバッチ処理。
         extract_fullcontext_string_batch => extract_fullcontext_string -> Vec<String>
     );
-}
-
-#[cfg(test)]
-mod log_redirect_tests {
-    use std::sync::{Mutex, OnceLock};
-
-    static CAPTURED: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
-
-    struct Capture;
-
-    impl log::Log for Capture {
-        fn enabled(&self, _: &log::Metadata) -> bool {
-            true
-        }
-        fn log(&self, record: &log::Record) {
-            CAPTURED
-                .get_or_init(Default::default)
-                .lock()
-                .unwrap()
-                .push(format!("{} {}", record.level(), record.args()));
-        }
-        fn flush(&self) {}
-    }
-
-    /// vendor 側の出力が `log` に届くこと。
-    ///
-    /// `redirect.h` の `#define` が `printf` / `fprintf` を `haqumei_redirect_*` に
-    /// 置き換え、そこからこの関数に来る。経路が切れてもビルドもテストも通って
-    /// しまい、診断だけが黙って消えるので、ここで見張る。
-    #[test]
-    fn test_c_output_reaches_log() {
-        CAPTURED.get_or_init(Default::default);
-        static LOGGER: Capture = Capture;
-        let _ = log::set_logger(&LOGGER);
-        log::set_max_level(log::LevelFilter::Trace);
-
-        let out = std::ffi::CString::new("from-c 1\n").unwrap();
-        let err = std::ffi::CString::new("from-c 2\n").unwrap();
-
-        // SAFETY: どちらも終端付きの有効な C 文字列を指す。
-        unsafe {
-            super::haqumei_rust_print(out.as_ptr(), 0);
-            super::haqumei_rust_print(err.as_ptr(), 1);
-        }
-
-        let captured = CAPTURED.get().unwrap().lock().unwrap().clone();
-        assert!(
-            captured.contains(&"INFO [OpenJTalk] from-c 1".to_string()),
-            "stdout 側が log に届いていない: {captured:?}"
-        );
-        assert!(
-            captured.contains(&"WARN [OpenJTalk] from-c 2".to_string()),
-            "stderr 側が log に届いていない: {captured:?}"
-        );
-    }
 }

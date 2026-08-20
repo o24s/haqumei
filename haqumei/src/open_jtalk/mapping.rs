@@ -1,4 +1,5 @@
 use rustc_hash::FxHashMap;
+use std::ops::Range;
 
 use crate::errors::HaqumeiError;
 use crate::ffi;
@@ -351,11 +352,11 @@ pub(super) fn consume_odori_morphs(
 
 #[rustfmt::skip]
 #[inline(always)]
-pub(super) fn consume_mismatched_morphs<T: IntoPhonemeMapItem>(
+pub(super) fn consume_mismatched_morphs<'a>(
     morphs: &[MecabMorph],
     morph_idx: usize,
     current_map_word: &str,
-    remaining_mapping: &[Option<T>],
+    remaining_words: impl Iterator<Item = &'a str>,
 ) -> usize {
     let current_morph = &morphs[morph_idx];
 
@@ -397,8 +398,7 @@ pub(super) fn consume_mismatched_morphs<T: IntoPhonemeMapItem>(
         digit_maps_count += 1;
     }
     
-    for map in remaining_mapping.iter().flatten() {
-        let w = map.word();
+    for w in remaining_words {
         if matches!(
             w,
             "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" | "九" |
@@ -439,6 +439,279 @@ pub(super) fn consume_mismatched_morphs<T: IntoPhonemeMapItem>(
     }
 
     consumed
+}
+
+/// 突き合わせのために、算用数字と漢数字を同じ文字へ寄せる。
+///
+/// `njd_set_digit` は `５` を `五` に直すので、そのままでは表層形が一致しない。
+/// 位置を突き合わせるときだけ同じものとして扱う。
+fn number_key(c: char) -> Option<char> {
+    Some(match c {
+        '０' | '0' | '〇' | '○' | '零' => '〇',
+        '１' | '1' | '一' | '壱' => '一',
+        '２' | '2' | '二' | '弐' => '二',
+        '３' | '3' | '三' | '参' => '三',
+        '４' | '4' | '四' => '四',
+        '５' | '5' | '五' => '五',
+        '６' | '6' | '六' => '六',
+        '７' | '7' | '七' => '七',
+        '８' | '8' | '八' => '八',
+        '９' | '9' | '九' => '九',
+        '十' | '百' | '千' | '万' | '億' | '兆' => c,
+        _ => return None,
+    })
+}
+
+/// 表層形が数字だけでできているか。
+fn is_number_surface(surface: &str) -> bool {
+    !surface.is_empty() && surface.chars().all(|c| number_key(c).is_some())
+}
+
+/// 数詞の並びを、突き合わせ用の文字列に直す。
+fn number_keys(surface: &str) -> Vec<char> {
+    surface.chars().filter_map(number_key).collect()
+}
+
+/// 編集距離の表が入力の長さの二乗で膨らまないための上限。通常の数値表記を
+/// 十分に上回る大きさにしてある。
+const MAX_NUMBER_BLOCK: usize = 128;
+
+/// 数詞の並びについて、NJD の形態素それぞれが消費する MeCab 形態素を決める。
+///
+/// `njd_set_digit` は位取りの文字を差し込む一方 (`２０` -> `二 十`)、ゼロや
+/// 助数詞との結合では入力を吸収する。差し込みと吸収があるので、1 つずつ順に
+/// 対応させると以降がずれる。並び全体で編集距離が最小になる経路を求め、
+/// 差し込まれた形態素には入力を割り当てず、吸収された入力は直前の形態素に
+/// まとめる。
+///
+/// 実装は `pyopenjtalk-plus` の `_align_number_block` に倣った。
+fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usize>> {
+    let (n, m) = (source.len(), target.len());
+    let mut assignments: Vec<Vec<usize>> = vec![Vec::new(); m];
+
+    // 極端に長い数詞では表を作らず、入力順に 1 対 1 で消費する。
+    // NJD 側が少ない場合の余りは最後の形態素へ集約し、入力を取りこぼさない
+    if n > MAX_NUMBER_BLOCK || m > MAX_NUMBER_BLOCK {
+        for (i, assignment) in (0..n).zip(0..) {
+            let _ = assignment;
+            assignments[i.min(m.saturating_sub(1))].push(i);
+        }
+        return assignments;
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum Action {
+        None,
+        Align,
+        Delete,
+        Insert,
+    }
+
+    let mut cost = vec![vec![0usize; m + 1]; n + 1];
+    let mut action = vec![vec![Action::None; m + 1]; n + 1];
+    for i in 1..=n {
+        cost[i][0] = i;
+        action[i][0] = Action::Delete;
+    }
+    for j in 1..=m {
+        cost[0][j] = j;
+        action[0][j] = Action::Insert;
+    }
+    for i in 1..=n {
+        for j in 1..=m {
+            let substitution = usize::from(source[i - 1] != target[j - 1]);
+            let candidates = [
+                (cost[i - 1][j - 1] + substitution, Action::Align),
+                (cost[i - 1][j] + 1, Action::Delete),
+                (cost[i][j - 1] + 1, Action::Insert),
+            ];
+            let (best, best_action) = candidates
+                .into_iter()
+                .min_by_key(|(c, a)| {
+                    (
+                        *c,
+                        match a {
+                            Action::Align => 0,
+                            Action::Delete => 1,
+                            _ => 2,
+                        },
+                    )
+                })
+                .unwrap();
+            cost[i][j] = best;
+            action[i][j] = best_action;
+        }
+    }
+
+    // 経路を逆にたどり、入力順へ戻す
+    let mut steps: Vec<(Action, Option<usize>, Option<usize>)> = Vec::new();
+    let (mut i, mut j) = (n, m);
+    while i > 0 || j > 0 {
+        match action[i][j] {
+            Action::Align => {
+                steps.push((Action::Align, Some(i - 1), Some(j - 1)));
+                i -= 1;
+                j -= 1;
+            }
+            Action::Delete => {
+                steps.push((Action::Delete, Some(i - 1), None));
+                i -= 1;
+            }
+            _ => {
+                steps.push((Action::Insert, None, Some(j - 1)));
+                j -= 1;
+            }
+        }
+    }
+    steps.reverse();
+
+    // 吸収された入力 (delete) は直前の形態素へまとめる
+    let mut pending: Vec<usize> = Vec::new();
+    let mut previous: Option<usize> = None;
+    for (act, src, tgt) in steps {
+        match act {
+            Action::Align => {
+                let tgt = tgt.unwrap();
+                assignments[tgt].append(&mut pending);
+                assignments[tgt].push(src.unwrap());
+                previous = Some(tgt);
+            }
+            Action::Delete => match previous {
+                Some(prev) => assignments[prev].push(src.unwrap()),
+                None => pending.push(src.unwrap()),
+            },
+            _ => {}
+        }
+    }
+    if let Some(prev) = previous {
+        assignments[prev].extend(pending);
+    } else if let Some(first) = assignments.first_mut() {
+        first.extend(pending);
+    }
+
+    assignments
+}
+
+/// NJD の形態素列に、解析対象の文字列における位置 (文字単位、半開区間) を与える。
+///
+/// [`MecabMorph::char_span`] は MeCab のノードがバッファのどこを指すかで決まるが、
+/// NJD は数字を正規化するので (「１４７３」-> 千 四 百 七 十 三)、NJD の形態素に
+/// そのまま対応するバイト位置は無い。そこで MeCab の形態素列と突き合わせ、
+/// 各 NJD 形態素が元の文字列のどこにあたるかを求める。
+///
+/// 突き合わせは 4 通りになる。表層形がそのまま一致する場合、NJD が複数の
+/// 形態素を 1 語にまとめた場合、数詞の並び、踊り字の展開である。
+/// 数詞は [`align_number_block`]、踊り字は [`consume_odori_morphs`] が扱う。
+///
+/// 対応が取れなかった形態素には空の区間 (`n..n`) を与える。位取りとして
+/// 差し込まれた形態素 (`２０` の `十`) がこれにあたる。
+pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Range<usize>> {
+    let mut spans: Vec<Range<usize>> = vec![0..0; features.len()];
+    let mut morph_idx = 0;
+    let mut idx = 0;
+
+    while idx < features.len() {
+        // NJD の形態素列に現れない morph (空白など) を先に進める
+        while morphs.get(morph_idx).is_some_and(|m| m.is_ignored) {
+            morph_idx += 1;
+        }
+
+        let word = features[idx].string.as_str();
+        let Some(morph) = morphs.get(morph_idx) else {
+            let end = morphs.last().map_or(0, |m| m.char_span.end);
+            spans[idx] = end..end;
+            idx += 1;
+            continue;
+        };
+
+        // 数詞の並びは、まとめて突き合わせる
+        if is_number_surface(word) && is_number_surface(&morph.surface) {
+            let feature_end = (idx..features.len())
+                .find(|&i| !is_number_surface(&features[i].string))
+                .unwrap_or(features.len());
+            let mut morph_end = morph_idx;
+            while morphs
+                .get(morph_end)
+                .is_some_and(|m| m.is_ignored || is_number_surface(&m.surface))
+            {
+                morph_end += 1;
+            }
+            let source_indices: Vec<usize> = (morph_idx..morph_end)
+                .filter(|&i| !morphs[i].is_ignored)
+                .collect();
+            let source: Vec<Vec<char>> = source_indices
+                .iter()
+                .map(|&i| number_keys(&morphs[i].surface))
+                .collect();
+            let target: Vec<Vec<char>> = features[idx..feature_end]
+                .iter()
+                .map(|f| number_keys(&f.string))
+                .collect();
+
+            // 位取りとして差し込まれた形態素は元の文字を持たないので、直前の
+            // 形態素の終端に空の区間として置く。並びの先頭に置くと、そこから
+            // 始まる形態素と開始位置が同じになる
+            let mut at = morph.char_span.start;
+            for (offset, assigned) in align_number_block(&source, &target).into_iter().enumerate() {
+                spans[idx + offset] = match (
+                    assigned
+                        .first()
+                        .map(|&i| morphs[source_indices[i]].char_span.start),
+                    assigned
+                        .last()
+                        .map(|&i| morphs[source_indices[i]].char_span.end),
+                ) {
+                    (Some(start), Some(end)) => {
+                        at = end;
+                        start..end
+                    }
+                    _ => at..at,
+                };
+            }
+            idx = feature_end;
+            morph_idx = morph_end;
+            continue;
+        }
+
+        let start = morph.char_span.start;
+        let consumed = if word == morph.surface {
+            1
+        } else if word.starts_with(&morph.surface) {
+            // NJD が複数の morph を 1 語にまとめた
+            let mut matched = 0;
+            let mut consumed = 0;
+            while let Some(m) = morphs.get(morph_idx + consumed) {
+                if m.is_ignored {
+                    consumed += 1;
+                    continue;
+                }
+                if !word[matched..].starts_with(&m.surface) {
+                    break;
+                }
+                matched += m.surface.len();
+                consumed += 1;
+                if matched == word.len() {
+                    break;
+                }
+            }
+            consumed
+        } else if has_odori_chars(&morph.surface) {
+            consume_odori_morphs(morphs, morph_idx, word)
+        } else {
+            1
+        };
+
+        let end = morphs[morph_idx..morph_idx + consumed]
+            .iter()
+            .map(|m| m.char_span.end)
+            .max()
+            .unwrap_or(start);
+        spans[idx] = start..end;
+        morph_idx += consumed;
+        idx += 1;
+    }
+
+    spans
 }
 
 impl OpenJTalk {
@@ -954,7 +1227,10 @@ impl OpenJTalk {
                         &morphs,
                         morph_idx,
                         map.word(),
-                        &mapping_options[idx + 1..],
+                        mapping_options[idx + 1..]
+                            .iter()
+                            .flatten()
+                            .map(|m| m.word()),
                     );
                 }
 

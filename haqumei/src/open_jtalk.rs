@@ -4,14 +4,17 @@ mod jpcommon_label;
 mod jpcommon_push_word;
 pub(crate) mod jpcommon_rule;
 mod lattice;
-mod mapping;
+pub(crate) mod mapping;
 mod mecab;
 mod model;
-mod njd;
+pub(crate) mod morph;
+pub(crate) mod njd;
+pub(crate) mod reading_protection;
 
 #[cfg(test)]
 mod tests;
 
+use crate::cursor::CharCursor;
 use crate::errors::HaqumeiError;
 use crate::open_jtalk::{
     jpcommon::JpCommon,
@@ -35,11 +38,11 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
+pub use dictionary::build_mecab_dictionary;
 pub use dictionary::{Dictionary, MecabDictIndexCompiler};
 pub use lattice::LatticeNode;
-
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+pub use mapping::njd_char_spans;
+pub use morph::{MecabMorph, NO_DICTIONARY_INDEX};
 
 #[cfg(doc)]
 use crate::Haqumei;
@@ -127,37 +130,6 @@ pub struct OpenJTalk {
     /// [update_global_dictionary] で勝手に差し替えられては困るので追従しない。
     pub(crate) follows_global: bool,
     _marker: PhantomData<Cell<()>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct MecabMorph {
-    /// 形態素の表層形。
-    pub surface: String,
-
-    /// MeCab が出力した特徴量文字列。
-    pub feature: String,
-
-    /// left-id.def で定義された左文脈 ID。
-    pub left_id: u16,
-
-    /// right-id.def で定義された右文脈 ID。
-    pub right_id: u16,
-
-    /// pos-id.def で定義された品詞 ID。
-    pub pos_id: u16,
-
-    /// 辞書に定義された単語コスト。
-    pub word_cost: i16,
-
-    /// MeCab が未知語 (`MECAB_UNK_NODE`) と判定したかどうか。
-    pub is_unknown: bool,
-
-    /// `pyopenjtalk` のパイプラインで無視される対象かどうか。 ("記号,空白")
-    ///
-    /// ここでは、`pyopenjtalk` は Mecab の出力に対して、どのように必要のないトークンを除去していたか、
-    /// ということをフラグによって明確にするものであって、JPCommon の音素割り当てと実際には関係がありません。
-    pub is_ignored: bool,
 }
 
 impl OpenJTalk {
@@ -995,10 +967,23 @@ impl OpenJTalk {
             ));
         }
 
+        // ノードは解析対象のバッファを指すので、バイト位置を文字位置に直す。
+        // `char_span` を文字単位で持つのは、バイト単位だと利用者が入力を切り出す
+        // ときに UTF-8 の境界を自分で気にすることになるため。
+        //
+        // 対応表を作る必要はなく、最良経路のノードはバイト位置の昇順に並ぶので、
+        // カーソルを持って前へ進めるだけで済む。
+        let analysed = buffer
+            .iter()
+            .position(|&b| b == 0)
+            .map_or(&buffer[..], |end| &buffer[..end]);
+        let mut cursor = CharCursor::new(analysed);
+
         // Lattice Traversal
         let morphs = unsafe {
             let mecab_ptr = self.mecab.inner.as_ptr();
             let lattice = (*mecab_ptr).lattice as *mut ffi::mecab_lattice_t;
+            let base = analysed.as_ptr() as usize;
 
             let mut node = ffi::mecab_lattice_get_bos_node(lattice);
 
@@ -1010,6 +995,19 @@ impl OpenJTalk {
                 if stat != 2 && stat != 3 {
                     let surface_ptr = (*node).surface;
                     let length = (*node).length as usize;
+                    // sentence と同じバッファを指すノードだけ位置に直す。
+                    // 外部で確保されたノードの surface はこの範囲の外を指しうる
+                    let (char_start, char_end) = if !surface_ptr.is_null()
+                        && (surface_ptr as usize) >= base
+                        && (surface_ptr as usize) - base + length <= analysed.len()
+                    {
+                        let byte_start = (surface_ptr as usize) - base;
+                        let start = cursor.char_at(byte_start);
+                        let end = cursor.char_at(byte_start + length);
+                        (start, end)
+                    } else {
+                        (0, 0)
+                    };
 
                     let surface = if !surface_ptr.is_null() && length > 0 {
                         let bytes = std::slice::from_raw_parts(surface_ptr as *const u8, length);
@@ -1047,8 +1045,9 @@ impl OpenJTalk {
                         && surface.chars().all(|c| !c.is_alphanumeric())
                         && surface.chars().count() > 1
                     {
-                        for ch in surface.chars() {
+                        for (offset, ch) in surface.chars().enumerate() {
                             let ch_str = ch.to_string();
+                            let span = char_start + offset..char_start + offset + 1;
 
                             if let Some(known_feature) = get_known_symbol_feature(&ch_str) {
                                 let compatible_feature = format!("{},{}", ch_str, known_feature);
@@ -1059,6 +1058,10 @@ impl OpenJTalk {
                                     right_id: (*node).rcAttr,
                                     pos_id: (*node).posid,
                                     word_cost: (*node).wcost,
+                                    char_span: span.clone(),
+                                    // 既知記号の feature で作り直しているので、
+                                    // もとのノードを引いた辞書とは無関係になる
+                                    dictionary_index: 0,
                                     is_unknown: false,
                                     is_ignored: ch.is_whitespace(),
                                 });
@@ -1071,6 +1074,8 @@ impl OpenJTalk {
                                     right_id: (*node).rcAttr,
                                     pos_id: (*node).posid,
                                     word_cost: (*node).wcost,
+                                    char_span: span,
+                                    dictionary_index: (*node).dictionary_index,
                                     is_unknown: true,
                                     is_ignored,
                                 });
@@ -1085,6 +1090,8 @@ impl OpenJTalk {
                             right_id: (*node).rcAttr,
                             pos_id: (*node).posid,
                             word_cost: (*node).wcost,
+                            char_span: char_start..char_end,
+                            dictionary_index: (*node).dictionary_index,
                             is_unknown,
                             is_ignored,
                         });
@@ -1417,13 +1424,4 @@ impl OpenJTalk {
         /// フルコンテキストラベル抽出のバッチ処理。
         extract_fullcontext_string_batch => extract_fullcontext_string -> Vec<String>
     );
-}
-
-pub fn build_mecab_dictionary<P: AsRef<Path>>(
-    path: P,
-) -> Result<(), dictionary::DictCompilerError> {
-    MecabDictIndexCompiler::new()
-        .dict_dir(&path)
-        .out_dir(&path)
-        .run()
 }
