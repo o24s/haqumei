@@ -598,7 +598,6 @@ fn calculate_hash_for_extensions(
     Ok(hex::encode(hasher.0.finalize()))
 }
 
-
 /// `src/generated/bindings.rs` を作り直す。
 ///
 /// `vendor/open_jtalk` のヘッダを変えたときに再生成する。

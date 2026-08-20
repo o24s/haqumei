@@ -105,9 +105,9 @@ struct DictArgs {
     #[arg(long, value_name = "DIR")]
     dict_dir: Option<PathBuf>,
 
-    /// ユーザー辞書のパス (.csv)
+    /// ユーザー辞書のパス。複数回指定できる
     #[arg(long, value_name = "FILE")]
-    user_dict: Option<PathBuf>,
+    user_dict: Vec<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -287,11 +287,11 @@ fn main() -> Result<()> {
     };
 
     let mut haqumei = match (cli.dict.dict_dir, cli.dict.user_dict) {
-        (Some(dict), Some(user_dict)) => {
-            Haqumei::from_path_with_userdict(dict, user_dict, haqumei_options)
+        (Some(dict), user_dicts) if !user_dicts.is_empty() => {
+            Haqumei::from_paths(dict, &user_dicts, haqumei_options)
                 .context("Failed to load dictionary and user dictionary")?
         }
-        (Some(dict), None) => {
+        (Some(dict), _) => {
             Haqumei::from_path(dict, haqumei_options).context("Failed to load custom dictionary")?
         }
         _ => Haqumei::with_options(haqumei_options)

@@ -135,6 +135,12 @@ impl PyDictionary {
     }
 
     #[staticmethod]
+    fn from_paths(dict_dir: PathBuf, user_dicts: Vec<PathBuf>) -> PyResult<Self> {
+        let inner = Dictionary::from_paths(&dict_dir, &user_dicts).map_err(to_py_err)?;
+        Ok(Self { inner })
+    }
+
+    #[staticmethod]
     fn from_embedded() -> PyResult<Self> {
         {
             let inner = Dictionary::from_embedded().map_err(to_py_err)?;

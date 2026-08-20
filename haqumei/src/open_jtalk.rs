@@ -223,6 +223,14 @@ impl OpenJTalk {
         Self::from_path_inner(dict_dir, Some(user_dict))
     }
 
+    /// 指定された辞書と、0 個以上のユーザー辞書から [OpenJTalk] を生成します。
+    pub fn from_paths<P: AsRef<Path>, Q: AsRef<Path>>(
+        dict_dir: P,
+        user_dicts: &[Q],
+    ) -> Result<Self, HaqumeiError> {
+        Self::from_dictionary(Dictionary::from_paths(dict_dir.as_ref(), user_dicts)?)
+    }
+
     fn from_path_inner<P: AsRef<Path>, Q: AsRef<Path>>(
         dict_dir: P,
         user_dict: Option<Q>,

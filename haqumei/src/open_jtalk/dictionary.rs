@@ -23,32 +23,77 @@ pub struct Dictionary {
     pub(crate) dict_dir: PathBuf,
 }
 
+/// パスを絶対パスに直す。
+///
+/// 見つからないときと、それ以外の理由で解決できないときを分ける。
+fn resolve_path(path: &Path) -> Result<PathBuf, HaqumeiError> {
+    path.canonicalize().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => HaqumeiError::DictionaryNotFound {
+            path: path.to_path_buf(),
+        },
+        _ => HaqumeiError::InvalidDictionaryPath(format!("{}: {e}", path.display())),
+    })
+}
+
 impl Dictionary {
     /// システム辞書パス、ユーザー辞書パスから [Dictionary] を生成します。
+    ///
+    /// ユーザー辞書を複数使う場合は [`Dictionary::from_paths`] を使ってください。
+    pub fn from_path<P: AsRef<Path>>(
+        dict_dir: P,
+        user_dict: Option<P>,
+    ) -> Result<Self, HaqumeiError> {
+        match user_dict {
+            Some(user_dict) => Self::from_paths(dict_dir.as_ref(), &[user_dict]),
+            None => Self::from_paths::<&Path>(dict_dir.as_ref(), &[]),
+        }
+    }
+
+    /// システム辞書と、0 個以上のユーザー辞書から [Dictionary] を生成します。
     ///
     /// パスは絶対パスに解決してから Mecab に渡します。Mecab は辞書内のファイルを
     /// 開く際に相対パスを解釈できるとは限らず、またプロセスのカレントディレクトリが
     /// 変わると同じ [Dictionary] が別の辞書を指しかねないためです。
     /// 保持する `dict_dir` も解決後のパスになります。
-    pub fn from_path<P: AsRef<Path>>(
-        dict_dir: P,
-        user_dict: Option<P>,
+    ///
+    /// `dict_dir` がディレクトリでないとき、ユーザー辞書がファイルでないとき、
+    /// パスが存在しないときは [`HaqumeiError`] を返します。
+    pub fn from_paths<P: AsRef<Path>>(
+        dict_dir: &Path,
+        user_dicts: &[P],
     ) -> Result<Self, HaqumeiError> {
-        // 存在しない場合に Mecab のロード失敗ではなく、原因の分かるエラーを返す
-        let resolve = |p: &Path| -> Result<PathBuf, HaqumeiError> {
-            p.canonicalize()
-                .map_err(|_| HaqumeiError::DictionaryNotFound {
-                    path: p.to_path_buf(),
-                })
-        };
+        let dict_dir = resolve_path(dict_dir)?;
+        if !dict_dir.is_dir() {
+            return Err(HaqumeiError::InvalidDictionaryPath(format!(
+                "{} はディレクトリではありません。\
+                 システム辞書は `sys.dic` などを含むディレクトリを指定してください",
+                dict_dir.display()
+            )));
+        }
 
-        let dict_dir = resolve(dict_dir.as_ref())?;
-        let user_dict = user_dict
-            .as_ref()
-            .map(|p| resolve(p.as_ref()))
-            .transpose()?;
+        let mut resolved = Vec::with_capacity(user_dicts.len());
+        for user_dict in user_dicts {
+            let path = resolve_path(user_dict.as_ref())?;
+            if !path.is_file() {
+                return Err(HaqumeiError::InvalidDictionaryPath(format!(
+                    "{} はファイルではありません。\
+                     ユーザー辞書はコンパイル済みの `.dic` を指定してください",
+                    path.display()
+                )));
+            }
+            // Mecab はユーザー辞書をカンマで区切って受け取るので、パス自体に
+            // カンマが入っていると別のパスとして解釈される
+            if path.to_string_lossy().contains(',') {
+                return Err(HaqumeiError::InvalidDictionaryPath(format!(
+                    "{} にはカンマが含まれています。\
+                     Mecab がユーザー辞書の区切りに使う文字なので、パスに含められません",
+                    path.display()
+                )));
+            }
+            resolved.push(path);
+        }
 
-        let model = MecabModel::new(&dict_dir, user_dict.as_deref())?;
+        let model = MecabModel::new(&dict_dir, &resolved)?;
         Ok(Self {
             model: Arc::new(model),
             dict_dir,

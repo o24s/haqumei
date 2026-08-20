@@ -145,12 +145,65 @@ fn test_userdict() {
         .unwrap();
 
     let mut ojt_with_userdic =
-        OpenJTalk::from_path_with_userdict(&dict_dir, user_out_path).unwrap();
+        OpenJTalk::from_path_with_userdict(&dict_dir, &user_out_path).unwrap();
 
     for (text, expected) in &tests {
         let p = ojt_with_userdic.g2p(text).unwrap().join(" ");
         assert_eq!(&p, expected);
     }
+
+    // 2 つに分けても同じ結果になること。Mecab は `-u` にカンマ区切りで複数受け取る
+    let mut second_csv = NamedTempFile::new().unwrap();
+    writeln!(
+        second_csv.as_file_mut(),
+        "ＸＹＺ,,,1,名詞,一般,*,*,*,*,ＸＹＺ,エックスワイゼット,エックスワイゼット,5/9,*"
+    )
+    .unwrap();
+    let second_csv_path = second_csv.into_temp_path();
+    let second_out_path = NamedTempFile::new().unwrap().into_temp_path();
+    MecabDictIndexCompiler::new()
+        .dict_dir(manifest_dir.join("dictionary"))
+        .add_input_file(&second_csv_path)
+        .userdict_out_path(&second_out_path)
+        .run()
+        .unwrap();
+
+    let mut ojt_two = OpenJTalk::from_paths(
+        &dict_dir,
+        &[user_out_path.to_path_buf(), second_out_path.to_path_buf()],
+    )
+    .unwrap();
+    for (text, expected) in &tests {
+        assert_eq!(&ojt_two.g2p(text).unwrap().join(" "), expected);
+    }
+    assert_eq!(
+        ojt_two.g2p("XYZ").unwrap().join(" "),
+        "e cl k U s u w a i z e cl t o"
+    );
+}
+
+/// 辞書のパスが誤っているときに、Mecab の「読み込み失敗」ではなく原因を返すこと。
+#[test]
+fn test_dictionary_path_errors() {
+    use crate::open_jtalk::Dictionary;
+
+    let dict_dir = GLOBAL_MECAB_DICTIONARY.load().dict_dir.clone();
+    let missing = dict_dir.join("この名前のファイルは無い.dic");
+
+    assert!(matches!(
+        Dictionary::from_paths(&missing, &[] as &[&Path]),
+        Err(HaqumeiError::DictionaryNotFound { .. })
+    ));
+    // システム辞書にファイルを渡した
+    assert!(matches!(
+        Dictionary::from_paths(&dict_dir.join("sys.dic"), &[] as &[&Path]),
+        Err(HaqumeiError::InvalidDictionaryPath(_))
+    ));
+    // ユーザー辞書にディレクトリを渡した
+    assert!(matches!(
+        Dictionary::from_paths(&dict_dir, &[&dict_dir]),
+        Err(HaqumeiError::InvalidDictionaryPath(_))
+    ));
 }
 
 unsafe fn run_push_word_state_test(

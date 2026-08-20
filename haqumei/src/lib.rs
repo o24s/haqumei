@@ -137,6 +137,15 @@ impl Haqumei {
         )
     }
 
+    /// 辞書と、0 個以上のユーザー辞書のパスから [Haqumei] を生成します。
+    pub fn from_paths<P: AsRef<Path>, Q: AsRef<Path>>(
+        dict_dir: P,
+        user_dicts: &[Q],
+        options: HaqumeiOptions,
+    ) -> Result<Self, HaqumeiError> {
+        Self::from_open_jtalk(OpenJTalk::from_paths(dict_dir, user_dicts)?, options)
+    }
+
     /// 入力テキストを音素列 (フラットなリスト) に変換します。
     ///
     /// pyopenjtalk と同様の出力を得るためには、`.join(" ")` をチェーンしてください。
