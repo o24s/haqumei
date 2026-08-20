@@ -1,6 +1,6 @@
 [package]
 name = "haqumei-cli"
-version = "0.1.18"
+version = "0.1.19"
 edition = "2024"
 description = "Command-line interface for the Haqumei G2P (Grapheme-to-Phoneme) engine."
 readme = "README.md"
@@ -10,7 +10,7 @@ keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
-haqumei = { version = "0.9.1", path = "../haqumei", features = ["embed-dictionary", "download-dictionary", "serde"], default-features = false }
+haqumei = { version = "0.9.2", path = "../haqumei", features = ["embed-dictionary", "download-dictionary", "serde"], default-features = false }
 clap.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
