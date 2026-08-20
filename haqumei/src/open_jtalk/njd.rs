@@ -192,8 +192,8 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
 ///
 /// # アクセント
 ///
-/// 品詞を戻しただけでは核が 0 (平板) のままなので、外来語のアクセント規則
-/// 「後ろから 3 モーラ目」を当てる。特殊拍 (長音・撥音・促音・小書き) には
+/// 品詞を戻しただけでは核が 0 (平板) のままなので、外来語のアクセント規則に
+/// 従って核を後ろから 3 モーラ目に置く。特殊拍 (長音・撥音・促音・小書き) には
 /// 核が立たないので、その場合は 1 つ前へずらす。
 pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_features: &[&str]) {
     /// 既知語の feature は 12 列以上、未知語は読みを持たないので短い
