@@ -152,7 +152,9 @@ fn test_userdict() {
         assert_eq!(&p, expected);
     }
 
-    // 2 つに分けても同じ結果になること。Mecab は `-u` にカンマ区切りで複数受け取る
+    const XYZ: &str = "e cl k U s u w a i z e cl t o";
+    assert_ne!(ojt_with_userdic.g2p("XYZ").unwrap().join(" "), XYZ);
+
     let mut second_csv = NamedTempFile::new().unwrap();
     writeln!(
         second_csv.as_file_mut(),
@@ -176,10 +178,7 @@ fn test_userdict() {
     for (text, expected) in &tests {
         assert_eq!(&ojt_two.g2p(text).unwrap().join(" "), expected);
     }
-    assert_eq!(
-        ojt_two.g2p("XYZ").unwrap().join(" "),
-        "e cl k U s u w a i z e cl t o"
-    );
+    assert_eq!(ojt_two.g2p("XYZ").unwrap().join(" "), XYZ);
 }
 
 /// 辞書のパスが誤っているときに、Mecab の「読み込み失敗」ではなく原因を返すこと。
