@@ -128,6 +128,7 @@ struct PyDictionary {
 #[pymethods]
 impl PyDictionary {
     #[staticmethod]
+    #[pyo3(signature = (dict_dir, user_dict = None))]
     fn from_path(dict_dir: PathBuf, user_dict: Option<PathBuf>) -> PyResult<Self> {
         let inner = Dictionary::from_path(dict_dir, user_dict).map_err(to_py_err)?;
         Ok(Self { inner })

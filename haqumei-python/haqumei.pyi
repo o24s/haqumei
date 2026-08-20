@@ -922,6 +922,9 @@ class Haqumei:
     def from_dictionary(dict: Dictionary) -> Haqumei:
         """既存の Dictionary オブジェクトを使用してインスタンスを初期化します。
 
+        オプションはすべてデフォルトになります。変更したい場合は
+        `Haqumei(...)` を使ってください。
+
         Args:
             dict (Dictionary): ロード済みの辞書オブジェクト。
 

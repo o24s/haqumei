@@ -31,6 +31,7 @@ impl PyOpenJTalk {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (dict_dir, user_dict = None))]
     fn from_path(dict_dir: &str, user_dict: Option<&str>) -> PyResult<Self> {
         let inner = if let Some(user_dict) = user_dict {
             OpenJTalk::from_path_with_userdict(dict_dir, user_dict).map_err(to_py_err)?

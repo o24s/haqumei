@@ -8,6 +8,7 @@ use ::haqumei::{
 use pyo3::prelude::*;
 use std::sync::Mutex;
 
+use crate::PyDictionary;
 use crate::{
     IuPronunciation, PyHaqumei, PyMecabMorph, PyNjdFeature, UnicodeNormalization,
     prosody::PyProsodyFormat, to_py_err, word_phoneme::PyWordPhonemeProsody,
@@ -19,11 +20,17 @@ use crate::{
 
 #[pymethods]
 impl PyHaqumei {
+    #[staticmethod]
+    fn from_dictionary(dict: &PyDictionary) -> PyResult<Self> {
+        let inner = Haqumei::from_dictionary(dict.inner.clone(), HaqumeiOptions::default())
+            .map_err(to_py_err)?;
+        Ok(Self {
+            inner: Mutex::new(inner),
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[new]
-    // `normalize_unicode` の後ろはキーワード専用にする。既定値付きの真偽値が
-    // 20 個以上並ぶので、位置で渡せる形にしておくと、間に 1 つ足しただけで
-    // 利用者の呼び出しが黙ってずれる。
     #[pyo3(signature = (
         normalize_unicode = UnicodeNormalization::None_,
         *,
