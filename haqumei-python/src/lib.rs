@@ -1,3 +1,5 @@
+#![allow(clippy::clone_on_copy)]
+
 pub mod jlabel;
 pub mod prosody;
 pub mod pyhaqumei;
