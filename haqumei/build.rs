@@ -13,12 +13,12 @@ use digest_io::IoWrapper;
 use sha2::{Digest, Sha256};
 
 #[cfg(feature = "download-dictionary")]
-const DICTIONARY_URL: &str = "https://github.com/o24s/haqumei/releases/download/dictionary-20260819/dictionary-20260819.tar.zst";
+const DICTIONARY_URL: &str = "https://github.com/o24s/haqumei/releases/download/dictionary-20260829/dictionary-20260829.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
-    "c5a8c1437738c7ccaa24f16c10a8e2f340a393c8be5976ebbccffcc07144edf4";
+    "c338ea8d785df4e9ab38d9a8b5e602bdda9abe349ed2fdb94880ac051d521b1d";
 #[cfg(feature = "download-dictionary")]
-const DICTIONARY_HASH: &str = "bd940910b9a684ce7451f0f418aa78305302b759fb1210cc028727a87cc4a96b";
+const DICTIONARY_HASH: &str = "e02c49364287546b26a3650148323fcea8a80aaa6ca4bb35c41caa60f460ca07";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
