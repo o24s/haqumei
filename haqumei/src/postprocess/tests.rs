@@ -309,3 +309,60 @@ fn test_modify_context_reading_nado() {
     modify_context_reading(&mut features);
     assert_eq!(features[1].pron, "ラ");
 }
+
+#[test]
+fn test_modify_context_reading_shifts_accent_nucleus() {
+    fn f(string: &str, pos_group1: &str, pron: &str, acc: i32, chain_flag: i32) -> NjdFeature {
+        NjdFeature {
+            string: string.to_string(),
+            pos: "名詞".to_string(),
+            pos_group1: pos_group1.to_string(),
+            pos_group2: "*".to_string(),
+            pos_group3: "*".to_string(),
+            ctype: "*".to_string(),
+            cform: "*".to_string(),
+            orig: string.to_string(),
+            read: pron.to_string(),
+            pron: pron.to_string(),
+            acc,
+            mora_size: count_mora(pron) as i32,
+            chain_rule: "*".to_string(),
+            chain_flag,
+        }
+    }
+
+    // 「唐詩選余師」。`njd_set_accent_type` が 9 モーラの句に核 8 を書いた後に
+    // `余` が アマリ から ヨ になるので、核は 6 (= ヨ の上) に下がる
+    let mut features = [
+        f("唐詩", "一般", "トーシ", 8, -1),
+        f("選", "接尾", "セン", 1, 1),
+        f("余", "接尾", "アマリ", 1, 1),
+        f("師", "接尾", "シ", 1, 1),
+    ];
+    modify_context_reading(&mut features);
+    assert_eq!(features[2].pron, "ヨ");
+    assert_eq!(features[2].mora_size, 1);
+    assert_eq!(features[0].acc, 6);
+
+    // 核が書き換えた形態素より前にあるときは動かさない
+    let mut features = [
+        f("唐詩", "一般", "トーシ", 2, -1),
+        f("選", "接尾", "セン", 1, 1),
+        f("余", "接尾", "アマリ", 1, 1),
+        f("師", "接尾", "シ", 1, 1),
+    ];
+    modify_context_reading(&mut features);
+    assert_eq!(features[0].acc, 2);
+
+    // 核が書き換えた形態素の中にあって、読みが短くなって位置が無くなるときは
+    // その形態素の末尾のモーラに置く。核 7 は アマリ の 2 モーラ目だが、
+    // ヨ は 1 モーラしかないので 6 になる
+    let mut features = [
+        f("唐詩", "一般", "トーシ", 7, -1),
+        f("選", "接尾", "セン", 1, 1),
+        f("余", "接尾", "アマリ", 1, 1),
+        f("師", "接尾", "シ", 1, 1),
+    ];
+    modify_context_reading(&mut features);
+    assert_eq!(features[0].acc, 6);
+}

@@ -37,6 +37,10 @@
 //! `[0 / 0]` は、この収集データにその語が 1 度も出てこないという意味である。
 //! 規則が誤っている証拠ではないが、裏付けも取れていない。
 
+use std::sync::LazyLock;
+
+use rustc_hash::FxHashMap;
+
 use crate::NjdFeature;
 use crate::utils::count_mora;
 
@@ -52,6 +56,21 @@ enum Cue {
     ///
     /// 「〜の下」のように連体助詞を挟む構造のために用意している。
     PrevViaNo(&'static [&'static str]),
+
+    /// 指定した語を 1 つ飛ばして遡った形態素の品詞が、いずれかに一致する。
+    ///
+    /// 例えば、「そう思うより外にない」の `思う` を見るためにあり、
+    /// `より` が挟まるので [`Cue::PrevPosIn`] では前の形態素を見られない。
+    PrevPosVia(&'static [&'static str], &'static [&'static str]),
+
+    /// 指定した語を 1 つ飛ばして遡った形態素の品詞細分類 1 が、いずれかに一致する。
+    PrevPosGroup1Via(&'static [&'static str], &'static [&'static str]),
+
+    /// この形態素より後ろ、文が終わるまでに打ち消しの語がある。
+    ///
+    /// 「〜より外に〜ない」のように、打ち消しと組でなければ成り立たない読みがある。
+    /// [`NEGATIVE_ORIGS`] の原形を持つ形態素を探し、句点に当たったところで止める。
+    Negated,
 
     /// 直前の形態素の品詞が、いずれかに一致する。
     ///
@@ -125,14 +144,6 @@ const RULES: &[Rule] = &[
         pos_group1: None,
         cue: Cue::NextIn(&["ども", "共"]),
         reading: "ツワモノ",
-    },
-    // 仏号に続く「仏」は ブツ と読む。(阿弥陀仏 = アミダブツ)
-    // [0 / 11]
-    Rule {
-        surface: "仏",
-        pos_group1: None,
-        cue: Cue::PrevIn(&["阿弥陀", "釈迦", "大日", "薬師", "毘盧遮那"]),
-        reading: "ブツ",
     },
     // 人を指す名詞に付く接尾辞「方」は複数の敬称なので ガタ。
     // 「読み方」「夕方」のように 1 形態素として解析される語は対象外になる。
@@ -239,14 +250,6 @@ const RULES: &[Rule] = &[
         pos_group1: Some("一般"),
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "カクケー",
-    },
-    // 「室町通」「四条通」の 通 は ドーリ。人名の トール が勝っていた。
-    // [0 / 7]
-    Rule {
-        surface: "通",
-        pos_group1: Some("固有名詞"),
-        cue: Cue::PrevPosIn(&["名詞"]),
-        reading: "ドーリ",
     },
     // 「軍艦旗」「連隊旗」の 旗 は キ。単独の 旗 は ハタ のまま。
     // [0 / 0]
@@ -356,14 +359,6 @@ const RULES: &[Rule] = &[
         pos_group1: None,
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "ジ",
-    },
-    // 「防衛記念章」「褒章」の 章 は ショー になる。人名の アキラ が勝っていた。
-    // [1 / 7]
-    Rule {
-        surface: "章",
-        pos_group1: Some("固有名詞"),
-        cue: Cue::PrevPosIn(&["名詞"]),
-        reading: "ショー",
     },
     // 「叙事詩環」「循環」の 環 は カン になる。単独は タマキ / ワ。
     // [6 / 3]
@@ -479,17 +474,6 @@ const RULES: &[Rule] = &[
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "コー",
     },
-    // 「同じ様に」の 様 は ヨー になる。また、「田中様」「王様」の接尾辞は サマ。
-    //
-    // 「この様に」「以下の様に」は 様 が非自立名詞になり元から ヨー だが、
-    // 「同じ様に」だけは人名の接尾辞と解析されて サマ になる。
-    // [0 / 91]
-    Rule {
-        surface: "様",
-        pos_group1: None,
-        cue: Cue::PrevIn(&["同じ"]),
-        reading: "ヨー",
-    },
     // 「如何ですか」の 如何 は イカガ になる。「如何なる」「如何にも」は イカ。
     // [3 / 0]
     Rule {
@@ -587,13 +571,56 @@ const RULES: &[Rule] = &[
         cue: Cue::PrevPosIn(&["助詞"]),
         reading: "ココ",
     },
-    // 「〜より外に」の 外 は ホカ と読む。
+    // 「〜するより外にない」「君より外にない」の 外 は ホカ と読む。
+    //
+    // 空間の比較に ソト が使われるため、「より」と打ち消しだけでは足りず、
+    // 「物体AはBより外にない」「地球より外に惑星はない」が ソト になるべきである。
+    // 分かれるのは「より」の直前の品詞で、動詞と代名詞の後に空間の比較は来ない。
     // [9 / 0]
     Rule {
         surface: "外",
         pos_group1: None,
-        cue: Cue::PrevIn(&["より"]),
+        cue: Cue::All(&[Cue::PrevPosVia(&["より"], &["動詞"]), Cue::Negated]),
         reading: "ホカ",
+    },
+    // [9 / 0]
+    Rule {
+        surface: "外",
+        pos_group1: None,
+        cue: Cue::All(&[
+            Cue::PrevPosGroup1Via(&["より"], &["代名詞"]),
+            Cue::Negated,
+        ]),
+        reading: "ホカ",
+    },
+    // 接頭詞の 大 は、後ろが和語なら オー になる。漢語なら ダイ で、
+    // 「大企業」「大部分」は触らない。和語かどうかは形態素の特徴に無いので、
+    // 語を列挙した。大掃除 は後部要素が漢語だが オー で読む慣用である。
+    // 一方で、正解が オオジシン の出典と ダイジシン の出典があるため、大地震 は入れていない。
+    // 手を入れると 7 箇所で ダイ を オー に変えてしまう。
+    // 負の対照: 大企業 ダイキギョー / 大部分 ダイブブン / 大気圧 タイキアツ。
+    // [12 / 0]
+    Rule {
+        surface: "大",
+        pos_group1: Some("名詞接続"),
+        cue: Cue::NextIn(&[
+            "にぎわい", "丸髷", "地主", "旦那", "泥坊", "津波", "掃除",
+            "番狂わせ", "番頭", "違い",
+        ]),
+        reading: "オー",
+    },
+    // 接頭詞の 御 は、後ろが和語なら オ になる。漢語なら ゴ で、
+    // 「御住所」「御多忙」は触らない。「御粗末」は漢語だが オソマツ が慣用である。
+    // 負の対照: 御住所 ゴジューショ / 御多忙 ゴタボー。
+    // [18 / 0]
+    Rule {
+        surface: "御",
+        pos_group1: Some("名詞接続"),
+        cue: Cue::NextIn(&[
+            "仕置", "屋敷", "帰り", "急ぎ", "手際", "支払い", "楽しみ",
+            "気の毒", "田植祭", "神籤", "粗末", "言葉", "近く", "隣", "嬢",
+        ]),
+        reading: "オ",
     },
     // 「〜町史」の 町 は チョー と読む。
     // [6 / 0]
@@ -611,12 +638,17 @@ const RULES: &[Rule] = &[
         cue: Cue::PrevPosIn(&["名詞"]),
         reading: "ヨ",
     },
-    // 「前期」の 前 は ゼン と読む。
+    // 「前期」「前段階」と、役職が直後に来る「前会長」の 前 は ゼン と読む。
+    // 役職は収集データで 会長 280 / 社長 165 / 首相 129 / 理事長 71 / 大統領 56 と
+    // 続き、いずれも マエ には出てこない。直後に付く語だけを見るので、
+    // 「〜の前、会長が」のように読点が挟まる形とは区別が付く。
     // [29 / 0]
     Rule {
         surface: "前",
         pos_group1: None,
-        cue: Cue::NextIn(&["期"]),
+        cue: Cue::NextIn(&[
+            "会長", "大統領", "段階", "理事長", "社長", "総裁", "期", "首相",
+        ]),
         reading: "ゼン",
     },
 
@@ -795,19 +827,28 @@ const RULES: &[Rule] = &[
     },
     // 道具の「〜の柄」は エ、刀剣の「〜の柄」は ツカ と読む。
     // 直前は「の」で潰れるので、その 1 つ前の語を見る。
+    // 収集データでは エ が 槍 56 / 鍬 7 / 斧 6 / 柄杓 6 / 団扇 4 / 薙刀 4 / 傘 3、
+    // ツカ が 刀 72 / 太刀 14 / 脇差 9 / 剣 8 / 大刀 5 / 短剣 5 と分かれる。
+    // かな書きの表層形もあるので併記する。
     // 負の対照: 「柄が悪い」「大柄な人」は直前が「の」ではないので発火しない。
     // [4 / 0]
     Rule {
         surface: "柄",
         pos_group1: None,
-        cue: Cue::PrevViaNo(&["うちわ", "やり", "傘", "鍬"]),
+        cue: Cue::PrevViaNo(&[
+            "うちわ", "やり", "傘", "剃刀", "団扇", "提灯", "斧", "柄杓", "槍", "洋傘",
+            "箒", "薙刀", "鋏", "鋤", "鋸", "鍬", "錫杖",
+        ]),
         reading: "エ",
     },
     // [2 / 0]
     Rule {
         surface: "柄",
         pos_group1: None,
-        cue: Cue::PrevViaNo(&["剣", "鎧通し"]),
+        cue: Cue::PrevViaNo(&[
+            "刀", "剣", "大刀", "太刀", "小剣", "懐剣", "木剣", "短刀", "短剣", "脇差",
+            "軍刀", "長脇差", "鎧通し",
+        ]),
         reading: "ツカ",
     },
     // 器物の「〜の縁」は フチ。既定の エン は 縁がある / 縁側 の意味で、
@@ -825,6 +866,9 @@ const RULES: &[Rule] = &[
     },
 ];
 
+/// [`Cue::Negated`] が探す打ち消しの語の原形。
+const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
+
 /// [`Cue::All`] が手がかりを入れ子にできるので、判定は再帰で書く。
 fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
     match cue {
@@ -839,6 +883,22 @@ fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
                 && njd_features[i - 1].string == "の"
                 && candidates.contains(&njd_features[i - 2].string.as_str())
         }
+        Cue::PrevPosVia(via, candidates) => {
+            i >= 2
+                && via.contains(&njd_features[i - 1].string.as_str())
+                && candidates.contains(&njd_features[i - 2].pos.as_str())
+        }
+        Cue::PrevPosGroup1Via(via, candidates) => {
+            i >= 2
+                && via.contains(&njd_features[i - 1].string.as_str())
+                && candidates.contains(&njd_features[i - 2].pos_group1.as_str())
+        }
+        Cue::Negated => njd_features
+            .get(i + 1..)
+            .unwrap_or_default()
+            .iter()
+            .take_while(|f| !matches!(f.string.as_str(), "。" | "．" | "！" | "？"))
+            .any(|f| NEGATIVE_ORIGS.contains(&f.orig.as_str())),
         Cue::PrevPosIn(candidates) => {
             i > 0 && candidates.contains(&njd_features[i - 1].pos.as_str())
         }
@@ -852,14 +912,26 @@ fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
     }
 }
 
+/// 表層形から、その表層形を対象にする規則を引く。並びは [`RULES`] の順のままで、
+/// 上から評価して最初に一致したものを使う性質を保つ。
+static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static Rule>>> =
+    LazyLock::new(|| {
+        let mut by_surface: FxHashMap<&'static str, Vec<&'static Rule>> = FxHashMap::default();
+        for rule in RULES.iter() {
+            by_surface.entry(rule.surface).or_default().push(rule);
+        }
+        by_surface
+    });
+
 /// 隣接する形態素で読みが決まる語を補正する。
 pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
+    let by_surface = &*RULES_BY_SURFACE;
     for i in 0..njd_features.len() {
-        let Some(rule) = RULES.iter().find(|rule| {
+        let Some(rules) = by_surface.get(njd_features[i].string.as_str()) else {
+            continue;
+        };
+        let Some(rule) = rules.iter().copied().find(|rule| {
             let node = &njd_features[i];
-            if node.string != rule.surface {
-                return false;
-            }
             if let Some(pos_group1) = rule.pos_group1
                 && node.pos_group1 != pos_group1
             {
@@ -874,6 +946,42 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
         node.read = rule.reading.to_string();
         node.pron = rule.reading.to_string();
         // 読みが変わるとモーラ数も変わりうるため数え直す
+        let old_mora = node.mora_size;
         node.mora_size = count_mora(rule.reading) as i32;
+        shift_accent_nucleus(njd_features, i, old_mora);
     }
+}
+
+/// 読みを書き換えた形態素のモーラ数が変わったぶん、アクセント句の核の位置をずらす。
+///
+/// `modify_context_reading` は `njd_set_accent_type` の後に走るので、
+/// 核の位置は書き換える前のモーラ数で数えたものである。
+/// そのため、アクセント核の位置をモーラ数の変更に合わせてシフトする。
+///
+/// 例えば、`唐詩選余師` の `余` が アマリ (3 モーラ) から ヨ (1 モーラ) になると、
+/// 句が 9 モーラから 7 モーラになるのに核は 8 のままで、句の外を指すので核が消える。
+///
+/// 読みが短くなると、核が書き換えた形態素の中にあったときにその位置が無くなるので、
+/// その形態素の末尾のモーラに置く。
+fn shift_accent_nucleus(njd_features: &mut [NjdFeature], i: usize, old_mora: i32) {
+    let new_mora = njd_features[i].mora_size;
+    if new_mora == old_mora {
+        return;
+    }
+    // アクセント句の先頭を探す。chain_flag が 1 の形態素は前に繋がっている
+    let mut head = i;
+    while head > 0 && njd_features[head].chain_flag == 1 {
+        head -= 1;
+    }
+    let before: i32 = njd_features[head..i].iter().map(|f| f.mora_size).sum();
+    let acc = njd_features[head].acc;
+    if acc <= before {
+        // 核は書き換えた形態素より前にあるので変更しない。
+        return;
+    }
+    njd_features[head].acc = if acc > before + old_mora {
+        acc + new_mora - old_mora
+    } else {
+        before + (acc - before).min(new_mora)
+    };
 }
