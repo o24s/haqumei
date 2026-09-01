@@ -1,6 +1,8 @@
 use rustc_hash::FxHashMap;
 use std::ops::Range;
 
+#[allow(deprecated)]
+use crate::WordPhonemePair;
 use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::phoneme::Phoneme;
@@ -8,7 +10,7 @@ use crate::prosody::{PitchAccent, ProsodicPhoneme};
 use crate::utils::has_odori_chars;
 use crate::word_phoneme::WordPhonemeProsody;
 use crate::{MecabMorph, OpenJTalk};
-use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
+use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap};
 
 pub(crate) trait WordPhonemeEntry {
     fn phonemes_mut(&mut self) -> &mut Vec<Phoneme>;
@@ -18,6 +20,7 @@ pub(crate) trait WordPhonemeEntry {
     fn merge_from(&mut self, other: &mut Self);
 }
 
+#[allow(deprecated)]
 impl WordPhonemeEntry for WordPhonemePair {
     fn phonemes_mut(&mut self) -> &mut Vec<Phoneme> {
         &mut self.phonemes
@@ -63,6 +66,13 @@ impl WordPhonemeEntry for WordPhonemeDetail {
 
         let pron_to_merge = std::mem::take(&mut other.pron);
         self.pron.push_str(&pron_to_merge);
+
+        // 吸収した語のぶんだけ区間を伸ばす。`make_phoneme_mapping` は区間を入れ直す
+        // ので、ここで伸ばした値が残るのは `assign_and_merge_phonemes` の結果を
+        // そのまま読む経路だけである
+        if other.char_span.end > self.char_span.end {
+            self.char_span.end = other.char_span.end;
+        }
     }
 }
 
@@ -92,31 +102,45 @@ impl WordPhonemeProsody {
 
         let pron_to_merge = std::mem::take(&mut other.pron);
         self.pron.push_str(&pron_to_merge);
+
+        // 吸収した語のぶんだけ区間を伸ばす。`make_phoneme_mapping` は区間を入れ直す
+        // ので、ここで伸ばした値が残るのは `assign_and_merge_phonemes` の結果を
+        // そのまま読む経路だけである
+        if other.char_span.end > self.char_span.end {
+            self.char_span.end = other.char_span.end;
+        }
     }
 }
 
-pub(crate) trait IntoPhonemeMapItem: Sized {
-    type Output;
-
-    fn word(&self) -> &str;
-
-    /// is_ignored な形態素用の出力を生成
-    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output;
-
-    /// morphs が尽きた場合の処理
-    fn into_unmatched_remainder(self) -> Self::Output;
-
-    /// 完全一致の場合の処理
-    fn into_exact_match(self, morph: &MecabMorph) -> Self::Output;
-
-    /// 先頭一致（結合）の場合の処理
-    fn into_prefix_match(self, is_unknown_word: bool) -> Self::Output;
-
-    /// 不一致の場合の処理
-    fn into_mismatch(self) -> Self::Output;
+/// `assign_and_merge_phonemes` に音素を入れてもらうあいだだけ使う、
+/// [`WordPhonemeMap`] を組み立てる前の形。
+///
+/// [`WordPhonemePair`] を使っていたが、[`WordPhonemeMap::char_span`] に入れる区間を
+/// 持ち回れない。廃止予定の公開型にフィールドを足す代わりに、内部の型を分けてある。
+pub(crate) struct WordPhonemeSeed {
+    pub(crate) word: String,
+    pub(crate) phonemes: Vec<Phoneme>,
+    pub(crate) char_span: Range<usize>,
 }
 
-impl IntoPhonemeMapItem for WordPhonemePair {
+impl WordPhonemeEntry for WordPhonemeSeed {
+    fn phonemes_mut(&mut self) -> &mut Vec<Phoneme> {
+        &mut self.phonemes
+    }
+    fn phonemes(&self) -> &[Phoneme] {
+        &self.phonemes
+    }
+
+    fn merge_from(&mut self, other: &mut Self) {
+        let text_to_merge = std::mem::take(&mut other.word);
+        self.word.push_str(&text_to_merge);
+        if other.char_span.end > self.char_span.end {
+            self.char_span.end = other.char_span.end;
+        }
+    }
+}
+
+impl IntoPhonemeMapItem for WordPhonemeSeed {
     type Output = WordPhonemeMap;
 
     #[inline]
@@ -125,12 +149,13 @@ impl IntoPhonemeMapItem for WordPhonemePair {
     }
 
     #[inline]
-    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
+    fn new_ignored(morph: &MecabMorph) -> Self::Output {
         WordPhonemeMap {
-            word: surface,
+            word: morph.surface.clone(),
             phonemes: vec![Phoneme::Sp],
-            is_unknown,
+            is_unknown: morph.is_unknown,
             is_ignored: true,
+            char_span: morph.char_span.clone(),
         }
     }
 
@@ -142,6 +167,7 @@ impl IntoPhonemeMapItem for WordPhonemePair {
             phonemes: self.phonemes,
             is_unknown: false,
             is_ignored,
+            char_span: self.char_span,
         }
     }
 
@@ -160,6 +186,7 @@ impl IntoPhonemeMapItem for WordPhonemePair {
             phonemes,
             is_unknown: morph.is_unknown,
             is_ignored,
+            char_span: self.char_span,
         }
     }
 
@@ -177,6 +204,7 @@ impl IntoPhonemeMapItem for WordPhonemePair {
             phonemes,
             is_unknown: is_unknown_word,
             is_ignored,
+            char_span: self.char_span,
         }
     }
 
@@ -188,8 +216,30 @@ impl IntoPhonemeMapItem for WordPhonemePair {
             phonemes: self.phonemes,
             is_unknown: false,
             is_ignored,
+            char_span: self.char_span,
         }
     }
+}
+
+pub(crate) trait IntoPhonemeMapItem: Sized {
+    type Output;
+
+    fn word(&self) -> &str;
+
+    /// is_ignored な形態素用の出力を生成
+    fn new_ignored(morph: &MecabMorph) -> Self::Output;
+
+    /// morphs が尽きた場合の処理
+    fn into_unmatched_remainder(self) -> Self::Output;
+
+    /// 完全一致の場合の処理
+    fn into_exact_match(self, morph: &MecabMorph) -> Self::Output;
+
+    /// 先頭一致（結合）の場合の処理
+    fn into_prefix_match(self, is_unknown_word: bool) -> Self::Output;
+
+    /// 不一致の場合の処理
+    fn into_mismatch(self) -> Self::Output;
 }
 
 impl IntoPhonemeMapItem for WordPhonemeDetail {
@@ -201,7 +251,8 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
     }
 
     #[inline]
-    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
+    fn new_ignored(morph: &MecabMorph) -> Self::Output {
+        let surface = morph.surface.clone();
         WordPhonemeDetail {
             word: surface.clone(),
             phonemes: vec![Phoneme::Sp],
@@ -219,8 +270,9 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
             mora_count: 0,
             chain_rule: "*".to_string(),
             chain_flag: -1,
-            is_unknown,
+            is_unknown: morph.is_unknown,
             is_ignored: true,
+            char_span: morph.char_span.clone(),
         }
     }
 
@@ -272,7 +324,8 @@ impl IntoPhonemeMapItem for WordPhonemeProsody {
     }
 
     #[inline]
-    fn new_ignored(surface: String, is_unknown: bool) -> Self::Output {
+    fn new_ignored(morph: &MecabMorph) -> Self::Output {
+        let surface = morph.surface.clone();
         WordPhonemeProsody {
             word: surface.clone(),
             phonemes: vec![ProsodicPhoneme::sp()],
@@ -289,8 +342,9 @@ impl IntoPhonemeMapItem for WordPhonemeProsody {
             mora_count: 0,
             chain_rule: "*".to_string(),
             chain_flag: -1,
-            is_unknown,
+            is_unknown: morph.is_unknown,
             is_ignored: true,
+            char_span: morph.char_span.clone(),
         }
     }
 
@@ -599,9 +653,10 @@ fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usi
 /// そのまま対応するバイト位置は無い。そこで MeCab の形態素列と突き合わせ、
 /// 各 NJD 形態素が元の文字列のどこにあたるかを求める。
 ///
-/// 突き合わせは 4 通りになる。表層形がそのまま一致する場合、NJD が複数の
-/// 形態素を 1 語にまとめた場合、数詞の並び、踊り字の展開である。
-/// 数詞は [`align_number_block`]、踊り字は [`consume_odori_morphs`] が扱う。
+/// 突き合わせは 4 通りになる。表層形がそのまま一致する場合、NJD が複数の形態素を
+/// 1 語にまとめた場合、数詞の並び、踊り字の展開である。数詞の並びは
+/// `align_number_block` が MeCab の形態素と NJD の形態素を対応付け、踊り字は
+/// `consume_odori_morphs` が消費する形態素の数を数える。
 ///
 /// 対応が取れなかった形態素には空の区間 (`n..n`) を与える。位取りとして
 /// 差し込まれた形態素 (`２０` の `十`) がこれにあたる。
@@ -715,6 +770,31 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
 }
 
 impl OpenJTalk {
+    /// [`WordPhonemeMap`] を組むための種を作る。
+    ///
+    /// `njd_spans` は [`njd_char_spans`] が返したもので、`njd_features` と長さが
+    /// 揃っていなければならない。
+    pub(crate) fn g2p_seed_inner(
+        &mut self,
+        njd_features: &[NjdFeature],
+        njd_spans: &[Range<usize>],
+        is_non_pause_symbol: fn(&str) -> bool,
+    ) -> Result<Vec<WordPhonemeSeed>, HaqumeiError> {
+        let mut mapping: Vec<WordPhonemeSeed> = njd_features
+            .iter()
+            .enumerate()
+            .map(|(i, f)| WordPhonemeSeed {
+                word: f.string.clone(),
+                phonemes: Vec::new(),
+                char_span: njd_spans.get(i).cloned().unwrap_or(0..0),
+            })
+            .collect();
+
+        self.assign_and_merge_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
+        Ok(mapping)
+    }
+
+    #[allow(deprecated)]
     pub(crate) fn g2p_pairs_inner(
         &mut self,
         njd_features: &[NjdFeature],
@@ -735,11 +815,13 @@ impl OpenJTalk {
     pub(crate) fn g2p_mapping_inner(
         &mut self,
         njd_features: &[NjdFeature],
+        njd_spans: &[Range<usize>],
         is_non_pause_symbol: fn(&str) -> bool,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
         let mut mapping: Vec<WordPhonemeDetail> = njd_features
             .iter()
-            .map(|f| WordPhonemeDetail {
+            .enumerate()
+            .map(|(i, f)| WordPhonemeDetail {
                 word: f.string.clone(),
                 phonemes: Vec::new(),
                 features: Vec::new(),
@@ -758,6 +840,7 @@ impl OpenJTalk {
                 chain_flag: f.chain_flag,
                 is_unknown: false,
                 is_ignored: false,
+                char_span: njd_spans.get(i).cloned().unwrap_or(0..0),
             })
             .collect();
 
@@ -768,11 +851,13 @@ impl OpenJTalk {
     pub(crate) fn g2p_mapping_prosody_inner(
         &mut self,
         njd_features: &[NjdFeature],
+        njd_spans: &[Range<usize>],
         is_non_pause_symbol: fn(&str) -> bool,
     ) -> Result<Vec<WordPhonemeProsody>, HaqumeiError> {
         let mut mapping: Vec<WordPhonemeProsody> = njd_features
             .iter()
-            .map(|f| WordPhonemeProsody {
+            .enumerate()
+            .map(|(i, f)| WordPhonemeProsody {
                 word: f.string.clone(),
                 phonemes: Vec::new(),
                 pos: f.pos.clone(),
@@ -790,6 +875,7 @@ impl OpenJTalk {
                 chain_flag: f.chain_flag,
                 is_unknown: false,
                 is_ignored: false,
+                char_span: njd_spans.get(i).cloned().unwrap_or(0..0),
             })
             .collect();
 
@@ -1153,7 +1239,7 @@ impl OpenJTalk {
             // is_ignored な Morph を先に進めておく
             while let Some(m) = morphs.get(morph_idx) {
                 if m.is_ignored {
-                    result.push(T::new_ignored(m.surface.clone(), m.is_unknown));
+                    result.push(T::new_ignored(m));
                     morph_idx += 1;
                 } else {
                     break;
@@ -1185,15 +1271,9 @@ impl OpenJTalk {
                     if inner_morph.is_ignored {
                         // 文字列構成が始まる「前」のスペースは単語の前に出す
                         if matched_len == 0 {
-                            pre_ignored.push(T::new_ignored(
-                                inner_morph.surface.clone(),
-                                inner_morph.is_unknown,
-                            ));
+                            pre_ignored.push(T::new_ignored(inner_morph));
                         } else {
-                            internal_ignored.push(T::new_ignored(
-                                inner_morph.surface.clone(),
-                                inner_morph.is_unknown,
-                            ));
+                            internal_ignored.push(T::new_ignored(inner_morph));
                         }
                         morph_idx += 1;
                         continue;
@@ -1242,7 +1322,7 @@ impl OpenJTalk {
                 // 縮約後は元の位置が復元できないので、まとめて直後に置く。
                 for m in &morphs[consumed_from..morph_idx] {
                     if m.is_ignored {
-                        result.push(T::new_ignored(m.surface.clone(), m.is_unknown));
+                        result.push(T::new_ignored(m));
                     }
                 }
             }
@@ -1251,7 +1331,7 @@ impl OpenJTalk {
         // 余った ignored morphs を回収
         while let Some(m) = morphs.get(morph_idx) {
             if m.is_ignored {
-                result.push(T::new_ignored(m.surface.clone(), m.is_unknown));
+                result.push(T::new_ignored(m));
             }
             morph_idx += 1;
         }

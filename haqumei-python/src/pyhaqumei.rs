@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use pyo3::pymethods;
 
 use ::haqumei::{
@@ -14,6 +16,7 @@ use crate::{
     prosody::PyProsodyFormat, to_py_err, word_phoneme::PyWordPhonemeProsody,
 };
 use crate::{
+    candidates::{PyCandidateOptions, PyCandidates, PyCandidatesDetail, PyCandidatesProsody},
     jlabel::PyLabel,
     word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemePair},
 };
@@ -373,6 +376,75 @@ impl PyHaqumei {
                 .g2p_per_word_batch(&texts)
                 .map_err(to_py_err)
                 .map(|p| p.iter().map(|p| p.to_strs()).collect())
+        })
+    }
+
+    #[pyo3(signature = (text, options = None))]
+    fn g2p_candidates(
+        &self,
+        text: &str,
+        options: Option<PyCandidateOptions>,
+    ) -> PyResult<PyCandidates> {
+        let options = options.map(Into::into).unwrap_or_default();
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_candidates_with_options(text, options)
+            .map_err(to_py_err)?
+            .into())
+    }
+
+    #[pyo3(signature = (text, options = None))]
+    fn g2p_candidates_detailed(
+        &self,
+        text: &str,
+        options: Option<PyCandidateOptions>,
+    ) -> PyResult<PyCandidatesDetail> {
+        let options = options.map(Into::into).unwrap_or_default();
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_candidates_detailed_with_options(text, options)
+            .map_err(to_py_err)?
+            .into())
+    }
+
+    #[pyo3(signature = (text, options = None))]
+    fn g2p_candidates_prosody(
+        &self,
+        text: &str,
+        options: Option<PyCandidateOptions>,
+    ) -> PyResult<PyCandidatesProsody> {
+        let options = options.map(Into::into).unwrap_or_default();
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .g2p_candidates_prosody_with_options(text, options)
+            .map_err(to_py_err)?
+            .into())
+    }
+
+    #[pyo3(signature = (texts, options = None))]
+    fn g2p_candidates_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+        options: Option<PyCandidateOptions>,
+    ) -> PyResult<Vec<PyCandidates>> {
+        let options: ::haqumei::CandidateOptions = options.map(Into::into).unwrap_or_default();
+        py.detach(|| {
+            Ok(self
+                .inner
+                .lock()
+                .unwrap()
+                .g2p_candidates_with_options_batch(&texts, options)
+                .map_err(to_py_err)?
+                .into_iter()
+                .map(Into::into)
+                .collect())
         })
     }
 

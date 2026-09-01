@@ -9,7 +9,11 @@ pub struct MecabMorph {
     /// 形態素の表層形。
     pub surface: String,
 
-    /// MeCab が出力した特徴量文字列。
+    /// MeCab の特徴量文字列に、表層形を先頭に付けたもの。
+    ///
+    /// Open JTalk の `mecab.cpp` が `mecab2njd` に渡す形に揃えてあるので、
+    /// [`crate::LatticeNode::feature`] とは列が 1 つずれる。原形が 7 番目、読みが
+    /// 8 番目、発音が 9 番目で、[`crate::LatticeNode::feature`] は 1 つ手前になる。
     pub feature: String,
 
     /// left-id.def で定義された左文脈 ID。

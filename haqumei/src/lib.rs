@@ -8,6 +8,7 @@ mod ffi {
     include!("generated/bindings.rs");
 }
 
+pub mod candidates;
 mod cursor;
 mod data;
 pub mod errors;
@@ -35,6 +36,10 @@ use moka::sync::Cache;
 
 use std::collections::HashMap;
 
+pub use candidates::{
+    Candidate, CandidateAlternative, CandidateBranch, CandidateOptions, CandidateReading,
+    Candidates,
+};
 pub use features::NjdFeature;
 pub use open_jtalk::{
     LatticeNode, MecabDictIndexCompiler, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk,
@@ -44,7 +49,9 @@ pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub(crate) use redirect_log::{setup_cpp_redirect, teardown_cpp_redirect};
-pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, WordPhonemeProsody};
+#[allow(deprecated)]
+pub use word_phoneme::WordPhonemePair;
+pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody};
 
 use crate::{
     errors::HaqumeiError,
@@ -479,36 +486,49 @@ impl Haqumei {
     /// //     phonemes: ["unk"],
     /// //     is_unknown: true,
     /// //     is_ignored: false,
+    /// //     char_span: 0..2,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "麺",
     /// //     phonemes: ["m", "e", "N"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 2..3,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "\u{3000}",
     /// //     phonemes: ["sp"],
     /// //     is_unknown: false,
     /// //     is_ignored: true,
+    /// //     char_span: 3..4,
+    /// // },
+    /// // WordPhonemeMap {
+    /// //     word: "お冷",
+    /// //     phonemes: ["o", "h", "i", "y", "a"],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// //     char_span: 4..6,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "を",
     /// //     phonemes: ["o"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 6..7,
     /// // },
     /// // WordPhonemeMap {
-    /// //     word: "\u{3000}",
-    /// //     phonemes: ["sp"],
-    /// //     is_unknown: false,
-    /// //     is_ignored: true,
-    /// // },
-    /// // WordPhonemeMap {
-    /// //     word: "食べる",
-    /// //     phonemes: ["t", "a", "b", "e", "r", "u"],
+    /// //     word: "頼ん",
+    /// //     phonemes: ["t", "a", "n", "o", "N"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 7..9,
+    /// // },
+    /// // WordPhonemeMap {
+    /// //     word: "だ",
+    /// //     phonemes: ["d", "a"],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// //     char_span: 9..10,
     /// // }]
     /// // ```
     pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
@@ -523,9 +543,12 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        let mapping = self
-            .open_jtalk
-            .g2p_pairs_inner(&njd_features, self.options.is_non_pause_symbol)?;
+        let njd_spans = njd_char_spans(&njd_features, &morphs);
+        let mapping = self.open_jtalk.g2p_seed_inner(
+            &njd_features,
+            &njd_spans,
+            self.options.is_non_pause_symbol,
+        )?;
 
         let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
         postprocess::apply_allophones(
@@ -591,6 +614,7 @@ impl Haqumei {
     /// //   chain_flag: -1,
     /// //   is_unknown: false,
     /// //   is_ignored: false,
+    /// //   char_span: 0..2,
     /// // }
     /// // ```
     pub fn g2p_mapping_detailed(
@@ -605,9 +629,12 @@ impl Haqumei {
         // normalize_unicode_if_needed, revert_pron_to_read はここで実行される
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self
-            .open_jtalk
-            .g2p_mapping_inner(&njd_features, self.options.is_non_pause_symbol)?;
+        let njd_spans = njd_char_spans(&njd_features, &morphs);
+        let mapping = self.open_jtalk.g2p_mapping_inner(
+            &njd_features,
+            &njd_spans,
+            self.options.is_non_pause_symbol,
+        )?;
 
         let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
 
@@ -695,9 +722,12 @@ impl Haqumei {
         // normalize_unicode_if_needed, revert_pron_to_read はここで実行される
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self
-            .open_jtalk
-            .g2p_mapping_prosody_inner(&njd_features, self.options.is_non_pause_symbol)?;
+        let njd_spans = njd_char_spans(&njd_features, &morphs);
+        let mapping = self.open_jtalk.g2p_mapping_prosody_inner(
+            &njd_features,
+            &njd_spans,
+            self.options.is_non_pause_symbol,
+        )?;
 
         let mut mapping = self.open_jtalk.make_phoneme_mapping(morphs, mapping)?;
         postprocess::apply_allophones_to_prosody(
@@ -754,6 +784,39 @@ impl Haqumei {
             self.apply_postprocessing(text, njd_features, &protected, &mecab_morphs)?,
             mecab_morphs,
         ))
+    }
+
+    /// MeCab の解析結果を、形態素ごとの情報として返します。
+    ///
+    /// [`HaqumeiOptions::normalize_unicode`] を通したテキストを
+    /// [`OpenJTalk::run_mecab_detailed`] に渡します。[`MecabMorph::char_span`] と
+    /// [`Haqumei::analyze_lattice`] が返す [`LatticeNode::char_span`] は、同じ文字列の
+    /// 位置になります。
+    pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
+        self.open_jtalk.ensure_dictionary_is_latest()?;
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+        let text = self.normalize_unicode_if_needed(text);
+        self.open_jtalk.run_mecab_detailed(text.as_ref())
+    }
+
+    /// MeCab のラティスを、ノードごとの経路コスト差とともに返します。
+    ///
+    /// [`HaqumeiOptions::normalize_unicode`] を通したテキストを
+    /// [`OpenJTalk::analyze_lattice`] に渡します。[`LatticeNode::char_span`] を
+    /// [`MecabMorph::char_span`] と突き合わせるなら、形態素も
+    /// [`Haqumei::run_mecab_detailed`] から取ります。片方を
+    /// [`OpenJTalk::analyze_lattice`] から取ると、正規化のぶん位置がずれます。
+    ///
+    /// ラティスから読みの候補を作るなら [`Haqumei::g2p_candidates`] があります。
+    pub fn analyze_lattice(&mut self, text: &str) -> Result<Vec<LatticeNode>, HaqumeiError> {
+        self.open_jtalk.ensure_dictionary_is_latest()?;
+        if text.is_empty() {
+            return Ok(Vec::new());
+        }
+        let text = self.normalize_unicode_if_needed(text);
+        self.open_jtalk.analyze_lattice(text.as_ref())
     }
 
     /// テキストから [haqumei_jlabel::Label] のリストとしてフルコンテキストラベルを抽出する。
@@ -959,6 +1022,8 @@ impl Haqumei {
         ///
         /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
         ///   音素リストとして `["pau"]` が割り当てられます。
+        #[allow(deprecated)]
+        #[deprecated(since = "0.11.0", note = "`g2p_mapping_batch` を使う")]
         g2p_pairs_batch => g2p_pairs -> Vec<WordPhonemePair>
     );
 
@@ -987,6 +1052,36 @@ impl Haqumei {
     impl_batch_method_haqumei!(
         /// プロソディ記号付き音素マッピングのバッチ処理。
         g2p_mapping_prosody_batch => g2p_mapping_prosody -> Vec<WordPhonemeProsody>
+    );
+
+    impl_batch_method_haqumei!(
+        /// 読みの候補のバッチ処理。
+        g2p_candidates_batch => g2p_candidates -> Candidates<WordPhonemeMap>
+    );
+
+    impl_batch_method_haqumei!(
+        /// NJD の情報を含む読みの候補のバッチ処理。
+        g2p_candidates_detailed_batch => g2p_candidates_detailed -> Candidates<WordPhonemeDetail>
+    );
+
+    impl_batch_method_haqumei!(
+        /// プロソディ記号付きの読みの候補のバッチ処理。
+        g2p_candidates_prosody_batch => g2p_candidates_prosody -> Candidates<WordPhonemeProsody>
+    );
+
+    impl_batch_method_haqumei!(
+        /// [`CandidateOptions`] を指定した読みの候補のバッチ処理。
+        g2p_candidates_with_options_batch => g2p_candidates_with_options(options: CandidateOptions) -> Candidates<WordPhonemeMap>
+    );
+
+    impl_batch_method_haqumei!(
+        /// [`CandidateOptions`] を指定した、NJD の情報を含む読みの候補のバッチ処理。
+        g2p_candidates_detailed_with_options_batch => g2p_candidates_detailed_with_options(options: CandidateOptions) -> Candidates<WordPhonemeDetail>
+    );
+
+    impl_batch_method_haqumei!(
+        /// [`CandidateOptions`] を指定した、プロソディ記号付きの読みの候補のバッチ処理。
+        g2p_candidates_prosody_with_options_batch => g2p_candidates_prosody_with_options(options: CandidateOptions) -> Candidates<WordPhonemeProsody>
     );
 
     impl_batch_method_haqumei!(

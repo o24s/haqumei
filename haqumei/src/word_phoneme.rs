@@ -1,9 +1,15 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use std::ops::Range;
+
 use crate::{phoneme::Phoneme, prosody::ProsodicPhoneme};
 
 /// Word と `Phoneme` リストのペア。
+///
+// /// 未知語情報を落としてマッピングが得たいケースがあるべきではなく、
+// /// また実際には未知語をどう扱うかというのはユースケースに合わせて選ぶべきであるため、
+// /// deprecated とする。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WordPhonemePair {
@@ -14,6 +20,7 @@ pub struct WordPhonemePair {
 /// Word と `Phoneme` リストに加えて、未知語かどうか・OpenJTalk などで無視されるかどうかを表すフラグをもつ構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct WordPhonemeMap {
     /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
@@ -29,11 +36,35 @@ pub struct WordPhonemeMap {
     ///
     /// (e.g., 先頭の `ー` など、他の形態素に長音として吸収されず破棄されたケース)
     pub is_ignored: bool,
+
+    /// 解析対象の文字列における位置 (文字単位、半開区間)。
+    ///
+    /// 指すのは入力そのものではなく、Unicode 正規化と `text2mecab` を通したあとの
+    /// 文字列である。`text2mecab` は制御文字と範囲外の文字を出力せず、半角カナと
+    /// 濁点の並び (`ｶﾞ`) を 1 文字にまとめるので、入力と文字数が変わることがある。
+    /// 入力を切り出す位置として使えるのは、
+    /// [`crate::HaqumeiOptions::normalize_unicode`] が
+    /// [`crate::UnicodeNormalization::None`] で、かつ入力に制御文字も半角カナも
+    /// 無いときだけである。
+    ///
+    /// 複数の形態素がまとまった語では、まとめた範囲全体を指す。位取りとして
+    /// 差し込まれた語 (「１４７３」から作られる「百」「十」) は元の文字を持た
+    /// ないので、空の区間になる。
+    ///
+    /// 数字が縮約された語は間に挟まった空白まで含むので、区間どうしが重なる
+    /// ことがある。「1 0 個」の「十」は `0..3` で、`1..2` の空白を含む。
+    /// 語の並びが位置の昇順になるとも限らない (縮約に使った空白は、縮約後の語の
+    /// うしろに置かれる)。位置の順に見たいなら並べ替える。
+    ///
+    /// [`crate::njd_char_spans`] が NJD の形態素列について返す区間と同じものが
+    /// 入っている。
+    pub char_span: Range<usize>,
 }
 
 /// Word と `Phoneme` リスト、未知語・無視フラグに加えて、Mecab の解析情報をもつ構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct WordPhonemeDetail {
     /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
@@ -83,11 +114,17 @@ pub struct WordPhonemeDetail {
     ///
     /// (e.g., 先頭の `ー` など、他の形態素に長音として吸収されず破棄されたケース)
     pub is_ignored: bool,
+
+    /// 解析対象の文字列における位置 (文字単位、半開区間)。
+    ///
+    /// 意味は [`WordPhonemeMap::char_span`] と同じ。
+    pub char_span: Range<usize>,
 }
 
 /// プロソディ情報つきの [ProsodicPhoneme] のリストや表層形、未知語・無視フラグ、Mecab の解析情報を表す構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct WordPhonemeProsody {
     /// Word (表層形・辞書エントリを意味しない)
     pub word: String,
@@ -133,4 +170,9 @@ pub struct WordPhonemeProsody {
     ///
     /// (e.g., 先頭の `ー` など、他の形態素に長音として吸収されず破棄されたケース)
     pub is_ignored: bool,
+
+    /// 解析対象の文字列における位置 (文字単位、半開区間)。
+    ///
+    /// 意味は [`WordPhonemeMap::char_span`] と同じ。
+    pub char_span: Range<usize>,
 }

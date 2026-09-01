@@ -46,7 +46,7 @@ fn losing_candidates_carry_their_margin() {
 
 /// ラティスを覗いても、そのあとの解析の挙動が変わらない。
 ///
-/// 辺を作らせるために要求種別を書き換えるので、戻し忘れると `node.next` が
+/// 辺を作らせるために `request_type` を書き換えるので、戻し忘れると `node.next` が
 /// ラティス全体を辿るようになり、以降の解析結果が壊れる。
 #[test]
 fn peeking_at_the_lattice_does_not_change_later_analysis() {

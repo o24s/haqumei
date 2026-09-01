@@ -46,6 +46,7 @@
   - [Python](#python-1)
 - [Advanced Features](#advanced-features)
   - [Word-Phoneme Mapping APIs](#word-phoneme-mapping-apis)
+  - [Getting Reading Candidates (`g2p_candidates`)](#getting-reading-candidates-g2p_candidates)
   - [Modifying Output with G2P Options](#modifying-output-with-g2p-options)
 - [Prosody Features (`g2p_prosody` / `g2p_mapping_prosody`)](#prosody-features-g2p_prosody--g2p_mapping_prosody)
   - [Specification of `g2p_prosody_with_options`](#specification-of-g2p_prosody_with_options)
@@ -259,24 +260,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //     phonemes: ["unk"],
   //     is_unknown: true,
   //     is_ignored: false,
+  //     char_span: 0..2,
   // },
   // WordPhonemeMap {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"],
   //     is_unknown: false,
   //     is_ignored: false,
+  //     char_span: 2..3,
   // },
   // WordPhonemeMap {
   //     word: "\u{3000}",
   //     phonemes: ["sp"],
   //     is_unknown: false,
   //     is_ignored: true,
+  //     char_span: 3..4,
   // },
   // WordPhonemeMap {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"],
   //     is_unknown: false,
   //     is_ignored: false,
+  //     char_span: 4..6,
   // }, ... ]
 
   println!("{:?}", haqumei.g2p_mapping_detailed("薄明")?);
@@ -312,11 +317,86 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    chain_flag: -1,
   //    is_unknown: false,
   //    is_ignored: false,
+  //    char_span: 0..2,
   // }]
 
   Ok(())
 }
 ```
+
+### Getting Reading Candidates (`g2p_candidates`)
+
+`g2p_mapping` commits to a single reading, but `g2p_candidates` leaves the branch open
+when a downstream model should decide between them, as in forced alignment against
+audio.
+
+Candidates are limited to readings the dictionary already holds. A surface form carrying
+more than one entry with a different pronunciation is a branch point, and each candidate
+re-runs the analysis with one reading picked per branch. Every candidate is built from a
+single fixed morpheme sequence, so its words have the same shape as what `g2p_mapping`
+returns.
+
+The first entry of `Candidates::candidates` is exactly what `g2p_mapping` returns.
+
+Segmentation differences are candidates too: `彼の` splits into `彼` + `の` (カレノ) or
+into the single 連体詞 `彼の` (アノ).
+
+```rust
+use haqumei::Haqumei;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+  let got = haqumei.g2p_candidates("彼の話を聞いた。")?;
+
+  for branch in &got.branches {
+    println!(
+      "{:?} {} {:?}",
+      branch.char_span, branch.surface,
+      branch.alternatives.iter().map(|a| (a.pron(), a.nodes.len())).collect::<Vec<_>>()
+    );
+  }
+  // 0..2 彼の [("カレノ", 2), ("アノ", 1)]
+
+  for cand in &got.candidates {
+    println!(
+      "{} {:?}",
+      cand.delta,
+      cand.words.iter().flat_map(|w| w.phonemes.iter()).collect::<Vec<_>>()
+    );
+  }
+  // 0    [k, a, r, e, n, o, h, a, n, a, sh, i, o, k, i, i, t, a, pau]
+  // 1529 [a, n, o, h, a, n, a, sh, i, o, k, i, i, t, a, pau]
+
+  Ok(())
+}
+```
+
+The `words` of a candidate are `WordPhonemeMap` for `g2p_candidates`,
+`WordPhonemeDetail` for `g2p_candidates_detailed`, and `WordPhonemeProsody` for
+`g2p_candidates_prosody`. `CandidateOptions` controls the cost cutoff and the number of
+candidates.
+
+`Candidates::branches` lists the branch points themselves and is not subject to
+`max_candidates`. Build the product yourself from `branches` when the cap would leave out
+variants you need, and join it to the candidates on `char_span`.
+
+Four things keep a reading out of the candidate list.
+
+- A word with a single dictionary entry: it yields one reading, however many it could
+  have in principle
+- Unknown-word nodes: they carry no pronunciation of their own and are left out by
+  default (`branch_on_unknown_words`)
+- Places where a correction decides the reading: the `何` predictor, the context-reading
+  rules and `njd_set_digit` overwrite whatever the lattice chose
+- Candidates that end up with the same phoneme sequence: only the one with the smallest
+  cost difference is kept
+
+`０` and `何` branch in the lattice but rarely yield a second candidate.
+
+Combinations are assembled from the smallest sum upward, `max_candidates` of them, so
+`Candidates::candidates` comes out sorted by `Candidate::delta`. MeCab's costs are there
+to decide segmentation and part of speech rather than to measure how likely a reading is,
+so **the value cannot serve as an arc weight**.
 
 ### Modifying Output with G2P Options
 

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use haqumei::OpenJTalk;
 use pyo3::pymethods;
 

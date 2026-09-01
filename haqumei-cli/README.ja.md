@@ -75,10 +75,11 @@ $ haqumei-cli "テスト" --mode mapping-detailed --format json
 - `kana`: カタカナ
 - `kana-per-word`: 単語 (形態素) ごとに分割されたカタカナ
 - `per-word`: 単語ごとの音素リスト
-- `pairs`: 形態素ごとの音素マッピング (`word: phonemes`)
+- `pairs`: 形態素ごとの音素マッピング (`word: phonemes`) (廃止予定、`mapping` を使う)
 - `mapping`: 未知語情報などを含めた形態素マッピング
 - `mapping-detailed`: 品詞、発音、アクセント核、モーラ数などを含めたさらに詳細なマッピング
 - `mapping-prosody`: 形態素ごとの詳細なプロソディ情報を含めたマッピング
+- `candidates`: 読みの候補。分岐点を `# 開始..終了<TAB>表層形<TAB>発音(コスト差) / ...` で並べ、続けて候補を 1 行ずつ `コスト差<TAB>音素` で出す
 - `fullcontext`: 構造化された拡張 HTSフルコンテキストラベル
 - `fullcontext-string`: 拡張 HTSフルコンテキストラベル文字列
 

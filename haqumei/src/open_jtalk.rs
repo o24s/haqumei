@@ -14,6 +14,8 @@ pub(crate) mod reading_protection;
 #[cfg(test)]
 mod tests;
 
+#[allow(deprecated)]
+use crate::WordPhonemePair;
 use crate::cursor::CharCursor;
 use crate::errors::HaqumeiError;
 use crate::open_jtalk::{
@@ -24,7 +26,7 @@ use crate::open_jtalk::{
 use crate::phoneme::Phoneme;
 use crate::utils::{default_is_non_pause_symbol, get_known_symbol_feature};
 use crate::word_phoneme::WordPhonemeProsody;
-use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair};
+use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap};
 use crate::{PitchAccent, ProsodyFormat, ffi};
 
 use arc_swap::ArcSwap;
@@ -112,7 +114,7 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 ///
 /// Sync ではありませんが、代わりに `haqumei` は辞書を
 /// グローバルに共有しており、 [OpenJTalk::new] の二回目実行
-/// 以降はそれらのポインタをコピーするため、比較的軽量です。
+/// 以降は Mecab・NJD・JPCommon のポインタをコピーするため、比較的軽量です。
 ///
 /// 辞書の更新には `update_global_dictionary`,
 /// グローバル辞書のユーザー辞書の解除には `unset_user_dictionary`
@@ -551,6 +553,7 @@ impl OpenJTalk {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
+    #[allow(deprecated)]
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<Phoneme>>, HaqumeiError> {
         let mapping = self.g2p_pairs(text)?;
 
@@ -635,36 +638,49 @@ impl OpenJTalk {
     /// //     phonemes: ["unk"],
     /// //     is_unknown: true,
     /// //     is_ignored: false,
+    /// //     char_span: 0..2,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "麺",
     /// //     phonemes: ["m", "e", "N"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 2..3,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "\u{3000}",
     /// //     phonemes: ["sp"],
     /// //     is_unknown: false,
     /// //     is_ignored: true,
+    /// //     char_span: 3..4,
+    /// // },
+    /// // WordPhonemeMap {
+    /// //     word: "お冷",
+    /// //     phonemes: ["o", "h", "i", "y", "a"],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// //     char_span: 4..6,
     /// // },
     /// // WordPhonemeMap {
     /// //     word: "を",
     /// //     phonemes: ["o"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 6..7,
     /// // },
     /// // WordPhonemeMap {
-    /// //     word: "\u{3000}",
-    /// //     phonemes: ["sp"],
-    /// //     is_unknown: false,
-    /// //     is_ignored: true,
-    /// // },
-    /// // WordPhonemeMap {
-    /// //     word: "食べる",
-    /// //     phonemes: ["t", "a", "b", "e", "r", "u"],
+    /// //     word: "頼ん",
+    /// //     phonemes: ["t", "a", "n", "o", "N"],
     /// //     is_unknown: false,
     /// //     is_ignored: false,
+    /// //     char_span: 7..9,
+    /// // },
+    /// // WordPhonemeMap {
+    /// //     word: "だ",
+    /// //     phonemes: ["d", "a"],
+    /// //     is_unknown: false,
+    /// //     is_ignored: false,
+    /// //     char_span: 9..10,
     /// // }]
     /// // ```
     pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
@@ -688,9 +704,10 @@ impl OpenJTalk {
             return Ok(Vec::new());
         }
 
-        let pairs = self.g2p_pairs_inner(&njd_features, default_is_non_pause_symbol)?;
+        let njd_spans = crate::njd_char_spans(&njd_features, &morphs);
+        let seeds = self.g2p_seed_inner(&njd_features, &njd_spans, default_is_non_pause_symbol)?;
 
-        self.make_phoneme_mapping(morphs, pairs)
+        self.make_phoneme_mapping(morphs, seeds)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを、NJD が付与する情報を含めて返します。
@@ -748,6 +765,7 @@ impl OpenJTalk {
     /// //   chain_flag: -1,
     /// //   is_unknown: false,
     /// //   is_ignored: false,
+    /// //   char_span: 0..2,
     /// // }
     /// // ```
     pub fn g2p_mapping_detailed(
@@ -759,7 +777,9 @@ impl OpenJTalk {
         }
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self.g2p_mapping_inner(&njd_features, default_is_non_pause_symbol)?;
+        let njd_spans = crate::njd_char_spans(&njd_features, &morphs);
+        let mapping =
+            self.g2p_mapping_inner(&njd_features, &njd_spans, default_is_non_pause_symbol)?;
 
         self.make_phoneme_mapping(morphs, mapping)
     }
@@ -837,7 +857,9 @@ impl OpenJTalk {
         }
         let (njd_features, morphs) = self.run_frontend_detailed(text)?;
 
-        let mapping = self.g2p_mapping_prosody_inner(&njd_features, default_is_non_pause_symbol)?;
+        let njd_spans = crate::njd_char_spans(&njd_features, &morphs);
+        let mapping =
+            self.g2p_mapping_prosody_inner(&njd_features, &njd_spans, default_is_non_pause_symbol)?;
 
         self.make_phoneme_mapping(morphs, mapping)
     }
@@ -931,6 +953,33 @@ impl OpenJTalk {
     ///
     /// 空白や記号など、通常 OpenJTalk で無視されるトークンも含め、
     /// 全ての解析結果を返します。
+    /// `text2mecab` を通した文字列を返します。
+    ///
+    /// [`MecabMorph::char_span`] と [`LatticeNode::char_span`] が指すのはこの文字列で、
+    /// 入力とは文字数が変わることがあります。`text2mecab` は制御文字と範囲外の文字を
+    /// 出力せず、半角カナと濁点の並び (`ｶﾞ`) を 1 文字にまとめ、ASCII を全角にします。
+    ///
+    /// 出力をもう一度通しても変わりません。変換表の右辺はどれも左辺に現れないので、
+    /// [`OpenJTalk::run_mecab_detailed`] に渡し直しても同じ文字列になります。
+    pub fn text2mecab_string(&self, text: &str) -> Result<String, HaqumeiError> {
+        let c_text = CString::new(text)?;
+        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
+        let result = unsafe {
+            ffi::text2mecab(
+                buffer.as_mut_ptr() as *mut _,
+                Self::BUFFER_SIZE,
+                c_text.as_ptr(),
+            )
+        };
+        if result != ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS {
+            return Err(HaqumeiError::Text2MecabError(format!(
+                "text2mecab failed: {result}"
+            )));
+        }
+        let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
+        Ok(String::from_utf8_lossy(&buffer[..end]).into_owned())
+    }
+
     pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
@@ -979,8 +1028,8 @@ impl OpenJTalk {
         // `char_span` を文字単位で持つのは、バイト単位だと利用者が入力を切り出す
         // ときに UTF-8 の境界を自分で気にすることになるため。
         //
-        // 対応表を作る必要はなく、最良経路のノードはバイト位置の昇順に並ぶので、
-        // カーソルを持って前へ進めるだけで済む。
+        // 最良経路のノードはバイト位置の昇順に並ぶので、ハッシュマップを作らず
+        // カーソルを前へ進めるだけで済む。
         let analysed = buffer
             .iter()
             .position(|&b| b == 0)
@@ -1118,7 +1167,19 @@ impl OpenJTalk {
         Ok(morphs)
     }
 
-    pub(crate) fn run_njd_from_mecab<'a, I>(
+    /// MeCab の feature 文字列の列を `mecab2njd` に渡し、[`NjdFeature`] の列を
+    /// 返します。
+    ///
+    /// [`OpenJTalk::run_frontend`] から MeCab の解析を除いたものです。
+    ///
+    /// 渡す文字列は [`MecabMorph::feature`] と同じ形でなければなりません。表層形が
+    /// 先頭に付いていないと `mecab2njd` が列を 1 つずらして読みます。[`LatticeNode`]
+    /// から組むときは `format!("{},{}", node.surface, node.feature)` にします。
+    ///
+    /// [`Haqumei`] が持つ読みの補正は動きません。
+    ///
+    /// [`Haqumei`]: crate::Haqumei
+    pub fn run_njd_from_mecab<'a, I>(
         &mut self,
         mecab_features: I,
     ) -> Result<Vec<NjdFeature>, HaqumeiError>
@@ -1393,6 +1454,8 @@ impl OpenJTalk {
         ///
         /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
         ///   音素リストとして `["pau"]` が割り当てられます。
+        #[allow(deprecated)]
+        #[deprecated(since = "0.11.0", note = "`g2p_mapping_batch` を使う")]
         g2p_pairs_batch => g2p_pairs -> Vec<WordPhonemePair>
     );
 

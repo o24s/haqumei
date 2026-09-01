@@ -75,10 +75,11 @@ $ haqumei-cli "テスト" --mode mapping-detailed --format json
 - `kana`: Katakana sequence.
 - `kana-per-word`: Katakana sequence separated by word (morpheme).
 - `per-word`: Phoneme list grouped by word.
-- `pairs`: Word-to-phoneme mapping (`word: phonemes`).
+- `pairs`: Word-to-phoneme mapping (`word: phonemes`). *Deprecated; use `mapping`.*
 - `mapping`: Detailed morpheme mapping including unknown word status.
 - `mapping-detailed`: Further detailed mapping including POS, pronunciation, accent nucleus, and mora count.
 - `mapping-prosody`: Mapping including detailed prosody information per morpheme.
+- `candidates`: Reading candidates. Branch points are printed as `# start..end<TAB>surface<TAB>pron(delta) / ...`, then one line per candidate as `delta<TAB>phonemes`.
 - `fullcontext`: Structured extended HTS full-context labels.
 - `fullcontext-string`: Extended HTS full-context label strings.
 

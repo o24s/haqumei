@@ -1,5 +1,6 @@
 #![allow(clippy::clone_on_copy)]
 
+pub mod candidates;
 pub mod jlabel;
 pub mod prosody;
 pub mod pyhaqumei;
@@ -187,6 +188,17 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWordPhonemeMap>()?;
     m.add_class::<PyWordPhonemeDetail>()?;
     m.add_class::<PyWordPhonemeProsody>()?;
+
+    m.add_class::<crate::candidates::PyCandidateOptions>()?;
+    m.add_class::<crate::candidates::PyCandidateReading>()?;
+    m.add_class::<crate::candidates::PyCandidateAlternative>()?;
+    m.add_class::<crate::candidates::PyCandidateBranch>()?;
+    m.add_class::<crate::candidates::PyCandidate>()?;
+    m.add_class::<crate::candidates::PyCandidates>()?;
+    m.add_class::<crate::candidates::PyCandidateDetail>()?;
+    m.add_class::<crate::candidates::PyCandidatesDetail>()?;
+    m.add_class::<crate::candidates::PyCandidateProsody>()?;
+    m.add_class::<crate::candidates::PyCandidatesProsody>()?;
 
     m.add_class::<PyProsodicPhoneme>()?;
     m.add_class::<PyProsodyFormat>()?;

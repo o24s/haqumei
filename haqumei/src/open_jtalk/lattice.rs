@@ -44,7 +44,11 @@ pub struct LatticeNode {
     /// 候補の表層形。
     pub surface: String,
 
-    /// MeCab が出力した特徴量文字列。
+    /// MeCab のノードが持つ特徴量文字列。
+    ///
+    /// MeCab が出力したままの形なので、[`MecabMorph::feature`] とは列が 1 つずれる。
+    /// 原形が 6 番目、読みが 7 番目、発音が 8 番目である。[`MecabMorph::feature`] は
+    /// 表層形が先頭に付くぶん 1 つうしろなので、同じ添字で読むと 1 つ手前の列が返る。
     pub feature: String,
 
     /// 解析対象の文字列における位置 (文字単位、半開区間)。
@@ -108,8 +112,8 @@ impl OpenJTalk {
             )));
         }
 
-        // 候補どうしを繋ぐ辺 (`mecab_path_t`) は、要求種別に MECAB_NBEST か
-        // MECAB_MARGINAL_PROB が立っているときにしか作られない。
+        // 候補どうしを繋ぐ辺 (`mecab_path_t`) は、`request_type` に MECAB_NBEST か
+        // MECAB_MARGINAL_PROB が入っているときにしか作られない。
         // (viterbi.cpp の Viterbi::analyze が IsAllPath を決める分岐)
         // 辺が無いと後ろ向きのコストを求められないので、この解析の間だけ立てる。
         // MECAB_ALL_MORPHS ではない点に注意しなければならず、`node.next` が
@@ -119,7 +123,7 @@ impl OpenJTalk {
         // ここでは使わないので、生成器を用意するだけの MECAB_NBEST を選ぶ。
         // 最良経路の組み立ては MECAB_ONE_BEST の側なので両方立てる。
         //
-        // `Mecab_refresh` (lattice->clear()) は要求種別を戻さないので、ここで必ず
+        // `Mecab_refresh` (lattice->clear()) は `request_type` を戻さないので、ここで必ず
         // 戻す。立てたままにすると以降の解析の挙動が変わる。
         let lattice = unsafe { (*self.mecab.inner.as_ptr()).lattice as *mut ffi::mecab_lattice_t };
         let previous_request = unsafe { ffi::mecab_lattice_get_request_type(lattice) };

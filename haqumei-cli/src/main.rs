@@ -68,6 +68,8 @@ enum OutputMode {
     MappingDetailed,
     /// 形態素ごとの詳細なプロソディ情報を含めたマッピング
     MappingProsody,
+    /// 読みが分かれる箇所の候補
+    Candidates,
     /// フルコンテキストラベル
     Fullcontext,
     /// フルコンテキストラベル文字列
@@ -470,11 +472,44 @@ fn process_batch(
                 writeln!(writer, "{}", formatted.join(" "))?;
             });
         }
+        // `--format json` は結果の型をそのまま直列化するので、`g2p_mapping_batch` に
+        // 差し替えると `pairs` モードの JSON に `is_unknown` と `char_span` が増える。
+        // `WordPhonemePair` を消すときに、このモードごと消す
+        #[allow(deprecated)]
         OutputMode::Pairs => {
             let res_batch = haqumei.g2p_pairs_batch(texts)?;
             handle_batch!(texts, writer, format, res_batch, |res| {
                 for pair in res {
                     writeln!(writer, "{}\t{}", pair.word, pair.phonemes.join(" "))?;
+                }
+            });
+        }
+        OutputMode::Candidates => {
+            let res_batch = haqumei.g2p_candidates_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                for branch in &res.branches {
+                    let alts: Vec<String> = branch
+                        .alternatives
+                        .iter()
+                        .map(|a| format!("{}({})", a.pron(), a.delta))
+                        .collect();
+                    writeln!(
+                        writer,
+                        "# {}..{}\t{}\t{}",
+                        branch.char_span.start,
+                        branch.char_span.end,
+                        branch.surface,
+                        alts.join(" / ")
+                    )?;
+                }
+                for cand in &res.candidates {
+                    let phonemes: Vec<&str> = cand
+                        .words
+                        .iter()
+                        .flat_map(|w| w.phonemes.iter())
+                        .map(|p| p.as_str())
+                        .collect();
+                    writeln!(writer, "{}\t{}", cand.delta, phonemes.join(" "))?;
                 }
             });
         }

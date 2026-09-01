@@ -153,6 +153,14 @@ class WordPhonemeMap:
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
 
+    char_span: tuple[int, int]
+    """解析対象の文字列における位置 (文字単位、`[start, end)`)。
+
+    指すのは入力そのものではなく、Unicode 正規化と `text2mecab` を通したあとの
+    文字列である。`text2mecab` は制御文字と範囲外の文字を出力せず、半角カナと濁点の
+    並び (`ｶﾞ`) を 1 文字にまとめるので、入力と文字数が変わることがある。
+    """
+
     def __eq__(self, other: object) -> bool: ...
 
 class WordPhonemeDetail:
@@ -194,6 +202,14 @@ class WordPhonemeDetail:
     """MeCab が未知語と判定したかどうか"""
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
+
+    char_span: tuple[int, int]
+    """解析対象の文字列における位置 (文字単位、`[start, end)`)。
+
+    指すのは入力そのものではなく、Unicode 正規化と `text2mecab` を通したあとの
+    文字列である。`text2mecab` は制御文字と範囲外の文字を出力せず、半角カナと濁点の
+    並び (`ｶﾞ`) を 1 文字にまとめるので、入力と文字数が変わることがある。
+    """
 
     def __eq__(self, other: object) -> bool: ...
 
@@ -245,7 +261,184 @@ class WordPhonemeProsody:
     is_ignored: bool
     """pyopenjtalk のパイプラインで無視される対象として空白 (sp) に置き換えられたか、または音素が割り当てられなかったか"""
 
+    char_span: tuple[int, int]
+    """解析対象の文字列における位置 (文字単位、`[start, end)`)。
+
+    指すのは入力そのものではなく、Unicode 正規化と `text2mecab` を通したあとの
+    文字列である。`text2mecab` は制御文字と範囲外の文字を出力せず、半角カナと濁点の
+    並び (`ｶﾞ`) を 1 文字にまとめるので、入力と文字数が変わることがある。
+    """
+
     def __eq__(self, other: object) -> bool: ...
+
+class CandidateOptions:
+    """`g2p_candidates` がラティスから経路を集める範囲と、返す候補の数の上限。"""
+
+    def __init__(
+        self,
+        *,
+        max_delta: int = 2000,
+        max_alternatives_per_branch: int = 4,
+        max_candidates: int = 32,
+        branch_on_unknown_words: bool = False,
+    ) -> None: ...
+
+    max_delta: int
+    """ラティスに残すノードの、最良経路とのコスト差の上限。
+
+    大きくすると区間が繋がって、経路の数が組み合わせで増える。
+    """
+
+    max_alternatives_per_branch: int
+    """分岐点ごとに残す経路の上限。`CandidateBranch.alternatives` は先頭に 1-best を
+    置くので、長さは `max_alternatives_per_branch + 1` までになる。
+
+    経路の多い分岐点があると、そこを動かしただけの組み合わせで
+    `max_candidates` に達し、後ろの分岐点を動かした組み合わせが 1 つも組み立て
+    られないことがある。分岐点ごとに先に上限を掛けると起きない。
+    """
+
+    max_candidates: int
+    """返す候補の数の上限。1 未満は 1 として扱う。
+
+    数が減るのは `candidates` だけで、`branches` は 1 にしても埋まる。
+    """
+
+    branch_on_unknown_words: bool
+    """未知語のノードを経路に含めるか。
+
+    未知語のノードは `CandidateReading.pron` が `*` で、読みは `read_unknown_kanji` と
+    `restore_loanword_kana` が決める。辞書のエントリと並べても同じ読みになることが
+    多いので、既定では False にしてラティスから外す。
+    """
+
+class CandidateReading:
+    """経路を組み立てているラティスのノード。"""
+
+    surface: str
+    """表層形。"""
+    char_span: tuple[int, int]
+    """`Candidates.text` における位置 (文字単位、`[start, end)`)。"""
+    pron: str
+    """辞書のエントリが持つ発音。未知語のノードでは `*` になる。
+
+    `mecab2njd` に渡す前の値なので、実際に出る音素は `Candidate.words` を見る。
+    """
+    feature: str
+    """`mecab2njd` に渡す feature 文字列。表層形が先頭に付く。"""
+    delta: int
+    """この読みを通る最良経路と、文全体の最良経路のコスト差。1-best は 0。"""
+    left_id: int
+    """left-id.def で定義された左文脈 ID。"""
+    right_id: int
+    """right-id.def で定義された右文脈 ID。"""
+    word_cost: int
+    """辞書に定義された単語コスト。"""
+    is_unknown: bool
+    """MeCab が未知語と判定したかどうか。"""
+
+    def __eq__(self, other: object) -> bool: ...
+
+class CandidateAlternative:
+    """分岐点の区間を通る経路。
+
+    分割の違いも候補にするので、`nodes` の数は経路ごとに違う。
+    「彼の」は `彼` + `の` (カレノ) と 連体詞 `彼の` (アノ) の 2 通りで、
+    前者の `nodes` は 2 個、後者は 1 個になる。
+    """
+
+    nodes: list[CandidateReading]
+    """経路のノード。`CandidateBranch.char_span` に隙間なく並ぶ。"""
+    delta: int
+    """`CandidateReading.delta` の和。1-best の経路は 0。"""
+
+    def pron(self) -> str:
+        """経路のノードの発音を連ねた文字列を返す。"""
+
+    def __eq__(self, other: object) -> bool: ...
+
+class CandidateBranch:
+    """経路が 2 通り以上ある区間。"""
+
+    char_span: tuple[int, int]
+    """分岐する区間の位置 (`Candidates.text` における文字単位、`[start, end)`)。"""
+    surface: str
+    """分岐する区間の表層形。"""
+    alternatives: list[CandidateAlternative]
+    """その区間を通る経路。0 番目が 1-best で、以降はコスト差の小さい順に並ぶ。"""
+
+    def __eq__(self, other: object) -> bool: ...
+
+class Candidate:
+    """分岐点ごとに経路を 1 つ選んで解析し直した、1 文ぶんの結果 (`WordPhonemeMap`)。"""
+
+    words: list[WordPhonemeMap]
+    """形態素ごとの音素マッピング。"""
+    delta: int
+    """選んだ経路の `CandidateAlternative.delta` の和。`Candidates.candidates` の
+    並び順を決める値で、小さいものから順に組み立てる。
+
+    MeCab のコストは分割と品詞を決めるための値で、読みの確からしさを測ったもの
+    ではないため、**FST のアークの重みには使えない**。
+    """
+    choices: list[int]
+    """分岐点ごとに何番目の代替を選んだか。`Candidates.branches` と長さが揃う。"""
+
+class Candidates:
+    """1 文ぶんの候補集合 (`WordPhonemeMap`)。"""
+
+    text: str
+    """解析に使った文字列。
+
+    入力に Unicode 正規化と `text2mecab` を掛けたあとのもので、`char_span` が指す
+    先である。入力とは文字数が変わることがある。
+    """
+    branches: list[CandidateBranch]
+    """経路が 2 通り以上ある区間。入力に現れる順に並び、`max_candidates` の上限を受けない。
+
+    `candidates` を並べて FST を組むと、上限に達して組み立てなかった組み合わせが
+    そのまま欠ける。すべて残したいなら `branches` から直積を組む。
+    """
+    candidates: list[Candidate]
+    """候補。コスト差の小さい順に並び、先頭は 1-best である。
+
+    音素列が同じ候補はコスト差の小さい方だけ残すので、`branches` の直積より少ない。
+    入力が空でなければ空にならない。
+    """
+
+    def __len__(self) -> int: ...
+
+class CandidateDetail:
+    """`Candidate` の語を `WordPhonemeDetail` にしたもの。"""
+
+    words: list[WordPhonemeDetail]
+    delta: int
+    choices: list[int]
+
+class CandidatesDetail:
+    """1 文ぶんの候補集合 (`WordPhonemeDetail`)。"""
+
+    text: str
+    branches: list[CandidateBranch]
+    candidates: list[CandidateDetail]
+
+    def __len__(self) -> int: ...
+
+class CandidateProsody:
+    """`Candidate` の語を `WordPhonemeProsody` にしたもの。"""
+
+    words: list[WordPhonemeProsody]
+    delta: int
+    choices: list[int]
+
+class CandidatesProsody:
+    """1 文ぶんの候補集合 (`WordPhonemeProsody`)。"""
+
+    text: str
+    branches: list[CandidateBranch]
+    candidates: list[CandidateProsody]
+
+    def __len__(self) -> int: ...
 
 class LabelPhoneme:
     """`Phoneme` field of full-context label."""
@@ -373,7 +566,8 @@ class OpenJTalk:
     g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
     また、他のバインディングにない以下の関数が実装されています。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
-    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。
+    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。 (廃止予定、`g2p_mapping` を使う)
+    - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 
 
     スレッドセーフに設計されていますが、内部で排他ロック (Mutex) を使用するため、
@@ -872,7 +1066,8 @@ class Haqumei:
     g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
     また、他のバインディングにない以下の関数が実装されています。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
-    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。
+    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。 (廃止予定、`g2p_mapping` を使う)
+    - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 
     [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) に実装されている、
     Rustで実装された以下の処理によって `OpenJTalk` よりも精度の高い読み推定を行います。
@@ -1136,6 +1331,69 @@ class Haqumei:
 
         Returns:
             List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
+        """
+
+    def g2p_candidates(
+        self, text: str, options: CandidateOptions | None = None
+    ) -> Candidates:
+        """読みの候補を、形態素ごとの音素マッピングとして返します。
+
+        経路が 2 通り以上ある区間を分岐点として、読みの候補を複数返します。読みを
+        1 つに決める `g2p_mapping` と違い、分かれたまま受け取れます。
+
+        どの候補も形態素列を 1 つに決めてから解析するので、返る候補の中身は
+        `g2p_mapping` の返り値と同じ形になります。候補は MeCab のラティスからだけ来るので、辞書のエントリが
+        分かれていない読み、未知語の読み、読みを決める補正が書き込む箇所
+        (「何」・数字・文脈読み) は候補になりません。
+
+        Args:
+            text (str): 入力テキスト。
+            options (CandidateOptions | None): 候補の作り方。省略すると既定値。
+
+        Returns:
+            Candidates: 先頭が `g2p_mapping` と一致する候補集合。
+        """
+
+    def g2p_candidates_detailed(
+        self, text: str, options: CandidateOptions | None = None
+    ) -> CandidatesDetail:
+        """読みの候補を、NJD が付与する情報を含めて返します。
+
+        Args:
+            text (str): 入力テキスト。
+            options (CandidateOptions | None): 候補の作り方。省略すると既定値。
+
+        Returns:
+            CandidatesDetail: 先頭が `g2p_mapping_detailed` と一致する候補集合。
+        """
+
+    def g2p_candidates_prosody(
+        self, text: str, options: CandidateOptions | None = None
+    ) -> CandidatesProsody:
+        """読みの候補を、プロソディ記号付きの音素として返します。
+
+        アクセント句の切れ目は候補ごとに変わるので、音素が同じでもプロソディが
+        違えば別の候補として残ります。
+
+        Args:
+            text (str): 入力テキスト。
+            options (CandidateOptions | None): 候補の作り方。省略すると既定値。
+
+        Returns:
+            CandidatesProsody: 先頭が `g2p_mapping_prosody` と一致する候補集合。
+        """
+
+    def g2p_candidates_batch(
+        self, texts: list[str], options: CandidateOptions | None = None
+    ) -> list[Candidates]:
+        """複数のテキストに対して `g2p_candidates` を実行します。
+
+        Args:
+            texts (List[str]): 解析対象のテキストのリスト。
+            options (CandidateOptions | None): 候補の作り方。省略すると既定値。
+
+        Returns:
+            List[Candidates]: 各テキストに対応する候補集合のリスト。
         """
 
     def run_frontend_batch(self, texts: list[str]) -> list[list[NjdFeature]]:

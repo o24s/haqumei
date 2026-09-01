@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use haqumei::{
     WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, phoneme::PhonemeVecExt,
     word_phoneme::WordPhonemeProsody,
@@ -50,6 +52,7 @@ pub struct PyWordPhonemeMap {
     pub phonemes: Vec<&'static str>,
     pub is_unknown: bool,
     pub is_ignored: bool,
+    pub char_span: (usize, usize),
 }
 
 impl From<WordPhonemeMap> for PyWordPhonemeMap {
@@ -59,6 +62,7 @@ impl From<WordPhonemeMap> for PyWordPhonemeMap {
             phonemes: map.phonemes.into_strs(),
             is_unknown: map.is_unknown,
             is_ignored: map.is_ignored,
+            char_span: (map.char_span.start, map.char_span.end),
         }
     }
 }
@@ -67,8 +71,8 @@ impl From<WordPhonemeMap> for PyWordPhonemeMap {
 impl PyWordPhonemeMap {
     fn __repr__(&self) -> String {
         format!(
-            "WordPhonemeMap(word={:?}, phonemes={:?}, is_unknown={}, is_ignored={})",
-            self.word, self.phonemes, self.is_unknown, self.is_ignored,
+            "WordPhonemeMap(word={:?}, phonemes={:?}, is_unknown={}, is_ignored={}, char_span={:?})",
+            self.word, self.phonemes, self.is_unknown, self.is_ignored, self.char_span,
         )
     }
 
@@ -77,6 +81,7 @@ impl PyWordPhonemeMap {
             && self.phonemes == other.phonemes
             && self.is_unknown == other.is_unknown
             && self.is_ignored == other.is_ignored
+            && self.char_span == other.char_span
     }
 }
 
@@ -106,6 +111,7 @@ pub struct PyWordPhonemeDetail {
     pub chain_flag: i32,
     pub is_unknown: bool,
     pub is_ignored: bool,
+    pub char_span: (usize, usize),
 }
 
 impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
@@ -129,6 +135,7 @@ impl From<WordPhonemeDetail> for PyWordPhonemeDetail {
             chain_flag: detail.chain_flag,
             is_unknown: detail.is_unknown,
             is_ignored: detail.is_ignored,
+            char_span: (detail.char_span.start, detail.char_span.end),
         }
     }
 }
@@ -140,7 +147,7 @@ impl PyWordPhonemeDetail {
             "WordPhonemeDetail(word={:?}, phonemes={:?}, features={:?}, pos={:?}, pos_group1={:?}, \
              pos_group2={:?}, pos_group3={:?}, ctype={:?}, cform={:?}, orig={:?}, \
              read={:?}, pron={:?}, accent_nucleus={}, mora_count={}, chain_rule={:?}, \
-             chain_flag={}, is_unknown={}, is_ignored={})",
+             chain_flag={}, is_unknown={}, is_ignored={}, char_span={:?})",
             self.word,
             self.phonemes,
             self.features,
@@ -159,6 +166,7 @@ impl PyWordPhonemeDetail {
             self.chain_flag,
             self.is_unknown,
             self.is_ignored,
+            self.char_span,
         )
     }
 
@@ -181,6 +189,7 @@ impl PyWordPhonemeDetail {
             && self.chain_flag == other.chain_flag
             && self.is_unknown == other.is_unknown
             && self.is_ignored == other.is_ignored
+            && self.char_span == other.char_span
     }
 }
 
@@ -209,6 +218,7 @@ pub struct PyWordPhonemeProsody {
     pub chain_flag: i32,
     pub is_unknown: bool,
     pub is_ignored: bool,
+    pub char_span: (usize, usize),
 }
 
 #[pymethods]
@@ -218,7 +228,7 @@ impl PyWordPhonemeProsody {
             "WordPhonemeDetail(word={:?}, phonemes={:?}, pos={:?}, pos_group1={:?}, \
              pos_group2={:?}, pos_group3={:?}, ctype={:?}, cform={:?}, orig={:?}, \
              read={:?}, pron={:?}, accent_nucleus={}, mora_count={}, chain_rule={:?}, \
-             chain_flag={}, is_unknown={}, is_ignored={})",
+             chain_flag={}, is_unknown={}, is_ignored={}, char_span={:?})",
             self.word,
             self.phonemes,
             self.pos,
@@ -236,6 +246,7 @@ impl PyWordPhonemeProsody {
             self.chain_flag,
             self.is_unknown,
             self.is_ignored,
+            self.char_span,
         )
     }
 
@@ -257,6 +268,7 @@ impl PyWordPhonemeProsody {
             && self.chain_flag == other.chain_flag
             && self.is_unknown == other.is_unknown
             && self.is_ignored == other.is_ignored
+            && self.char_span == other.char_span
     }
 }
 
@@ -284,6 +296,7 @@ impl From<WordPhonemeProsody> for PyWordPhonemeProsody {
             chain_flag: p.chain_flag,
             is_unknown: p.is_unknown,
             is_ignored: p.is_ignored,
+            char_span: (p.char_span.start, p.char_span.end),
         }
     }
 }

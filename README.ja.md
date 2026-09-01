@@ -46,6 +46,7 @@
   - [Python](#python-1)
 - [Advanced Features](#advanced-features)
   - [Word-Phoneme Mapping APIs について](#word-phoneme-mapping-apis-について)
+  - [読みの候補を得る (`g2p_candidates`)](#読みの候補を得る-g2p_candidates)
   - [G2P オプションで出力を変更する](#g2p-オプションで出力を変更する)
 - [プロソディ機能 (`g2p_prosody` / `g2p_mapping_prosody`)](#プロソディ機能-g2p_prosody--g2p_mapping_prosody)
   - [`g2p_prosody_with_options` の仕様](#g2p_prosody_with_options-の仕様)
@@ -267,24 +268,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //     phonemes: ["unk"],
   //     is_unknown: true,
   //     is_ignored: false,
+  //     char_span: 0..2,
   // },
   // WordPhonemeMap {
   //     word: "麺",
   //     phonemes: ["m", "e", "N"],
   //     is_unknown: false,
   //     is_ignored: false,
+  //     char_span: 2..3,
   // },
   // WordPhonemeMap {
   //     word: "\u{3000}",
   //     phonemes: ["sp"],
   //     is_unknown: false,
   //     is_ignored: true,
+  //     char_span: 3..4,
   // },
   // WordPhonemeMap {
   //     word: "お冷",
   //     phonemes: ["o", "h", "i", "y", "a"],
   //     is_unknown: false,
   //     is_ignored: false,
+  //     char_span: 4..6,
   // }, ... ]
 
   println!("{:?}", haqumei.g2p_mapping_detailed("薄明")?);
@@ -320,11 +325,81 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //    chain_flag: -1,
   //    is_unknown: false,
   //    is_ignored: false,
+  //    char_span: 0..2,
   // }]
 
   Ok(())
 }
 ```
+
+### 読みの候補を得る (`g2p_candidates`)
+
+`g2p_mapping` は読みを 1 つに決めて返しますが、Forced Alignment のように、読みが分かれる
+箇所を音響モデルに決めさせたいときは、`g2p_candidates` で読みの候補を出力できます。
+
+候補になるのは、辞書が持っている読みだけです。同じ表層形に発音の違うエントリが複数
+あるところが分岐点で、分岐点ごとに 1 つ選んで解析し直します。どの候補も形態素列を
+1 つに決めてから解析するので、返る候補の中身は `g2p_mapping` の返り値と同じ形です。
+
+`Candidates::candidates` の先頭の要素は `g2p_mapping` の出力と一致します。
+
+分割の違う読みも候補になります。「彼の」は `彼` + `の` (カレノ) と、連体詞 `彼の`
+(アノ) の 2 通りに分かれます。
+
+```rust
+use haqumei::Haqumei;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+  let got = haqumei.g2p_candidates("彼の話を聞いた。")?;
+
+  for branch in &got.branches {
+    println!(
+      "{:?} {} {:?}",
+      branch.char_span, branch.surface,
+      branch.alternatives.iter().map(|a| (a.pron(), a.nodes.len())).collect::<Vec<_>>()
+    );
+  }
+  // 0..2 彼の [("カレノ", 2), ("アノ", 1)]
+
+  for cand in &got.candidates {
+    println!(
+      "{} {:?}",
+      cand.delta,
+      cand.words.iter().flat_map(|w| w.phonemes.iter()).collect::<Vec<_>>()
+    );
+  }
+  // 0    [k, a, r, e, n, o, h, a, n, a, sh, i, o, k, i, i, t, a, pau]
+  // 1529 [a, n, o, h, a, n, a, sh, i, o, k, i, i, t, a, pau]
+
+  Ok(())
+}
+```
+
+候補の `words` は `g2p_candidates` なら `WordPhonemeMap`、`g2p_candidates_detailed`
+なら `WordPhonemeDetail`、`g2p_candidates_prosody` なら `WordPhonemeProsody` です。
+コストの閾値と候補の数は `CandidateOptions` で変えられます。
+
+`Candidates::candidates` を並べて FST を組むと、`max_candidates` に達して作らなかった
+組み合わせが欠けることになります。`Candidates::branches` は上限に影響されないので、
+すべて残したいなら `branches` から直積を組めます。候補との突き合わせには `char_span` を
+使えます。
+
+候補にならないものは以下の 4 つです。
+
+- 辞書にエントリが 1 つしかない語: ほかの読みがありうる場合でも 1 つしか返りません
+- 未知語のノード: `CandidateReading::pron` が `*` なので、既定でラティスから外しています
+  (`branch_on_unknown_words`)
+- 読みを決める補正が書き込む箇所: 「何」の予測、文脈読みの決定リスト、数字の
+  `njd_set_digit` が、ラティスの選んだ読みを上書きします
+- 音素列が同じになった候補: コスト差の小さい方だけ残ります
+
+`０` と `何` はラティスが分岐していても候補が増えません。
+
+値の小さい組み合わせから順に `max_candidates` 通りを組み立てるので、
+`Candidates::candidates` は `Candidate::delta` の昇順に並びます。MeCab のコストは分割と
+品詞を決めるための値で、読みの確からしさを測ったものではないため、FST のアークの重みには
+使えません。
 
 ### G2P オプションで出力を変更する
 

@@ -94,7 +94,8 @@ fn digit_blocks_do_not_shift_the_following_spans() {
 /// 位置が隣と並んでしまい、これは避けられないので、位置で形態素を引く側が空の区間を
 /// 除く必要がある (`apply_postprocessing` の読みの書き戻し)。
 ///
-/// 中身のある区間どうしは開始位置が重ならない。位置を鍵にした対応表が作れる根拠。
+/// 中身のある区間どうしは開始位置が重ならない。開始位置を鍵にしたハッシュマップで
+/// 形態素を引ける根拠である。
 #[test]
 fn inserted_place_value_morphemes_get_an_empty_span() {
     let mut haqumei = Haqumei::with_options(HaqumeiOptions::default()).unwrap();
