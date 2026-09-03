@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use haqumei::OpenJTalk;
 use pyo3::pymethods;
 
@@ -9,9 +7,7 @@ use std::sync::Mutex;
 
 use crate::jlabel::PyLabel;
 use crate::prosody::PyProsodyFormat;
-use crate::word_phoneme::{
-    PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemePair, PyWordPhonemeProsody,
-};
+use crate::word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemeProsody};
 use crate::{PyDictionary, PyMecabMorph, PyNjdFeature, PyOpenJTalk, to_py_err};
 
 #[pymethods]
@@ -264,30 +260,6 @@ impl PyOpenJTalk {
                 .g2p_per_word_batch(&texts)
                 .map_err(to_py_err)
                 .map(|p| p.iter().map(|p| p.to_strs()).collect())
-        })
-    }
-
-    fn g2p_pairs(&self, text: &str) -> PyResult<Vec<PyWordPhonemePair>> {
-        let mut guard = self.inner.lock().unwrap();
-        let mapping = guard.g2p_pairs(text).map_err(to_py_err)?;
-        Ok(mapping.into_iter().map(PyWordPhonemePair::from).collect())
-    }
-
-    fn g2p_pairs_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemePair>>> {
-        py.detach(|| {
-            Ok(self
-                .inner
-                .lock()
-                .unwrap()
-                .g2p_pairs_batch(&texts)
-                .map_err(to_py_err)?
-                .into_iter()
-                .map(|map| map.into_iter().map(PyWordPhonemePair::from).collect())
-                .collect())
         })
     }
 

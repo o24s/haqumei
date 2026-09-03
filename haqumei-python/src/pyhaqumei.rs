@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use pyo3::pymethods;
 
 use ::haqumei::{
@@ -18,7 +16,7 @@ use crate::{
 use crate::{
     candidates::{PyCandidateOptions, PyCandidates, PyCandidatesDetail, PyCandidatesProsody},
     jlabel::PyLabel,
-    word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemePair},
+    word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap},
 };
 
 #[pymethods]
@@ -444,36 +442,6 @@ impl PyHaqumei {
                 .map_err(to_py_err)?
                 .into_iter()
                 .map(Into::into)
-                .collect())
-        })
-    }
-
-    fn g2p_pairs(&self, text: &str) -> PyResult<Vec<PyWordPhonemePair>> {
-        Ok(self
-            .inner
-            .lock()
-            .unwrap()
-            .g2p_pairs(text)
-            .map_err(to_py_err)?
-            .into_iter()
-            .map(PyWordPhonemePair::from)
-            .collect())
-    }
-
-    fn g2p_pairs_batch(
-        &self,
-        py: Python<'_>,
-        texts: Vec<String>,
-    ) -> PyResult<Vec<Vec<PyWordPhonemePair>>> {
-        py.detach(|| {
-            Ok(self
-                .inner
-                .lock()
-                .unwrap()
-                .g2p_pairs_batch(&texts)
-                .map_err(to_py_err)?
-                .into_iter()
-                .map(|map| map.into_iter().map(PyWordPhonemePair::from).collect())
                 .collect())
         })
     }

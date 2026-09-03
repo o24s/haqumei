@@ -1,44 +1,9 @@
-#![allow(deprecated)]
-
 use haqumei::{
-    WordPhonemeDetail, WordPhonemeMap, WordPhonemePair, phoneme::PhonemeVecExt,
-    word_phoneme::WordPhonemeProsody,
+    WordPhonemeDetail, WordPhonemeMap, phoneme::PhonemeVecExt, word_phoneme::WordPhonemeProsody,
 };
 use pyo3::prelude::*;
 
 use crate::prosody::PyProsodicPhoneme;
-
-#[pyclass(name = "WordPhonemePair", module = "haqumei", skip_from_py_object)]
-#[derive(Clone)]
-pub struct PyWordPhonemePair {
-    #[pyo3(get)]
-    word: String,
-    #[pyo3(get)]
-    phonemes: Vec<&'static str>,
-}
-
-impl From<WordPhonemePair> for PyWordPhonemePair {
-    fn from(pair: WordPhonemePair) -> Self {
-        Self {
-            word: pair.word,
-            phonemes: pair.phonemes.into_strs(),
-        }
-    }
-}
-
-#[pymethods]
-impl PyWordPhonemePair {
-    fn __repr__(&self) -> String {
-        format!(
-            "PyWordPhonemePair(word={:?}, phonemes={:?})",
-            self.word, self.phonemes,
-        )
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.word == other.word && self.phonemes == other.phonemes
-    }
-}
 
 #[pyclass(
     name = "WordPhonemeMap",

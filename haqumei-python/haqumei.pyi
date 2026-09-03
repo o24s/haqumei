@@ -121,20 +121,6 @@ class MecabMorph:
     is_ignored: Final[bool]
     """`OpenJTalk` のパイプラインで無視される対象かどうか。(e.g, "記号,空白")"""
 
-class WordPhonemePair:
-    """単語とその音素列の対応関係を表すデータクラス。
-
-    `g2p_pairs` メソッドによって生成されます。
-    """
-
-    word: str
-    """単語の表層形。"""
-
-    phonemes: list[str]
-    """その単語に対応する音素のリスト。"""
-
-    def __eq__(self, other: object) -> bool: ...
-
 class WordPhonemeMap:
     """単語とその音素列の対応関係を表すデータクラス。
 
@@ -566,7 +552,6 @@ class OpenJTalk:
     g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
     また、他のバインディングにない以下の関数が実装されています。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
-    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。 (廃止予定、`g2p_mapping` を使う)
     - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 
 
@@ -773,16 +758,6 @@ class OpenJTalk:
             (例: `[['k', 'o', 'N', ...], ['pau'], ['s', 'e', 'k', 'a', 'i']]`)
         """
 
-    def g2p_pairs(self, text: str) -> list[WordPhonemePair]:
-        """テキストを解析し、単語と音素のマッピング情報を返します。
-
-        Args:
-            text (str): 入力テキスト。
-
-        Returns:
-            List[WordPhonemePair]: 単語と音素のマッピングオブジェクトのリスト。
-        """
-
     def g2p_mapping(self, text: str) -> list[WordPhonemeMap]:
         """入力テキストの形態素ごとの音素マッピングを返します。
         MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
@@ -970,22 +945,6 @@ class OpenJTalk:
             List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
         """
 
-    def g2p_pairs_batch(self, texts: list[str]) -> list[list[WordPhonemePair]]:
-        """複数のテキストを解析し、単語と音素のマッピング情報を返します。
-
-        注意:
-            Rust 側での解析計算は並列・バッチ化されますが、最終的な Python オブジェクトへの変換は
-            メインスレッド (GIL下) で行われるため、オブジェクト数が多い場合は変換コストが発生します。
-
-        Python の GIL を解放してバッチ処理を行います。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[WordPhonemePair]]: 各テキストに対応するマッピング情報のリスト。
-        """
-
     def g2p_mapping_batch(self, texts: list[str]) -> list[list[WordPhonemeMap]]:
         """入力テキストの形態素ごとの音素マッピング（詳細版）をバッチ処理で返します。
 
@@ -1066,7 +1025,6 @@ class Haqumei:
     g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
     また、他のバインディングにない以下の関数が実装されています。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
-    - `g2p_pairs`: テキストを解析し、単語と音素のマッピング情報を返します。 (廃止予定、`g2p_mapping` を使う)
     - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 
     [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) に実装されている、
@@ -1281,16 +1239,6 @@ class Haqumei:
 
         Returns:
             List[str]: プロソディ記号付き音素記号のリスト (例: `['^', 'a', '[', ...]`)。
-        """
-
-    def g2p_pairs(self, text: str) -> list[WordPhonemePair]:
-        """テキストを解析し、単語と音素のマッピング情報を返します。
-
-        Args:
-            text (str): 入力テキスト。
-
-        Returns:
-            List[WordPhonemePair]: 単語と音素のマッピングオブジェクトのリスト。
         """
 
     def g2p_mapping(self, text: str) -> list[WordPhonemeMap]:
@@ -1533,16 +1481,6 @@ class Haqumei:
 
         Returns:
             List[List[List[str]]]: 3次元リスト (テキスト -> 単語 -> 音素リスト)。
-        """
-
-    def g2p_pairs_batch(self, texts: list[str]) -> list[list[WordPhonemePair]]:
-        """形態素ごとの音素マッピングのバッチ処理。
-
-        Args:
-            texts (List[str]): 入力テキストのリスト。
-
-        Returns:
-            List[List[WordPhonemePair]]: 各テキストに対応するマッピング情報のリスト。
         """
 
     def g2p_mapping_batch(self, texts: list[str]) -> list[list[WordPhonemeMap]]:

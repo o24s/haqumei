@@ -5,18 +5,6 @@ use std::ops::Range;
 
 use crate::{phoneme::Phoneme, prosody::ProsodicPhoneme};
 
-/// Word と `Phoneme` リストのペア。
-///
-// /// 未知語情報を落としてマッピングが得たいケースがあるべきではなく、
-// /// また実際には未知語をどう扱うかというのはユースケースに合わせて選ぶべきであるため、
-// /// deprecated とする。
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct WordPhonemePair {
-    pub word: String,
-    pub phonemes: Vec<Phoneme>,
-}
-
 /// Word と `Phoneme` リストに加えて、未知語かどうか・OpenJTalk などで無視されるかどうかを表すフラグをもつ構造体。
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

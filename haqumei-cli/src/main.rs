@@ -60,8 +60,6 @@ enum OutputMode {
     KanaPerWord,
     /// 単語ごとの音素リスト
     PerWord,
-    /// 形態素ごとの音素マッピング (word: phonemes)
-    Pairs,
     /// 形態素ごとの未知語情報を含めたマッピング
     Mapping,
     /// 未知語情報や NJD の詳細な特徴量を含めたマッピング
@@ -470,18 +468,6 @@ fn process_batch(
                     .map(|phonemes| format!("[{}]", phonemes.join(", ")))
                     .collect();
                 writeln!(writer, "{}", formatted.join(" "))?;
-            });
-        }
-        // `--format json` は結果の型をそのまま直列化するので、`g2p_mapping_batch` に
-        // 差し替えると `pairs` モードの JSON に `is_unknown` と `char_span` が増える。
-        // `WordPhonemePair` を消すときに、このモードごと消す
-        #[allow(deprecated)]
-        OutputMode::Pairs => {
-            let res_batch = haqumei.g2p_pairs_batch(texts)?;
-            handle_batch!(texts, writer, format, res_batch, |res| {
-                for pair in res {
-                    writeln!(writer, "{}\t{}", pair.word, pair.phonemes.join(" "))?;
-                }
             });
         }
         OutputMode::Candidates => {

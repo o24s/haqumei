@@ -245,14 +245,13 @@ Open JTalk (pyopenjtalk) では、未知語は `pau` として扱われますが
 - 空白等: `sp` (Space)
 
 `g2p_mapping` を使用すると、未知語かどうか (`is_unknown`)、本来のパイプラインで無視されるかどうか (`is_ignored`) という情報とともに、音素と元の単語のマッピングが取得できます。また、`g2p_mapping_detailed` を使うことで、マッピングに加えて品詞やアクセント情報などを取得することもできます。
-未知語情報さえ必要ない場合は、`g2p_pairs` のような API もありますが、従来の `g2p` と同様に入力の損失が大きいためにあまり推奨しません。
 
 プロソディ情報付きの単語と音素を得るには、`g2p_mapping_prosody` が有用です。
 詳しくは [ここ](#g2p_mapping_prosody-の仕様) を読んでください。  
 とはいえ、`g2p_mapping_prosody` がリストとして返す [`WordPhonemeProsody`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeProsody.html) は、 `g2p_mapping_detailed` の返却する [`WordPhonemeDetail`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeDetail.html) のスーパーセット的な実装になっている (Mecab の features を除けば) 点は留意してください。
 
 以上より、この API で得られる情報の大きさを簡単に示すと、  
-`g2p_pairs` < `g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`  
+`g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`  
 のようになると言えます。
 
 

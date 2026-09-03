@@ -1,8 +1,6 @@
 use rustc_hash::FxHashMap;
 use std::ops::Range;
 
-#[allow(deprecated)]
-use crate::WordPhonemePair;
 use crate::errors::HaqumeiError;
 use crate::ffi;
 use crate::phoneme::Phoneme;
@@ -18,21 +16,6 @@ pub(crate) trait WordPhonemeEntry {
 
     /// 他の要素が空音素としてマージされる際に、テキストや付随情報を自身に結合する
     fn merge_from(&mut self, other: &mut Self);
-}
-
-#[allow(deprecated)]
-impl WordPhonemeEntry for WordPhonemePair {
-    fn phonemes_mut(&mut self) -> &mut Vec<Phoneme> {
-        &mut self.phonemes
-    }
-    fn phonemes(&self) -> &[Phoneme] {
-        &self.phonemes
-    }
-
-    fn merge_from(&mut self, other: &mut Self) {
-        let text_to_merge = std::mem::take(&mut other.word);
-        self.word.push_str(&text_to_merge);
-    }
 }
 
 impl WordPhonemeEntry for WordPhonemeDetail {
@@ -112,11 +95,9 @@ impl WordPhonemeProsody {
     }
 }
 
-/// `assign_and_merge_phonemes` に音素を入れてもらうあいだだけ使う、
-/// [`WordPhonemeMap`] を組み立てる前の形。
-///
-/// [`WordPhonemePair`] を使っていたが、[`WordPhonemeMap::char_span`] に入れる区間を
-/// 持ち回れない。廃止予定の公開型にフィールドを足す代わりに、内部の型を分けてある。
+/// `assign_and_merge_phonemes` に音素を入れてもらうあいだに使う、
+/// [`WordPhonemeMap`] を組み立てる前の構造体。
+/// (`is_unknown` と `is_ignored` は形態素と突き合わせるまで決まらないため)
 pub(crate) struct WordPhonemeSeed {
     pub(crate) word: String,
     pub(crate) phonemes: Vec<Phoneme>,
@@ -772,8 +753,8 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
 impl OpenJTalk {
     /// [`WordPhonemeMap`] を組むための種を作る。
     ///
-    /// `njd_spans` は [`njd_char_spans`] が返したもので、`njd_features` と長さが
-    /// 揃っていなければならない。
+    /// `njd_spans` には [`njd_char_spans`] が返したものを渡す。足りない分の区間は
+    /// `0..0` になるので、区間を使わない [`OpenJTalk::g2p_per_word`] は空で渡す。
     pub(crate) fn g2p_seed_inner(
         &mut self,
         njd_features: &[NjdFeature],
@@ -787,24 +768,6 @@ impl OpenJTalk {
                 word: f.string.clone(),
                 phonemes: Vec::new(),
                 char_span: njd_spans.get(i).cloned().unwrap_or(0..0),
-            })
-            .collect();
-
-        self.assign_and_merge_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
-        Ok(mapping)
-    }
-
-    #[allow(deprecated)]
-    pub(crate) fn g2p_pairs_inner(
-        &mut self,
-        njd_features: &[NjdFeature],
-        is_non_pause_symbol: fn(&str) -> bool,
-    ) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
-        let mut mapping: Vec<WordPhonemePair> = njd_features
-            .iter()
-            .map(|f| WordPhonemePair {
-                word: f.string.clone(),
-                phonemes: Vec::new(),
             })
             .collect();
 

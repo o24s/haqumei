@@ -14,8 +14,6 @@ pub(crate) mod reading_protection;
 #[cfg(test)]
 mod tests;
 
-#[allow(deprecated)]
-use crate::WordPhonemePair;
 use crate::cursor::CharCursor;
 use crate::errors::HaqumeiError;
 use crate::open_jtalk::{
@@ -553,67 +551,24 @@ impl OpenJTalk {
     /// 単語ごとの音素リストのベクタ。
     ///
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
-    #[allow(deprecated)]
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<Phoneme>>, HaqumeiError> {
-        let mapping = self.g2p_pairs(text)?;
-
-        Ok(mapping.into_iter().map(|m| m.phonemes).collect())
-    }
-
-    /// 入力テキストの形態素ごとの音素マッピングを返します。
-    ///
-    /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
-    ///
-    /// 記号・未知語の処理: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
-    ///   音素リストとして `["pau"]` が割り当てられます。
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use haqumei::OpenJTalk;
-    ///
-    /// let mut open_jtalk = OpenJTalk::new().unwrap();
-    /// let pairs = open_jtalk.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ").unwrap();
-    ///
-    /// // 結果:
-    /// // [WordPhonemePair {
-    /// //     word: "𰻞𰻞",
-    /// //     phonemes: ["pau"]
-    /// // }, WordPhonemePair {
-    /// //     word: "麺",
-    /// //     phonemes: ["m", "e", "N"]
-    /// // }, WordPhonemePair {
-    /// //     word: "＆",
-    /// //     phonemes: ["a", "N", "d", "o"]
-    /// // }, WordPhonemePair {
-    /// //     word: "お冷",
-    /// //     phonemes: ["o", "h", "i", "y", "a"]
-    /// // }, WordPhonemePair {
-    /// //     word: "を",
-    /// //     phonemes: ["o"]
-    /// // }, WordPhonemePair {
-    /// //     word: "頼ん",
-    /// //     phonemes: ["t", "a", "n", "o", "N"]
-    /// // }, WordPhonemePair {
-    /// //     word: "だ",
-    /// //     phonemes: ["d", "a"]
-    /// // }]
-    /// // ```
-    pub fn g2p_pairs(&mut self, text: &str) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
             return Ok(Vec::new());
         }
 
-        let mecab_features = self.run_mecab(text.as_ref())?;
+        let mecab_features = self.run_mecab(text)?;
         let njd_features = self.run_njd_from_mecab(&mecab_features)?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
         }
 
-        self.g2p_pairs_inner(&njd_features, default_is_non_pause_symbol)
+        // 区間を捨てるので `njd_spans` は空で渡す
+        let seeds = self.g2p_seed_inner(&njd_features, &[], default_is_non_pause_symbol)?;
+
+        Ok(seeds.into_iter().map(|s| s.phonemes).collect())
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを返します。
@@ -1445,18 +1400,6 @@ impl OpenJTalk {
     impl_batch_method_openjtalk!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<Phoneme>>
-    );
-
-    impl_batch_method_openjtalk!(
-        /// 形態素ごとの音素マッピングのバッチ処理。
-        ///
-        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
-        ///
-        /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
-        ///   音素リストとして `["pau"]` が割り当てられます。
-        #[allow(deprecated)]
-        #[deprecated(since = "0.11.0", note = "`g2p_mapping_batch` を使う")]
-        g2p_pairs_batch => g2p_pairs -> Vec<WordPhonemePair>
     );
 
     impl_batch_method_openjtalk!(

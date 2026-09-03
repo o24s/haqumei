@@ -4,8 +4,7 @@
 #[cfg(test)]
 mod tests {
     use haqumei::{
-        Haqumei, HaqumeiOptions, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, WordPhonemePair,
-        phoneme::Phoneme,
+        Haqumei, HaqumeiOptions, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, phoneme::Phoneme,
     };
 
     #[test]
@@ -438,11 +437,6 @@ mod tests {
     trait PhonemesExtractor {
         fn get_phonemes(&self) -> &[Phoneme];
     }
-    impl PhonemesExtractor for WordPhonemePair {
-        fn get_phonemes(&self) -> &[Phoneme] {
-            &self.phonemes
-        }
-    }
     impl PhonemesExtractor for WordPhonemeMap {
         fn get_phonemes(&self) -> &[Phoneme] {
             &self.phonemes
@@ -616,40 +610,6 @@ mod tests {
         for morph in morphs {
             assert!(morph.feature.starts_with(&morph.surface));
         }
-    }
-
-    #[test]
-    fn test_make_phoneme_mapping_basic() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mapping = ojt.g2p_pairs("こんにちは").unwrap();
-        assert!(!mapping.is_empty());
-        for entry in mapping {
-            assert!(!entry.phonemes.is_empty());
-        }
-    }
-
-    #[test]
-    fn test_make_phoneme_mapping_with_punctuation() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mapping = ojt.g2p_pairs("東京、大阪").unwrap();
-        assert!(mapping.iter().any(|e| e.phonemes == [Phoneme::Pau]));
-    }
-
-    #[test]
-    fn test_make_phoneme_mapping_boundary_punctuation_end() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mapping = ojt.g2p_pairs("あ。").unwrap();
-        assert_eq!(mapping[0].word, "あ");
-        assert_eq!(mapping[0].phonemes, ["a"]);
-        assert_eq!(mapping[1].word, "。");
-        assert_eq!(mapping[1].phonemes, [Phoneme::Pau]);
-    }
-
-    #[test]
-    fn test_make_phoneme_mapping_digit() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mapping = ojt.g2p_pairs("123").unwrap();
-        assert!(!mapping.is_empty());
     }
 
     #[test]

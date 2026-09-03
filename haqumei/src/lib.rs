@@ -49,8 +49,6 @@ pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
 pub(crate) use redirect_log::{setup_cpp_redirect, teardown_cpp_redirect};
-#[allow(deprecated)]
-pub use word_phoneme::WordPhonemePair;
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody};
 
 use crate::{
@@ -393,75 +391,21 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        let mapping = self.g2p_pairs(text.as_ref())?;
-
-        let mut result: Vec<Vec<Phoneme>> = mapping.into_iter().map(|m| m.phonemes).collect();
-        postprocess::apply_allophones(result.iter_mut().flat_map(|p| p.iter_mut()), &self.options);
-
-        Ok(result)
-    }
-
-    /// 入力テキストの形態素ごとの音素マッピングを返します。
-    ///
-    /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
-    ///
-    /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
-    ///   音素リストとして `["pau"]` が割り当てられます。
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use haqumei::Haqumei;
-    ///
-    /// let mut haqumei = Haqumei::new().unwrap();
-    /// let pairs = haqumei.g2p_pairs("𰻞𰻞麺＆お冷を頼んだ").unwrap();
-    ///
-    /// // 結果:
-    /// // [WordPhonemePair {
-    /// //     word: "𰻞𰻞",
-    /// //     phonemes: ["pau"]
-    /// // }, WordPhonemePair {
-    /// //     word: "麺",
-    /// //     phonemes: ["m", "e", "N"]
-    /// // }, WordPhonemePair {
-    /// //     word: "＆",
-    /// //     phonemes: ["a", "N", "d", "o"]
-    /// // }, WordPhonemePair {
-    /// //     word: "お冷",
-    /// //     phonemes: ["o", "h", "i", "y", "a"]
-    /// // }, WordPhonemePair {
-    /// //     word: "を",
-    /// //     phonemes: ["o"]
-    /// // }, WordPhonemePair {
-    /// //     word: "頼ん",
-    /// //     phonemes: ["t", "a", "n", "o", "N"]
-    /// // }, WordPhonemePair {
-    /// //     word: "だ",
-    /// //     phonemes: ["d", "a"]
-    /// // }]
-    /// // ```
-    pub fn g2p_pairs(&mut self, text: &str) -> Result<Vec<WordPhonemePair>, HaqumeiError> {
-        if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
-            return Ok(Vec::new());
-        }
-
         let features = self.run_frontend(text)?;
 
         if features.is_empty() {
             return Ok(Vec::new());
         }
 
-        let mut pairs = self
-            .open_jtalk
-            .g2p_pairs_inner(&features, self.options.is_non_pause_symbol)?;
+        // 区間を捨てるので `njd_spans` は空で渡す
+        let seeds =
+            self.open_jtalk
+                .g2p_seed_inner(&features, &[], self.options.is_non_pause_symbol)?;
 
-        postprocess::apply_allophones(
-            pairs.iter_mut().flat_map(|p| p.phonemes.iter_mut()),
-            &self.options,
-        );
+        let mut result: Vec<Vec<Phoneme>> = seeds.into_iter().map(|s| s.phonemes).collect();
+        postprocess::apply_allophones(result.iter_mut().flat_map(|p| p.iter_mut()), &self.options);
 
-        Ok(pairs)
+        Ok(result)
     }
 
     /// 入力テキストの形態素ごとの音素マッピングを未知語などの情報とともに返します。
@@ -1013,18 +957,6 @@ impl Haqumei {
     impl_batch_method_haqumei!(
         /// 単語ごとに分割された音素リストのバッチ処理。
         g2p_per_word_batch => g2p_per_word -> Vec<Vec<Phoneme>>
-    );
-
-    impl_batch_method_haqumei!(
-        /// 形態素ごとの音素マッピングのバッチ処理。
-        ///
-        /// MeCab による形態素解析の結果と 1:1 に対応するマッピング情報を生成します。
-        ///
-        /// **記号・未知語の処理**: 読点 (`、`) や未知語など、OpenJTalk が発音を生成しないトークンに対しては、
-        ///   音素リストとして `["pau"]` が割り当てられます。
-        #[allow(deprecated)]
-        #[deprecated(since = "0.11.0", note = "`g2p_mapping_batch` を使う")]
-        g2p_pairs_batch => g2p_pairs -> Vec<WordPhonemePair>
     );
 
     impl_batch_method_haqumei!(

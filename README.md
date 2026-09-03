@@ -238,14 +238,13 @@ However, by using G2P functions whose names contain `mapping`, `detailed`, or `p
 
 Using `g2p_mapping`, you can obtain the phoneme-to-word mapping along with flags indicating whether a word is unknown (`is_unknown`) and whether it would normally be ignored in the original pipeline (`is_ignored`).
 In addition, using `g2p_mapping_detailed` allows you to retrieve not only the mapping but also part-of-speech information and accent details.
-Additionally, an API such as `g2p_pairs` is available for cases where unknown-word information is not needed. However, like the traditional `g2p`, it loses a significant amount of input information and is not particularly recommended.
 
 To obtain words and phonemes together with prosody information, `g2p_mapping_prosody` is useful.
 See [here](#specification-of-g2p_mapping_prosody) for details.
 That said, keep in mind that [`WordPhonemeProsody`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeProsody.html), the list type returned by `g2p_mapping_prosody`, is essentially a superset of [`WordPhonemeDetail`](https://docs.rs/haqumei/latest/haqumei/word_phoneme/struct.WordPhonemeDetail.html) (returned by `g2p_mapping_detailed`), aside from Mecab's `features`.
 
 In short, the amount of information provided by these APIs can be roughly ordered as:
-`g2p_pairs` < `g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`
+`g2p_mapping` < `g2p_mapping_detailed` < `g2p_mapping_prosody`
 
 
 ```rust

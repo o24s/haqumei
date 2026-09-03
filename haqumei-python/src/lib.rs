@@ -14,9 +14,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 use crate::{
     prosody::{PyPitchAccent, PyProsodicPhoneme, PyProsodyFormat},
-    word_phoneme::{
-        PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemePair, PyWordPhonemeProsody,
-    },
+    word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemeProsody},
 };
 
 pub(crate) fn to_py_err<E: std::fmt::Debug>(err: E) -> PyErr {
@@ -184,7 +182,6 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDictionary>()?;
 
     m.add_class::<PyMecabMorph>()?;
-    m.add_class::<PyWordPhonemePair>()?;
     m.add_class::<PyWordPhonemeMap>()?;
     m.add_class::<PyWordPhonemeDetail>()?;
     m.add_class::<PyWordPhonemeProsody>()?;
