@@ -8,6 +8,8 @@ on:
     paths:
       - 'haqumei-python/**'
       - 'haqumei/**'
+      - 'haqumei-jpreprocess*/**'
+      - 'haqumei-jlabel/**'
       - '.github/workflows/pypi.yml'
 
 permissions:
@@ -44,13 +46,6 @@ jobs:
 
       - name: Copy README
         run: cp README.md haqumei-python/README.md
-
-      - name: Set LIBCLANG_PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $llvmPath = (Get-Command clang).Source | Split-Path -Parent
-          echo "LIBCLANG_PATH=$llvmPath" >> $env:GITHUB_ENV
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1

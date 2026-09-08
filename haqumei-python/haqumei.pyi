@@ -544,13 +544,12 @@ class Dictionary:
         """
 
 class OpenJTalk:
-    """OpenJTalk の機能を提供するラッパークラス。
+    """Open JTalk 互換の Rust 実装を利用するクラス。
 
     [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
 
-    `g2p_**`の実装において、フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
-    g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
-    また、他のバインディングにない以下の関数が実装されています。
+    `g2p` は JPCommon の構造化データから音素列を生成します。
+    以下の API で単語区切りと読み候補も取得できます。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
     - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 
@@ -1021,9 +1020,8 @@ class Haqumei:
 
     [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書を使用しています。
 
-    `g2p_**`の実装において、フルコンテキストラベルを経由せず、JPCommon で構築された内部ポインタを追って
-    g2p を行うため、他の Open JTalk バインディング実装より若干高速です。
-    また、他のバインディングにない以下の関数が実装されています。
+    `g2p` は JPCommon の構造化データから音素列を生成します。
+    以下の API で単語区切りと読み候補も取得できます。
     - `g2p_per_word`: テキストを単語ごとに区切られた音素リストに変換します。
     - `g2p_candidates`: 読みが分かれる箇所で複数の候補を返します。
 

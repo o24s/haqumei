@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
     paths:
       - 'haqumei/**'
+      - 'haqumei-jpreprocess*/**'
+      - 'haqumei-jlabel/**'
       - '.github/workflows/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -12,15 +14,12 @@ on:
     branches: [ "main" ]
     paths:
       - 'haqumei/**'
+      - 'haqumei-jpreprocess*/**'
+      - 'haqumei-jlabel/**'
       - '.github/workflows/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
   workflow_dispatch:
-  # The path filters below cannot see the runner image. libclang decides what
-  # bindgen emits, and the toolchain and SDKs decide whether the vendored C
-  # still compiles, so a periodic run is what surfaces an image change on its
-  # own rather than inside someone's pull request. cron has no fortnightly
-  # expression; the 1st and the 15th is the usual stand-in.
   schedule:
     - cron: '17 3 1,15 * *'
 
@@ -68,121 +67,12 @@ jobs:
           restore-keys: |
             haqumei-dictionary-${{ runner.os }}-
 
-      - name: Set up Clang Runtime Path (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          CLANG_RT_PATH=$(find $(xcode-select -p) -name "libclang_rt.osx.a" | head -n 1)
-          if [ -n "$CLANG_RT_PATH" ]; then
-            CLANG_RT_DIR=$(dirname "$CLANG_RT_PATH")
-            echo "LIBRARY_PATH=$CLANG_RT_DIR" >> $GITHUB_ENV
-            echo "Found clang_rt.osx at: $CLANG_RT_DIR"
-          else
-            echo "Warning: libclang_rt.osx.a not found"
-          fi
-
       - name: Build
         run: cargo build --verbose --workspace --exclude haqumei-python --exclude haqumei-bench --exclude haqumei-eval --exclude haqumei-dict-tool --no-default-features --features haqumei/embed-dictionary --features haqumei/download-dictionary
 
       - name: Run tests on ${{ matrix.os }}
-        run: cargo test --verbose -p haqumei --no-default-features --features "embed-dictionary download-dictionary"
+        run: cargo test --verbose --workspace --exclude haqumei-python --exclude haqumei-bench --exclude haqumei-eval --exclude haqumei-dict-tool --features "haqumei/embed-dictionary haqumei/download-dictionary"
 
-  # bindings.rs is determined by the headers reachable from wrapper.h, the
-  # bindgen configuration in build.rs, and the bindgen version. If none of those
-  # moved, regenerating produces the same file, so the expensive job is skipped.
-  bindings_changed:
-    name: Detect changes affecting bindings
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.filter.outputs.run }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      # bindings.rs is produced from the headers reachable from wrapper.h and the
-      # bindgen configuration in build.rs, so those are what can make it stale.
-      # redirect.h is force-included for the C compile only and is not parsed by
-      # bindgen, so it is not listed.
-      - name: Filter
-        id: filter
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -eu
-
-          decide() {
-            echo "run=$1" >> "$GITHUB_OUTPUT"
-            echo "$2"
-            exit 0
-          }
-
-          # Anything that cannot be resolved to a commit (manual run, new branch,
-          # force push) runs the check rather than skipping it.
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            decide true "no usable base commit"
-          fi
-
-          if git diff --name-only "$BASE" HEAD | grep -qE \
-               '^(haqumei/vendor/open_jtalk/|haqumei/src/generated/|haqumei/wrapper\.h$|haqumei/build\.rs$|\.github/workflows/rust\.yml$)'; then
-            decide true "headers, bindgen configuration or the committed output changed"
-          fi
-
-          # A different bindgen emits a different file even from identical input.
-          bindgen_version() {
-            git show "$1:Cargo.lock" \
-              | awk '/^name = "bindgen"$/ { found = 1; next } found && /^version = / { print; exit }'
-          }
-          if [ "$(bindgen_version "$BASE")" != "$(bindgen_version HEAD)" ]; then
-            decide true "the resolved bindgen version changed"
-          fi
-
-          decide false "nothing that feeds bindgen changed"
-
-  bindings:
-    name: Check generated bindings
-    runs-on: ubuntu-latest
-    needs: bindings_changed
-    if: needs.bindings_changed.outputs.run == 'true'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.9.1
-        with:
-          cache-on-failure: true
-          cache-bin: false
-
-      # Only the downloaded archive, for the reason given in build_and_test.
-      - name: Cache the downloaded dictionary
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/haqumei/dictionary.tar.zst
-            ~/Library/Caches/haqumei/dictionary.tar.zst
-            ~/AppData/Local/haqumei/dictionary.tar.zst
-          key: haqumei-dictionary-${{ runner.os }}-${{ hashFiles('haqumei/build.rs') }}
-          restore-keys: |
-            haqumei-dictionary-${{ runner.os }}-
-
-      - name: Install libclang
-        run: sudo apt-get update && sudo apt-get install -y libclang-dev
-
-      # Forgetting to regenerate after a header change leaves the declarations
-      # and the implementation out of sync, and the build still succeeds.
-      - name: Regenerate bindings
-        run: cargo build -p haqumei --features generate-bindings
-
-      - name: Fail if the committed bindings are stale
-        run: |
-          if ! git diff --exit-code -- haqumei/src/generated/bindings.rs; then
-            echo "::error::haqumei/src/generated/bindings.rs is out of date."
-            echo "::error::Run: cargo build -p haqumei --features generate-bindings"
-            exit 1
-          fi
+      - name: Build and test the source dictionary
+        if: runner.os == 'Linux'
+        run: cargo test -p haqumei --lib --no-default-features --features "embed-dictionary build-dictionary"

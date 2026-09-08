@@ -68,6 +68,8 @@
 
 ## 特徴 (Features)
 
+テキスト正規化、MeCab 互換の形態素解析、NJD、JPCommon によるラベル生成を Rust で実装しています。ワークスペースの `haqumei-jpreprocess*` は [jpreprocess](https://github.com/jpreprocess/jpreprocess) を基に、Haqumei の辞書・ラベル・単語と音素の対応 API に合わせて改修したクレートです。Open JTalk と MeCab の C/C++ コードはビルドしません。
+
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features)) |
@@ -647,6 +649,8 @@ HaqumeiOptions {
 
 ## ベンチマーク
 
+以下は旧 Open JTalk 実装での測定値です。Rust へ移行したパイプラインでは再測定していません。
+
 約31.8万文字の日本語テキストを対象にした、`pyopenjtalk` (Baseline) と `haqumei` の比較結果です。
 
 入力データ: [「吾輩は猫である」](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407文字 / 8,451行 (平均 37文字/行) (※ ルビは消去済み)
@@ -666,7 +670,6 @@ HaqumeiOptions {
 
 - 入力構造によるスループットの変化:  
   特に `*_batch` 系 API において、`pyopenjtalk` と比べ、1行あたりの文字数が多くなるほどスループット (chars/s) が高くなる傾向にあります。(だいたい 4KB ぐらいまでは)  
-  これは G2P処理 が Open JTalk 内部の構造体から、直接ラベルを取り出すように実装されていたり、FFI のオーバーヘッドが少ないためであると考えられます。  
   大量の文章を処理する場合は、極端に細かく改行せずにある程度の長さでバッチ処理に渡すのが最も効率的です。
 
 - 表中の Default:  
@@ -720,17 +723,20 @@ Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) �
 
 ## ライセンス
 
-`haqumei-jlabel` と `haqumei-kanalizer` を除く Haqumei は、Apache License 2.0 の条件に基づいて配布されています。
+`haqumei-jpreprocess*`、`haqumei-jlabel`、`haqumei-kanalizer` を除く Haqumei は、Apache License 2.0 の条件に基づいて配布されています。
 
 `haqumei` のロジックには、[tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) を移植実装したものを含んでおり、`tsukumijima/pyopenjtalk-plus` に配置された [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk) のライセンスを表明するファイルを同様に同梱しますが、`tsukumijima/pyopenjtalk-plus` の上流に対して新たに追加されたコードのライセンスを表明するわけではありません。
 
 ### 同梱ソフトウェアのライセンスと由来
 
-`haqumei` には、Grapheme-to-Phoneme (G2P) 機能を提供するために、Open JTalk の改変版に由来する C/C++ ソースコードおよび辞書データが含まれています。これら同梱されているコードの由来およびライセンスは以下の通りです。
+Haqumei には、以下のプロジェクトから移植した Rust コードと辞書データを同梱しています。
 
-- 同梱されている Open JTalk ソースコード
-  - 由来: `vendor/open_jtalk` ディレクトリに含まれるコードは、[tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) リポジトリに基づいています。これは、Open JTalkの拡張版に、さまざまなコミュニティフォーク (VOICEVOXプロジェクトなど) による改善を統合したものです。
-  - ライセンス: 同梱されている Open JTalk ソースコードは、修正BSDライセンスの下でライセンスされています。このライセンスは `vendor/open_jtalk` にあるコードにのみ適用され、このプロジェクトの他の部分には適用されません。再配布要件に従い、修正BSDライセンスの全文は `vendor/open_jtalk/src/COPYING` に含まれています。
+- `haqumei-jpreprocess*` クレート
+  - 由来: [jpreprocess/jpreprocess](https://github.com/jpreprocess/jpreprocess) のリビジョン `54cf9bc2d40a5d6f25144333e9cd03fd3258a126`。NJD と JPCommon には [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) との互換性を保つ変更を加えています。
+  - ライセンス: BSD-3-Clause。各クレートの `LICENSE` と `NOTICE` に、jpreprocess と Open JTalk の著作権・ライセンス表記を同梱しています。
+- Rust の辞書読み込み・構築処理
+  - 由来: `haqumei-jpreprocess-dictionary/src/mecab.rs` と `mecab_compile.rs` は、Open JTalk に同梱されていた MeCab の処理を移植したものです。Darts の辞書形式も引き継いでいます。
+  - ライセンス: BSD-3-Clause。著作権・ライセンス表記は `haqumei-jpreprocess-dictionary/LICENSE-MeCab`、正規化処理の表記は `haqumei-jpreprocess/LICENSE-OpenJTalk` に同梱しています。
 
 - バンドルされた辞書データ
   - 由来: `haqumei/dictionary` ディレクトリに含まれる辞書データは、
@@ -781,6 +787,7 @@ Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) �
 
 - pyopenjtalk: Copyright (c) 2018 Ryuichi Yamamoto
 - pyopenjtalk-plus: Copyright (c) 2023 tsukumijima
+- jpreprocess: Copyright (c) 2024 JPreprocess Team
 - jlabel: Copyright (c) 2024 JPreprocess Team
 - kanalizer: Copyright (c) 2025 VOICEVOX
 

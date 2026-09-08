@@ -67,6 +67,8 @@
 
 ## Features
 
+The G2P pipeline uses Rust implementations of text normalization, MeCab-compatible morphological analysis, NJD processing, and JPCommon label generation. The `haqumei-jpreprocess*` workspace crates are adapted from [jpreprocess](https://github.com/jpreprocess/jpreprocess), retaining Haqumei’s dictionary, label, and word-to-phoneme APIs. Open JTalk and MeCab C/C++ code is no longer compiled.
+
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | Provides mapping information between words ($\approx$ surface forms / dictionary entries) and phonemes, which was previously difficult to obtain directly. Enables retrieval of detailed analysis results with minimal loss of information from the input text, including unknown-word information. (See [Advanced Features](#advanced-features)) |
@@ -644,6 +646,8 @@ HaqumeiOptions {
 
 ## Benchmark
 
+The measurements below describe the former Open JTalk backend. They have not been repeated for the Rust pipeline.
+
 Here are the comparison results between `pyopenjtalk` (Baseline) and `haqumei` using approximately 318,000 characters of Japanese text.
 
 Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407 chars / 8,451 lines (Average 37 chars/line) (Ruby characters have been removed)
@@ -661,7 +665,7 @@ Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://c
 ### Performance Notes
 
 - **Throughput Variation by Input Structure**:  
-  Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. This efficiency stems from an implementation that directly extracts labels from Open JTalk's internal structures, combined with minimal FFI overhead. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
+  Especially in the `*_batch` APIs, throughput (chars/s) tends to increase as the number of characters per line grows (up to approximately 4KB), compared with pyopenjtalk. When processing large volumes of text, it is most efficient to pass content in substantial chunks rather than splitting it into excessively short lines.
 - **"Default" in the table**:  
   The configuration using `Haqumei::new` as is.
 
@@ -702,23 +706,20 @@ Haqumei uses a modified form of the dictionary included in [pyopenjtalk-plus](ht
 
 ## License
 
-Haqumei, excluding `haqumei-jlabel` and `haqumei-kanalizer`, is distributed under the terms of the Apache License 2.0.
+Haqumei, excluding `haqumei-jpreprocess*`, `haqumei-jlabel`, and `haqumei-kanalizer`, is distributed under the terms of the Apache License 2.0.
 
 Haqumei's logic includes an implementation ported from [tsukumijima/pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus), and it likewise bundles the file stating the license of [r9y9/pyopenjtalk](https://github.com/r9y9/pyopenjtalk) that is placed in `tsukumijima/pyopenjtalk-plus`. Bundling it does not state the license of the code newly added on top of `tsukumijima/pyopenjtalk-plus`'s upstream.
 
 ### Licenses and Origins of Bundled Software
 
-`haqumei` includes C/C++ source code and dictionary data from modified versions of Open JTalk to provide its Grapheme-to-Phoneme (G2P) functionality. The origins and licenses of this bundled code are as follows:
+Haqumei includes Rust ports and dictionary data derived from the following projects.
 
-- Bundled Open JTalk Source Code
-  - Origin: The code contained in the `vendor/open_jtalk` directory is based on the
-    [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) repository, which integrates
-    improvements from various community forks (e.g., VOICEVOX project) into an enhanced
-    version of Open JTalk.
-  - License: The bundled Open JTalk source code is licensed under the Modified BSD License. This license applies
-    only to the code located in `vendor/open_jtalk`, and does not apply to the rest of this project. In accordance
-    with redistribution requirements, the full text of the Modified BSD License is included in
-    `vendor/open_jtalk/src/COPYING`.
+- Adapted `haqumei-jpreprocess*` crates
+  - Origin: [jpreprocess/jpreprocess](https://github.com/jpreprocess/jpreprocess), revision `54cf9bc2d40a5d6f25144333e9cd03fd3258a126`. The NJD and JPCommon implementations include compatibility changes for [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk).
+  - License: BSD-3-Clause. Each crate includes `LICENSE` and `NOTICE`, preserving the jpreprocess and Open JTalk notices.
+- Rust dictionary reader and compiler
+  - Origin: The MeCab-compatible implementation in `haqumei-jpreprocess-dictionary/src/mecab.rs` and `mecab_compile.rs` is ported from the MeCab implementation bundled with Open JTalk, including its Darts trie format.
+  - License: BSD-3-Clause. Copyright and license notices are retained in `haqumei-jpreprocess-dictionary/LICENSE-MeCab`. The normalization port also retains `haqumei-jpreprocess/LICENSE-OpenJTalk`.
 
 - Bundled Dictionary Data
   - Origin: The dictionary data contained in the `haqumei/dictionary` directory is based on
@@ -767,6 +768,7 @@ In addition, some implementations are based on `jlabel` and `kanalizer` to impro
 
 - pyopenjtalk: Copyright (c) 2018 Ryuichi Yamamoto
 - pyopenjtalk-plus: Copyright (c) 2023 tsukumijima
+- jpreprocess: Copyright (c) 2024 JPreprocess Team
 - jlabel: Copyright (c) 2024 JPreprocess Team
 - kanalizer: Copyright (c) 2025 VOICEVOX
 
