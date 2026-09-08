@@ -70,6 +70,8 @@
 
 テキスト正規化、MeCab 互換の形態素解析、NJD、JPCommon によるラベル生成を Rust で実装しています。ワークスペースの `haqumei-jpreprocess*` は [jpreprocess](https://github.com/jpreprocess/jpreprocess) を基に、Haqumei の辞書・ラベル・単語と音素の対応 API に合わせて改修したクレートです。Open JTalk と MeCab の C/C++ コードはビルドしません。
 
+`haqumei-jpreprocess` のオプションの形態素解析器には Lindera 6 を使用しています。構造化した単語情報は rkyv 0.8 で保存し、読み込み時にバイト列を検査します。従来の bincode 形式や Lindera 3 で構築した辞書は、元の CSV からの再構築が必要です。Haqumei が扱う MeCab 互換の `.dic` 形式は変わりません。
+
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features)) |

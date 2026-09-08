@@ -42,6 +42,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.9.1
@@ -66,6 +68,14 @@ jobs:
           key: haqumei-dictionary-${{ runner.os }}-${{ hashFiles('haqumei/build.rs') }}
           restore-keys: |
             haqumei-dictionary-${{ runner.os }}-
+
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+
+      - name: Clippy for every workspace target
+        if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets --features "haqumei-jpreprocess/binary haqumei-jpreprocess/naist-jdic haqumei-jpreprocess-core/vibrato haqumei-jpreprocess-dictionary/binary" -- -D warnings
 
       - name: Build
         run: cargo build --verbose --workspace --exclude haqumei-python --exclude haqumei-bench --exclude haqumei-eval --exclude haqumei-dict-tool --no-default-features --features haqumei/embed-dictionary --features haqumei/download-dictionary
