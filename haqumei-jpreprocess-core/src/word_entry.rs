@@ -26,7 +26,12 @@ impl Default for WordEntry {
 
 impl WordEntry {
     pub fn load(details: &[&str]) -> JPreprocessResult<Self> {
-        WordDetailsLine::from_strs(details).try_into()
+        assert_eq!(details.len(), 12, "line must have exactly 12 columns");
+        if details[9].bytes().filter(|&b| b == b'/').take(2).count() <= 1 {
+            WordDetails::load(details).map(Self::Single)
+        } else {
+            WordDetailsLine::from_strs(details).try_into()
+        }
     }
 
     pub fn get_with_string(&self, string: &str) -> Vec<(String, WordDetails)> {

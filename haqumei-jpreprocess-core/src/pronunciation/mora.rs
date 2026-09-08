@@ -26,6 +26,16 @@ pub struct Mora {
 }
 
 impl Mora {
+    /// 無声化記号を除いたモーラの表記を返します。
+    pub fn as_str(&self) -> &'static str {
+        match self.mora_enum {
+            MoraEnum::Question => QUESTION,
+            MoraEnum::Exclamation => EXCLAMATION,
+            MoraEnum::Touten => TOUTEN,
+            mora_enum => INTO_STR.get(&mora_enum).unwrap(),
+        }
+    }
+
     pub fn phonemes(&self) -> (Option<Consonant>, Option<Vowel>) {
         mora_to_phoneme(self)
     }
@@ -91,13 +101,8 @@ impl Mora {
 
 impl Display for Mora {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mora = match self.mora_enum {
-            MoraEnum::Question => QUESTION,
-            MoraEnum::Exclamation => EXCLAMATION,
-            MoraEnum::Touten => TOUTEN,
-            mora_enum => INTO_STR.get(&mora_enum).unwrap(),
-        };
         let suffix = if self.is_voiced { "" } else { QUOTATION };
-        write!(f, "{}{}", mora, suffix)
+        f.write_str(self.as_str())?;
+        f.write_str(suffix)
     }
 }

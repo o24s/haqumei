@@ -90,12 +90,26 @@ pub fn njd_set_pronunciation(njd: &mut NJD) {
                 Triple::Full(_, node, next) => (node, next),
                 _ => continue,
             };
-            if next.get_pron().mora_matches(MoraEnum::U)
+            let auxiliary_u = next.get_pron().mora_matches(MoraEnum::U)
                 && matches!(next.get_pos(), POS::Jodoushi)
                 && matches!(node.get_pos(), POS::Doushi(_) | POS::Jodoushi)
-                && node.get_pron().mora_size() > 0
-            {
-                next.set_pron(pron!([Long], 0));
+                && node.get_pron().mora_size() > 0;
+            let registered_long = next.get_pron().mora_matches(MoraEnum::Long)
+                && next.get_pron().moras()[0].is_voiced;
+            if auxiliary_u || registered_long {
+                let keep_u = next.get_read() == Some("ウ")
+                    && node
+                        .get_pron()
+                        .moras()
+                        .last()
+                        .is_some_and(|mora| mora.is_voiced && ends_in_a_i_e(mora.as_str()));
+                if keep_u && registered_long {
+                    next.get_pron_mut().moras_mut()[0].mora_enum = MoraEnum::U;
+                } else if keep_u {
+                    next.set_pron(pron!([U], 0));
+                } else if auxiliary_u {
+                    next.set_pron(pron!([Long], 0));
+                }
             }
             if matches!(node.get_pos(), POS::Jodoushi) && matches!(next.get_string(), "？" | "！")
             {
@@ -109,9 +123,68 @@ pub fn njd_set_pronunciation(njd: &mut NJD) {
     }
 }
 
+// ア・イ・エ段の後では「う」を独立した母音として残す。
+// 小書きのャ・ヵ・ヶとヰ・ヱは従来の段判定に含まれない。
+#[rustfmt::skip]
+fn ends_in_a_i_e(mora: &str) -> bool {
+    matches!(mora.chars().last(), Some(
+        'ア' | 'カ' | 'サ' | 'タ' | 'ナ' | 'ハ' | 'マ' | 'ヤ' | 'ラ' | 'ワ' | 'ガ' | 'ザ'
+        | 'ダ' | 'バ' | 'パ' | 'ァ'
+        | 'イ' | 'キ' | 'シ' | 'チ' | 'ニ' | 'ヒ' | 'ミ' | 'リ' | 'ギ' | 'ジ' | 'ヂ' | 'ビ'
+        | 'ピ' | 'ィ'
+        | 'エ' | 'ケ' | 'セ' | 'テ' | 'ネ' | 'ヘ' | 'メ' | 'レ' | 'ゲ' | 'ゼ' | 'デ' | 'ベ'
+        | 'ペ' | 'ェ'
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{pronunciation::njd_set_pronunciation, NJD};
+
+    #[test]
+    fn auxiliary_u_preserves_separate_vowels() {
+        for (previous, expected) in [
+            ("ア", "ウ"),
+            ("イ", "ウ"),
+            ("エ", "ウ"),
+            ("ウ", "ー"),
+            ("オ", "ー"),
+            ("カ", "ウ"),
+            ("キ", "ウ"),
+            ("ケ", "ウ"),
+            ("キャ", "ー"),
+            ("クァ", "ウ"),
+            ("ティ", "ウ"),
+            ("シェ", "ウ"),
+            ("ヰ", "ー"),
+            ("ヱ", "ー"),
+            ("ン", "ー"),
+            ("ー", "ー"),
+            ("キ’", "ー"),
+        ] {
+            let feature = format!("前,動詞,自立,*,*,一段,未然形,前,{previous},{previous},0/1,*,0");
+            let mut njd: NJD = [
+                feature.as_str(),
+                "う,助動詞,*,*,*,不変化型,基本形,う,ウ,ウ,0/1,*,0",
+            ]
+            .into_iter()
+            .collect();
+            njd_set_pronunciation(&mut njd);
+            assert_eq!(njd.nodes[1].get_pron().to_string(), expected, "{previous}");
+        }
+    }
+
+    #[test]
+    fn ordinary_u_is_not_lengthened() {
+        let mut njd: NJD = [
+            "前,動詞,自立,*,*,一段,未然形,前,オ,オ,0/1,*,0",
+            "う,名詞,一般,*,*,*,*,う,ウ,ウ,0/1,*,0",
+        ]
+        .into_iter()
+        .collect();
+        njd_set_pronunciation(&mut njd);
+        assert_eq!(njd.nodes[1].get_pron().to_string(), "ウ");
+    }
 
     #[test]
     fn unknown_z_uses_the_registered_mora_count() {

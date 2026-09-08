@@ -3,9 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
 
 use crate::JPreprocessResult;
 
@@ -18,11 +16,6 @@ pub enum AccentRuleParseError {
     #[error("Unrecognized syntax {0}")]
     SyntaxError(String),
 }
-
-static PARSE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new("^((?P<pos>名詞|形容詞|助詞|特殊助動詞|動詞|助動詞|連体詞|副詞|接頭詞|接続詞|感動詞|記号|フィラー|その他)%)?(?P<accent>[FC][1-5]|P1|P2|P6|P14)?(@(?P<add>[-0-9]+))?$")
-        .expect("Failed to compile accent rule regex")
-});
 
 #[derive(
     Debug,
@@ -220,29 +213,50 @@ impl ChainRules {
     }
 
     fn parse_rule(rule: &str) -> JPreprocessResult<(POSMatch, ChainRule)> {
-        let capture = PARSE_REGEX
-            .captures(rule)
-            .ok_or_else(|| AccentRuleParseError::SyntaxError(rule.to_string()))?;
-
-        let pos = {
-            if let Some(pos) = capture.name("pos") {
-                POSMatch::from_str(pos.as_str())?
-            } else {
-                POSMatch::Default
+        let invalid = || AccentRuleParseError::SyntaxError(rule.to_owned());
+        let (pos, body) = match rule.split_once('%') {
+            Some((pos, body)) => {
+                if !matches!(
+                    pos,
+                    "名詞"
+                        | "形容詞"
+                        | "助詞"
+                        | "特殊助動詞"
+                        | "動詞"
+                        | "助動詞"
+                        | "連体詞"
+                        | "副詞"
+                        | "接頭詞"
+                        | "接続詞"
+                        | "感動詞"
+                        | "記号"
+                        | "フィラー"
+                        | "その他"
+                ) {
+                    return Err(invalid().into());
+                }
+                (Some(pos), body)
             }
+            None => (None, rule),
         };
-
-        let accent_type = if let Some(matched) = capture.name("accent") {
-            // This is guaranteed to success by regex
-            AccentType::from_str(matched.as_str()).unwrap()
-        } else {
-            AccentType::None
+        let (accent, add_type) = match body.split_once('@') {
+            Some((accent, offset)) => {
+                if offset.is_empty() || !offset.bytes().all(|b| b == b'-' || b.is_ascii_digit()) {
+                    return Err(invalid().into());
+                }
+                // 従来の文法は「--1」なども許し、整数化できない値や桁あふれを 0 とする。
+                (accent, offset.parse().unwrap_or(0))
+            }
+            None => (body, 0),
         };
-
-        let add_type = capture
-            .name("add")
-            .and_then(|matched| matched.as_str().parse().ok())
-            .unwrap_or(0);
+        if accent == "*" {
+            return Err(invalid().into());
+        }
+        let accent_type = AccentType::from_str(accent).map_err(|_| invalid())?;
+        let pos = pos
+            .map(POSMatch::from_str)
+            .transpose()?
+            .unwrap_or(POSMatch::Default);
 
         Ok((pos, ChainRule::new(accent_type, add_type)))
     }
@@ -433,5 +447,111 @@ mod tests {
         assert_eq!(rules.meishi, None);
 
         assert_eq!(rules.to_string(), "*");
+    }
+}
+
+#[cfg(test)]
+mod parser_compatibility_tests {
+    use super::*;
+
+    fn reference(rule: &str, regex: &regex::Regex) -> JPreprocessResult<(POSMatch, ChainRule)> {
+        let capture = regex
+            .captures(rule)
+            .ok_or_else(|| AccentRuleParseError::SyntaxError(rule.to_string()))?;
+
+        let pos = {
+            if let Some(pos) = capture.name("pos") {
+                POSMatch::from_str(pos.as_str())?
+            } else {
+                POSMatch::Default
+            }
+        };
+
+        let accent_type = if let Some(matched) = capture.name("accent") {
+            // 正規表現で AccentType が受け付ける値だけに絞っている。
+            AccentType::from_str(matched.as_str()).unwrap()
+        } else {
+            AccentType::None
+        };
+
+        let add_type = capture
+            .name("add")
+            .and_then(|matched| matched.as_str().parse().ok())
+            .unwrap_or(0);
+
+        Ok((pos, ChainRule::new(accent_type, add_type)))
+    }
+
+    #[test]
+    fn handwritten_parser_matches_previous_grammar() {
+        let regex = regex::Regex::new("^((?P<pos>名詞|形容詞|助詞|特殊助動詞|動詞|助動詞|連体詞|副詞|接頭詞|接続詞|感動詞|記号|フィラー|その他)%)?(?P<accent>[FC][1-5]|P1|P2|P6|P14)?(@(?P<add>[-0-9]+))?$").unwrap();
+        let compare = |rule: &str| {
+            assert_eq!(
+                ChainRules::parse_rule(rule).map_err(|e| e.to_string()),
+                reference(rule, &regex).map_err(|e| e.to_string()),
+                "{rule:?}"
+            );
+        };
+        for pos in [
+            "",
+            "名詞%",
+            "形容詞%",
+            "助詞%",
+            "特殊助動詞%",
+            "動詞%",
+            "助動詞%",
+            "連体詞%",
+            "副詞%",
+            "接頭詞%",
+            "接続詞%",
+            "感動詞%",
+            "記号%",
+            "フィラー%",
+            "その他%",
+            "特殊助詞%",
+            "%",
+            "名詞%%",
+        ] {
+            for accent in [
+                "", "F1", "F2", "F3", "F4", "F5", "C1", "C2", "C3", "C4", "C5", "P1", "P2", "P6",
+                "P14", "F0", "F6", "P4", "P13", "P140", "*", "-1",
+            ] {
+                for offset in [
+                    "",
+                    "@",
+                    "@0",
+                    "@-1",
+                    "@+1",
+                    "@-",
+                    "@--1",
+                    "@1-2",
+                    "@01",
+                    "@１２",
+                    "@1@2",
+                    "@9223372036854775807",
+                    "@-9223372036854775808",
+                    "@99999999999999999999999999999999999999",
+                ] {
+                    let rule = format!("{pos}{accent}{offset}");
+                    compare(&rule);
+                    for ending in ["\n", "\r\n", "\0", "/F1", " "] {
+                        compare(&format!("{rule}{ending}"));
+                    }
+                }
+            }
+        }
+        let alphabet: Vec<char> = "名詞特殊助動形容%FCP0123456789@-+*/ \n\0".chars().collect();
+        let mut state = 42u64;
+        for len in 0..24 {
+            for _ in 0..1000 {
+                let text: String = (0..len)
+                    .map(|_| {
+                        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                        alphabet[(state >> 32) as usize % alphabet.len()]
+                    })
+                    .collect();
+                compare(&text);
+            }
+        }
     }
 }

@@ -648,14 +648,15 @@ HaqumeiOptions {
 ## ベンチマーク
 
 約31.8万文字の日本語テキストを対象にした、`pyopenjtalk` (Baseline) と `haqumei` の比較結果です。
+初期化時間は除外されています。
 
 入力データ: [「吾輩は猫である」](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407文字 / 8,451行 (平均 37文字/行) (※ ルビは消去済み)
 
 | 実行モード | 実行時間 (Mean) | スループット | スピードアップ |
 | :--- | :--- | :--- | :--- |
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 1.359 s | 234k chars/s | 1.73x |
-| **haqumei** (`g2p_batch`, Default) | 0.133 s | 2.40M chars/s | 17.76x |
+| **haqumei** (Default) | 0.680 s | 468k chars/s | 3.47x |
+| **haqumei** (`g2p_batch`, Default) | 0.048 s | 6.62M chars/s | 49.00x |
 
 ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
 

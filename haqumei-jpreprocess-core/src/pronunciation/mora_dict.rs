@@ -22,22 +22,22 @@ pub static MORA_DICT_AHO_CORASICK: LazyLock<DoubleArrayAhoCorasick<usize>> = Laz
         .unwrap()
 });
 
-pub fn get_mora_enum(position: usize) -> Vec<MoraEnum> {
+pub fn get_mora_enum(position: usize) -> &'static [MoraEnum] {
     if position == 0 {
-        return vec![MoraEnum::Long];
+        return &[MoraEnum::Long];
     }
     let mut index = position - 1;
     for table in [MORA_KATAKANA.as_slice(), MORA_HIRAGANA.as_slice()] {
         if let Some((_, mora)) = table.get(index) {
-            return vec![*mora];
+            return std::slice::from_ref(mora);
         }
         index -= table.len();
     }
     if let Some((_, moras)) = MORA_ALPHABET.get(index) {
-        return moras.to_vec();
+        return moras;
     }
     index -= MORA_ALPHABET.len();
-    vec![MORA_IRREGULAR_KATAKANA[index].1]
+    std::slice::from_ref(&MORA_IRREGULAR_KATAKANA[index].1)
 }
 
 pub static INTO_STR: LazyLock<HashMap<MoraEnum, &'static str>> = LazyLock::new(|| {
@@ -491,35 +491,35 @@ mod tests {
     #[test]
     fn long() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ー").unwrap();
-        assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Long]);
+        assert_eq!(get_mora_enum(found), [MoraEnum::Long]);
     }
     #[test]
     fn katakana() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ヴョ").unwrap();
-        assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Vyo]);
+        assert_eq!(get_mora_enum(found), [MoraEnum::Vyo]);
     }
     #[test]
     fn hiragana() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ぁ").unwrap();
-        assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Xa]);
+        assert_eq!(get_mora_enum(found), [MoraEnum::Xa]);
     }
     #[test]
     fn alphabet() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ｘ").unwrap();
         assert_eq!(
-            get_mora_enum(found).as_slice(),
+            get_mora_enum(found),
             [MoraEnum::E, MoraEnum::Xtsu, MoraEnum::Ku, MoraEnum::Su]
         );
     }
     #[test]
     fn katakana_irregular1() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "グヮ").unwrap();
-        assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Gwa]);
+        assert_eq!(get_mora_enum(found), [MoraEnum::Gwa]);
     }
     #[test]
     fn katakana_irregular2() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ヶ").unwrap();
-        assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Xke]);
+        assert_eq!(get_mora_enum(found), [MoraEnum::Xke]);
     }
 }
 

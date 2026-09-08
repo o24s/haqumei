@@ -645,14 +645,15 @@ HaqumeiOptions {
 ## Benchmark
 
 The following benchmark compares `pyopenjtalk` (Baseline) with `haqumei`, using approximately 318,000 characters of Japanese text.
+Initialization time is excluded.
 
 Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407 chars / 8,451 lines (Average 37 chars/line) (Ruby characters have been removed)
 
 | Execution Mode | Execution Time (Mean) | Throughput | Speedup |
 | :--- | :--- | :--- | :--- |
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 1.359 s | 234k chars/s | **1.73x** |
-| **haqumei** (`g2p_batch`, Default) | 0.133 s | 2.40M chars/s | 17.76x |
+| **haqumei** (Default) | 0.680 s | 468k chars/s | **3.47x** |
+| **haqumei** (`g2p_batch`, Default) | 0.048 s | 6.62M chars/s | 49.00x |
 
 The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk).
 

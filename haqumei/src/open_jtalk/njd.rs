@@ -1,14 +1,15 @@
 use rustc_hash::FxHashMap;
 
 use crate::utils::{is_katakana_word, split_kana_mora};
-use crate::{
-    errors::HaqumeiError,
-    features::NjdFeature,
-    utils::{Dan, dan},
-};
+use crate::{errors::HaqumeiError, features::NjdFeature};
 
 /// pyopenjtalk-plus の独自結合ルールなどを適用する
-pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
+pub(crate) fn apply_plus_rules(features: &mut [haqumei_jpreprocess_njd::NJDNode]) {
+    use haqumei_jpreprocess_core::{
+        accent_rule::ChainRules,
+        cform::CForm,
+        ctype::{CType, SaIrregular},
+    };
     if features.len() < 2 {
         return;
     }
@@ -19,69 +20,97 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
         let njd = &mut head[i];
         let next_njd = &mut tail[0];
 
-        // njd_set_pronunciation は、動詞または助動詞の後に助動詞「う」が続く場合、
-        // その「う」の発音を長音（ー）に置き換えてしまう。
-        // 前方の単語が ア段, イ段, エ段 で終わるとき、長音の置き換えを取り消す。
-        if next_njd.pron == "ー"
-            && next_njd.read == "ウ"
-            && let Some(last) = njd.pron.chars().last()
-            && let Some(dan) = dan(last)
-            && matches!(dan, Dan::ア段 | Dan::イ段 | Dan::エ段)
-        {
-            next_njd.pron = "ウ".to_string();
-        }
+        let (is_sahen_prefix, is_verb, is_adjective) = plus_pos_flags(njd.get_details());
+        let (_, next_is_verb, _) = plus_pos_flags(next_njd.get_details());
 
         // サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
-        let is_sahen_prefix = matches!(njd.pos_group1.as_str(), "サ変接続" | "格助詞" | "接続助詞")
-            || (njd.pos == "名詞" && njd.pos_group1 == "一般")
-            || njd.pos == "副詞";
-        if is_sahen_prefix && next_njd.ctype == "サ変・スル" {
-            next_njd.chain_flag = 1;
+        if is_sahen_prefix && matches!(next_njd.get_ctype(), CType::SaIrregular(SaIrregular::Alone))
+        {
+            next_njd.set_chain_flag(true);
         }
 
         // ご遠慮、ご配慮のような接頭語がつく場合に、その後に続く単語の結合則を変更する
-        let is_honorific_prefix = matches!(njd.string.as_str(), "お" | "御" | "ご");
-        if is_honorific_prefix && njd.chain_rule == "P1" {
-            if next_njd.acc == 0 || next_njd.acc == next_njd.mora_size {
-                next_njd.chain_rule = "C4".to_string();
-                next_njd.acc = 0;
+        let is_honorific_prefix = matches!(njd.get_string(), "お" | "御" | "ご");
+        if is_honorific_prefix && njd.get_chain_rule().to_original_string() == "P1" {
+            if next_njd.get_pron().accent() == 0
+                || next_njd.get_pron().accent() == next_njd.get_pron().mora_size()
+            {
+                next_njd.get_details_mut().chain_rule = ChainRules::new("C4");
+                next_njd.get_pron_mut().set_accent(0);
             } else {
-                next_njd.chain_rule = "C1".to_string();
+                next_njd.get_details_mut().chain_rule = ChainRules::new("C1");
             }
         }
 
         // 動詞(自立)が連続する場合(e.g., 推し量る, 刺し貫く)、後ろの動詞のアクセント核が採用される
-        if njd.pos == "動詞" && next_njd.pos == "動詞" {
-            if next_njd.acc != 0 {
-                next_njd.chain_rule = "C1".to_string();
+        if is_verb && next_is_verb {
+            if next_njd.get_pron().accent() != 0 {
+                next_njd.get_details_mut().chain_rule = ChainRules::new("C1");
             } else {
-                next_njd.chain_rule = "C4".to_string();
+                next_njd.get_details_mut().chain_rule = ChainRules::new("C4");
             }
         }
 
         // 連用形のアクセント核の登録を修正する
         let is_renyoukei = matches!(
-            njd.cform.as_str(),
-            "連用形" | "連用タ接続" | "連用ゴザイ接続" | "連用テ接続"
+            njd.get_cform(),
+            CForm::Renyou
+                | CForm::RenyouConjunctionTa
+                | CForm::RenyouConjunctionGozai
+                | CForm::RenyouConjunctionTe
         );
-        if is_renyoukei && njd.acc == njd.mora_size && njd.mora_size > 1 {
-            njd.acc -= 1;
+        if is_renyoukei
+            && njd.get_pron().accent() == njd.get_pron().mora_size()
+            && njd.get_pron().mora_size() > 1
+        {
+            let accent = njd.get_pron().accent() - 1;
+            njd.get_pron_mut().set_accent(accent);
         }
 
         // 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
         let is_rareru_form = matches!(
-            njd.orig.as_str(),
+            njd.get_orig().unwrap_or("*"),
             "れる" | "られる" | "せる" | "させる" | "ちゃう"
         );
-        if is_rareru_form && next_njd.string == "た" {
-            next_njd.chain_rule = "F2@1".to_string();
+        if is_rareru_form && next_njd.get_string() == "た" {
+            next_njd.get_details_mut().chain_rule = ChainRules::new("F2@1");
         }
 
         // 形容詞＋「なる、する」を一つのアクセント句に纏める
-        if njd.pos == "形容詞" && matches!(next_njd.orig.as_str(), "なる" | "する") {
-            next_njd.chain_flag = 1;
+        if is_adjective && matches!(next_njd.get_orig().unwrap_or("*"), "なる" | "する") {
+            next_njd.set_chain_flag(true);
         }
     }
+}
+
+fn plus_pos_flags(
+    details: &haqumei_jpreprocess_core::word_details::WordDetails,
+) -> (bool, bool, bool) {
+    use haqumei_jpreprocess_core::pos::{Joshi, Meishi, POS};
+    if let Some((pos, original)) = &details.pos_original
+        && *pos == details.pos
+    {
+        let mut fields = original.split(',');
+        let major = fields.next().unwrap_or("*");
+        let minor = fields.next().unwrap_or("*");
+        return (
+            matches!(minor, "サ変接続" | "格助詞" | "接続助詞")
+                || (major == "名詞" && minor == "一般")
+                || major == "副詞",
+            major == "動詞",
+            major == "形容詞",
+        );
+    }
+    (
+        matches!(
+            details.pos,
+            POS::Meishi(Meishi::SahenSetsuzoku | Meishi::General)
+                | POS::Joshi(Joshi::KakuJoshi(_) | Joshi::SetsuzokuJoshi)
+                | POS::Fukushi(_)
+        ),
+        matches!(details.pos, POS::Doushi(_)),
+        matches!(details.pos, POS::Keiyoushi(_)),
+    )
 }
 
 /// 未知語が `njd_set_pronunciation` でフィラーに変更されたのを、MeCab の品詞に戻す。
@@ -111,14 +140,22 @@ pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
 /// 品詞を戻しただけでは核が 0 (平板) のままなので、外来語のアクセント規則に
 /// 従って核を後ろから 3 モーラ目に置く。特殊拍 (長音・撥音・促音・小書き) には
 /// 核が立たないので、その場合は 1 つ前へずらす。
-pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_features: &[&str]) {
+pub(crate) fn restore_unknown_word_pos(
+    features: &mut [haqumei_jpreprocess_njd::NJDNode],
+    mecab_features: &[&str],
+) {
     /// 既知語の feature は 12 列以上、未知語は読みを持たないので短い
     const KNOWN_FIELD_COUNT: usize = 12;
 
     let mut unknown: FxHashMap<&str, [&str; 4]> = FxHashMap::default();
     for feature in mecab_features {
-        let fields: Vec<&str> = feature.split(',').collect();
-        if fields.len() >= KNOWN_FIELD_COUNT || fields.len() < 5 {
+        let mut fields = ["*"; KNOWN_FIELD_COUNT];
+        let mut count = 0;
+        for (slot, value) in fields.iter_mut().zip(feature.split(',')) {
+            *slot = value;
+            count += 1;
+        }
+        if !(5..KNOWN_FIELD_COUNT).contains(&count) {
             continue;
         }
         unknown.insert(
@@ -136,20 +173,26 @@ pub(crate) fn restore_unknown_word_pos(features: &mut [NjdFeature], mecab_featur
     }
 
     for feature in features.iter_mut() {
-        if feature.pos != "フィラー" {
+        if !matches!(
+            feature.get_pos(),
+            haqumei_jpreprocess_core::pos::POS::Filler
+        ) {
             continue;
         }
-        if !is_katakana_word(&feature.string) {
+        if !is_katakana_word(feature.get_string()) {
             continue;
         }
-        let Some(pos) = unknown.get(feature.string.as_str()) else {
+        let Some(pos) = unknown.get(feature.get_string()) else {
             continue;
         };
-        feature.pos = pos[0].to_string();
-        feature.pos_group1 = pos[1].to_string();
-        feature.pos_group2 = pos[2].to_string();
-        feature.pos_group3 = pos[3].to_string();
-        feature.acc = loanword_accent(&feature.pron);
+        use haqumei_jpreprocess_core::pos::POS;
+        let parsed = POS::from_strs(pos[0], pos[1], pos[2], pos[3]).unwrap_or(POS::Others);
+        let original = pos.join(",");
+        let accent = loanword_accent(&feature.get_pron().to_string());
+        let details = feature.get_details_mut();
+        details.pos = parsed;
+        details.pos_original = (original != parsed.to_string()).then_some((parsed, original));
+        details.pron.set_accent(accent as usize);
     }
 }
 
@@ -180,30 +223,48 @@ fn is_special_mora(mora: &str) -> bool {
     matches!(mora, "ー" | "ン" | "ッ")
 }
 
+fn validate_no_nul(value: &str) -> Result<(), std::ffi::NulError> {
+    // C へ渡さない文字列なので、NUL がある場合だけ従来と同じエラーを構築する。
+    if value.as_bytes().contains(&0) {
+        std::ffi::CString::new(value)?;
+    }
+    Ok(())
+}
+
 /// MeCab の特徴量から、発音・数詞・アクセントを順に求める。
-pub(crate) fn run_frontend(raw: &[String]) -> Result<Vec<NjdFeature>, HaqumeiError> {
+pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
         NJD, NJDNode, accent_phrase, accent_type, digit, digit_sequence, pronunciation,
         unvoiced_vowel,
     };
 
-    let mut nodes = Vec::new();
+    let mut nodes = Vec::with_capacity(raw.len());
     for feature in raw {
-        std::ffi::CString::new(feature.as_str())?;
-        let mut fields: Vec<&str> = feature.split(',').collect();
-        fields.resize(13, "*");
+        validate_no_nul(feature)?;
+        let mut fields = ["*"; 13];
+        for (field, value) in fields.iter_mut().zip(feature.split(',')) {
+            *field = value;
+        }
         let entry = WordEntry::load(&fields[1..13])
             .map_err(|error| HaqumeiError::MecabError(format!("NJD: {feature}: {error}")))?;
-        nodes.extend(NJDNode::load(fields[0], &entry));
+        match entry {
+            WordEntry::Single(details) => {
+                nodes.push(NJDNode::from_details(fields[0].to_owned(), details))
+            }
+            entry @ WordEntry::Multiple(_) => nodes.extend(NJDNode::load(fields[0], &entry)),
+        }
     }
     let mut njd = NJD { nodes };
     pronunciation::njd_set_pronunciation(&mut njd);
-    let mut features = rust_njd_to_features(&njd);
-    let raw_refs: Vec<&str> = raw.iter().map(String::as_str).collect();
-    restore_unknown_word_pos(&mut features, &raw_refs);
-    apply_plus_rules(&mut features);
-    njd = features_to_njd(&features)?;
+    for node in &mut njd.nodes {
+        // 補正中に発音を書き換えても、公開特徴量の範囲に収めたモーラ数を維持する。
+        let pron = node.get_pron_mut();
+        pron.set_mora_size(pron.mora_size().min(i32::MAX as usize));
+        pron.set_accent(pron.accent().min(i32::MAX as usize));
+    }
+    restore_unknown_word_pos(&mut njd.nodes, raw);
+    apply_plus_rules(&mut njd.nodes);
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
     accent_phrase::njd_set_accent_phrase(&mut njd);
@@ -242,7 +303,7 @@ pub(crate) fn features_to_njd(
             &feature.pron,
             &feature.chain_rule,
         ] {
-            std::ffi::CString::new(value.as_str())?;
+            validate_no_nul(value)?;
         }
         // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
         let mut pron = Pronunciation::parse(&feature.pron, feature.acc.max(0) as usize)
@@ -334,4 +395,121 @@ fn rust_njd_to_features(njd: &haqumei_jpreprocess_njd::NJD) -> Vec<NjdFeature> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod nul_validation_tests {
+    #[test]
+    fn nul_errors_keep_the_original_position_and_bytes() {
+        for text in ["", "こんにちは", "\0先頭", "途中\0末尾", "末尾\0", "\0\0"] {
+            assert_eq!(
+                super::validate_no_nul(text),
+                std::ffi::CString::new(text).map(|_| ())
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod typed_rule_tests {
+    use super::*;
+    use haqumei_jpreprocess_njd::NJD;
+
+    #[test]
+    fn typed_rules_match_feature_based_rules() {
+        let fixtures = [
+            "お,接頭詞,名詞接続,*,*,*,*,お,オ,オ,0/1,P1,0",
+            "語,名詞,一般,*,*,*,*,語,コトバ,コトバ,3/3,C1,0",
+            "語,名詞,サ変接続,*,*,*,*,語,コトバ,コトバ,0/3,*,0",
+            "を,助詞,格助詞,一般,*,*,*,を,ヲ,ヲ,0/1,*,0",
+            "て,助詞,接続助詞,*,*,*,*,て,テ,テ,0/1,*,0",
+            "すぐ,副詞,一般,*,*,*,*,すぐ,スグ,スグ,1/2,*,0",
+            "し,動詞,自立,*,*,サ変・スル,連用形,する,シ,シ,0/1,*,0",
+            "食べ,動詞,自立,*,*,一段,連用形,食べる,タベ,タベ,2/2,*,0",
+            "られ,動詞,接尾,*,*,一段,連用形,られる,ラレ,ラレ,0/2,*,0",
+            "た,助動詞,*,*,*,特殊・タ,基本形,た,タ,タ,0/1,動詞%F2@0,0",
+            "高く,形容詞,自立,*,*,形容詞・アウオ段,連用テ接続,高い,タカク,タカク,2/3,*,0",
+            "なり,動詞,自立,*,*,五段・ラ行,連用形,なる,ナリ,ナリ,2/2,*,0",
+            "語,名詞,特殊,助動詞語幹,*,*,*,語,ゴ,ゴ,0/1,*,0",
+            "語,その他,サ変接続,*,*,*,*,語,ゴ,ゴ,0/1,*,0",
+        ];
+        for first in fixtures {
+            for second in fixtures {
+                let mut njd: NJD = [first, second].into_iter().collect();
+                let mut expected = rust_njd_to_features(&njd);
+                reference_plus_rules(&mut expected);
+                let expected = features_to_njd(&expected).unwrap();
+                apply_plus_rules(&mut njd.nodes);
+                assert_eq!(
+                    rust_njd_to_features(&njd),
+                    rust_njd_to_features(&expected),
+                    "{first} / {second}"
+                );
+            }
+        }
+    }
+    fn reference_plus_rules(features: &mut [NjdFeature]) {
+        if features.len() < 2 {
+            return;
+        }
+
+        for i in 0..features.len() - 1 {
+            let (head, tail) = features.split_at_mut(i + 1);
+
+            let njd = &mut head[i];
+            let next_njd = &mut tail[0];
+
+            // サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
+            let is_sahen_prefix =
+                matches!(njd.pos_group1.as_str(), "サ変接続" | "格助詞" | "接続助詞")
+                    || (njd.pos == "名詞" && njd.pos_group1 == "一般")
+                    || njd.pos == "副詞";
+            if is_sahen_prefix && next_njd.ctype == "サ変・スル" {
+                next_njd.chain_flag = 1;
+            }
+
+            // ご遠慮、ご配慮のような接頭語がつく場合に、その後に続く単語の結合則を変更する
+            let is_honorific_prefix = matches!(njd.string.as_str(), "お" | "御" | "ご");
+            if is_honorific_prefix && njd.chain_rule == "P1" {
+                if next_njd.acc == 0 || next_njd.acc == next_njd.mora_size {
+                    next_njd.chain_rule = "C4".to_string();
+                    next_njd.acc = 0;
+                } else {
+                    next_njd.chain_rule = "C1".to_string();
+                }
+            }
+
+            // 動詞(自立)が連続する場合(e.g., 推し量る, 刺し貫く)、後ろの動詞のアクセント核が採用される
+            if njd.pos == "動詞" && next_njd.pos == "動詞" {
+                if next_njd.acc != 0 {
+                    next_njd.chain_rule = "C1".to_string();
+                } else {
+                    next_njd.chain_rule = "C4".to_string();
+                }
+            }
+
+            // 連用形のアクセント核の登録を修正する
+            let is_renyoukei = matches!(
+                njd.cform.as_str(),
+                "連用形" | "連用タ接続" | "連用ゴザイ接続" | "連用テ接続"
+            );
+            if is_renyoukei && njd.acc == njd.mora_size && njd.mora_size > 1 {
+                njd.acc -= 1;
+            }
+
+            // 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
+            let is_rareru_form = matches!(
+                njd.orig.as_str(),
+                "れる" | "られる" | "せる" | "させる" | "ちゃう"
+            );
+            if is_rareru_form && next_njd.string == "た" {
+                next_njd.chain_rule = "F2@1".to_string();
+            }
+
+            // 形容詞＋「なる、する」を一つのアクセント句に纏める
+            if njd.pos == "形容詞" && matches!(next_njd.orig.as_str(), "なる" | "する") {
+                next_njd.chain_flag = 1;
+            }
+        }
+    }
 }

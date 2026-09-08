@@ -63,7 +63,33 @@ impl WordDetails {
     }
 
     pub fn load(details: &[&str]) -> JPreprocessResult<Self> {
-        WordDetailsLine::from_strs(details).try_into()
+        assert_eq!(details.len(), 12, "line must have exactly 12 columns");
+        let pos = POS::from_strs(details[0], details[1], details[2], details[3])?;
+        let original = format!(
+            "{},{},{},{}",
+            details[0], details[1], details[2], details[3]
+        );
+        Ok(Self {
+            pos,
+            pos_original: (original != pos.to_string()).then_some((pos, original)),
+            ctype: CType::from_str(details[4])?,
+            cform: CForm::from_str(details[5])?,
+            chain_rule: ChainRules::new(details[10]),
+            chain_flag: match details[11] {
+                "1" => Some(true),
+                "0" => Some(false),
+                _ => None,
+            },
+            orig: match details[6] {
+                "*" | "" => None,
+                _ => Some(details[6].to_owned()),
+            },
+            read: match details[7] {
+                "*" => None,
+                _ => Some(details[7].to_owned()),
+            },
+            pron: Pronunciation::parse_csv_pron(details[8], details[9])?,
+        })
     }
 
     pub fn extend_splited(
@@ -104,37 +130,20 @@ impl WordDetails {
 impl TryFrom<WordDetailsLine> for WordDetails {
     type Error = crate::JPreprocessError;
     fn try_from(value: WordDetailsLine) -> Result<WordDetails, Self::Error> {
-        let pos = POS::from_strs(
+        Self::load(&[
             &value.pos,
             &value.pos_group1,
             &value.pos_group2,
             &value.pos_group3,
-        )?;
-        let original = format!(
-            "{},{},{},{}",
-            value.pos, value.pos_group1, value.pos_group2, value.pos_group3
-        );
-        Ok(Self {
-            pos,
-            pos_original: (original != pos.to_string()).then_some((pos, original)),
-            ctype: CType::from_str(&value.ctype)?,
-            cform: CForm::from_str(&value.cform)?,
-            chain_rule: ChainRules::new(&value.chain_rule),
-            chain_flag: match value.chain_flag.as_ref() {
-                "1" => Some(true),
-                "0" => Some(false),
-                _ => None,
-            },
-            orig: match value.orig.as_str() {
-                "*" | "" => None,
-                _ => Some(value.orig.clone()),
-            },
-            read: match value.read.as_ref() {
-                "*" => None,
-                _ => Some(value.read.to_string()),
-            },
-            pron: Pronunciation::parse_csv_pron(&value.pron, &value.acc_morasize)?,
-        })
+            &value.ctype,
+            &value.cform,
+            &value.orig,
+            &value.read,
+            &value.pron,
+            &value.acc_morasize,
+            &value.chain_rule,
+            &value.chain_flag,
+        ])
     }
 }
 

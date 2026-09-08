@@ -123,10 +123,14 @@ impl Pronunciation {
     }
 
     pub fn to_pure_string(&self) -> String {
-        self.moras
-            .iter()
-            .map(|mora| mora.to_string())
-            .fold(String::new(), |a, b| a + &b)
+        let mut result = String::with_capacity(self.moras.len() * 3);
+        for mora in self.moras.iter() {
+            result.push_str(mora.as_str());
+            if !mora.is_voiced {
+                result.push_str(QUOTATION);
+            }
+        }
+        result
     }
 
     #[inline]
@@ -221,8 +225,10 @@ impl Pronunciation {
         for match_result in mora_dict::MORA_DICT_AHO_CORASICK.leftmost_find_iter(s) {
             if current_position != match_result.start() {
                 if !current_moras.is_empty() {
-                    result.push((segment_start_point..current_position, current_moras.clone()));
-                    current_moras.clear();
+                    result.push((
+                        segment_start_point..current_position,
+                        std::mem::take(&mut current_moras),
+                    ));
                     segment_start_point = current_position;
                 }
 
@@ -240,7 +246,8 @@ impl Pronunciation {
 
             current_moras.extend(
                 mora_dict::get_mora_enum(match_result.value())
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .map(|mora_enum| Mora {
                         mora_enum,
                         is_voiced: !quotation,
@@ -272,18 +279,30 @@ impl Pronunciation {
 
 impl Display for Pronunciation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            &self
-                .moras
-                .iter()
-                .fold(String::new(), |acc, mora| format!("{}{}", acc, mora)),
-        )
+        for mora in self.moras.iter() {
+            Display::fmt(mora, f)?;
+        }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::{Mora, MoraEnum, Pronunciation};
+
+    #[test]
+    fn formatting_preserves_moras_and_unvoiced_markers() {
+        for input in ["", "アキ’クェンー", "？", "！", "、", "キャティ’ヴァ"] {
+            let pronunciation = Pronunciation::parse(input, 0).unwrap();
+            let expected: String = pronunciation
+                .moras()
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(pronunciation.to_string(), expected);
+            assert_eq!(pronunciation.to_pure_string(), expected);
+        }
+    }
 
     #[test]
     fn extended_moras_preserve_spelling_and_phonemes() {

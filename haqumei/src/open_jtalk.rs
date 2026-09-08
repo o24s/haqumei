@@ -884,11 +884,9 @@ impl OpenJTalk {
         I: IntoIterator,
         I::Item: AsRef<str> + 'a,
     {
-        let raw: Vec<String> = mecab_features
-            .into_iter()
-            .map(|s| s.as_ref().to_string())
-            .collect();
-        njd::run_frontend(&raw)
+        let raw: Vec<_> = mecab_features.into_iter().collect();
+        let borrowed: Vec<&str> = raw.iter().map(AsRef::as_ref).collect();
+        njd::run_frontend(&borrowed)
     }
 
     /// NJD の特徴からフルコンテキストラベル文字列を生成します。
