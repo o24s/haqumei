@@ -20,14 +20,14 @@ if you want control over how njd and jpcommon are processed.
 
 ## Example
 
-In this example, haqumei_jpreprocess takes a [lindera](https://crates.io/crates/lindera-tokenizer/) dictionary and
+In this example, haqumei_jpreprocess loads a UTF-8 MeCab-compatible dictionary and
 preprocesses a text into jpcommon labels.
 
 ```rs
 use haqumei_jpreprocess::*;
 
 let system = SystemDictionaryConfig::File(path).load()?;
-let haqumei_jpreprocess = JPreprocess::with_dictionaries(system, None);
+let haqumei_jpreprocess = JPreprocess::from_tokenizer(system);
 
 let jpcommon_label = haqumei_jpreprocess
     .extract_fullcontext("日本語文を解析し、音声合成エンジンに渡せる形式に変換します．")?;
@@ -50,7 +50,7 @@ assert_eq!(
 );
 ```
 
-Other examples can be found at [GitHub](https://github.com/jpreprocess/jpreprocess/tree/54cf9bc2d40a5d6f25144333e9cd03fd3258a126/examples).
+User dictionaries are loaded with `SystemDictionaryConfig::load_with_user_dictionaries`. The previous Lindera-specific `with_dictionaries` and `from_config` APIs have been removed.
 
 ## Copyrights
 

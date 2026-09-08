@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
+use daachorse::{DoubleArrayAhoCorasick, DoubleArrayAhoCorasickBuilder, MatchKind};
 use std::sync::LazyLock;
 
 use super::mora_enum::MoraEnum;
@@ -15,8 +15,8 @@ pub static MORA_STR_LIST: LazyLock<Vec<&str>> = LazyLock::new(|| {
     result
 });
 
-pub static MORA_DICT_AHO_CORASICK: LazyLock<AhoCorasick> = LazyLock::new(|| {
-    AhoCorasickBuilder::new()
+pub static MORA_DICT_AHO_CORASICK: LazyLock<DoubleArrayAhoCorasick<usize>> = LazyLock::new(|| {
+    DoubleArrayAhoCorasickBuilder::new()
         .match_kind(MatchKind::LeftmostLongest)
         .build(MORA_STR_LIST.as_slice())
         .unwrap()
@@ -520,5 +520,32 @@ mod tests {
     fn katakana_irregular2() {
         let found = MORA_STR_LIST.iter().position(|l| *l == "ヶ").unwrap();
         assert_eq!(get_mora_enum(found).as_slice(), [MoraEnum::Xke]);
+    }
+}
+
+#[cfg(test)]
+mod matcher_compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn longest_matches_preserve_pattern_order_and_byte_spans() {
+        let reference = aho_corasick::AhoCorasickBuilder::new()
+            .match_kind(aho_corasick::MatchKind::LeftmostLongest)
+            .build(MORA_STR_LIST.as_slice())
+            .unwrap();
+        for first in MORA_STR_LIST.iter() {
+            for second in MORA_STR_LIST.iter() {
+                let text = format!("?{first}{second}’ー!");
+                let expected = reference
+                    .find_iter(&text)
+                    .map(|m| (m.start(), m.end(), m.pattern().as_usize()))
+                    .collect::<Vec<_>>();
+                let actual = MORA_DICT_AHO_CORASICK
+                    .leftmost_find_iter(&text)
+                    .map(|m| (m.start(), m.end(), m.value()))
+                    .collect::<Vec<_>>();
+                assert_eq!(actual, expected, "{text}");
+            }
+        }
     }
 }

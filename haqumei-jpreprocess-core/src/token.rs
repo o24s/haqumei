@@ -15,31 +15,7 @@ impl Token for (String, WordEntry) {
     }
 }
 
-#[cfg(feature = "lindera")]
-impl Tokenizer for lindera::segmenter::Segmenter {
-    fn tokenize<'a>(&'a self, text: &'a str) -> JPreprocessResult<Vec<impl 'a + Token>> {
-        Ok(self.segment(text.into())?)
-    }
-}
-
-#[cfg(feature = "lindera")]
-impl Token for lindera::token::Token<'_> {
-    fn fetch(&mut self) -> JPreprocessResult<(&str, WordEntry)> {
-        use lindera_dictionary::dictionary::UNK;
-
-        let mut details = self.details();
-        let entry = if details == *UNK {
-            WordEntry::default()
-        } else {
-            details.resize(12, "");
-            WordEntry::load(&details)?
-        };
-
-        Ok((&self.surface, entry))
-    }
-}
-
-/// Vibrato support is experimental and may be removed or changed in the future. Use with caution.
+/// vibrato-rkyv で解析した形態素を NJD の単語情報に変換します。
 #[cfg(feature = "vibrato")]
 impl Tokenizer for vibrato::tokenizer::Tokenizer {
     fn tokenize<'a>(&'a self, text: &'a str) -> JPreprocessResult<Vec<impl 'a + Token>> {

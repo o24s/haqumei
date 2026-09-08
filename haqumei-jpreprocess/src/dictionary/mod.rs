@@ -1,31 +1,28 @@
-use std::path::PathBuf;
-
 use haqumei_jpreprocess_core::JPreprocessResult;
-use lindera::dictionary::load_fs_dictionary;
-use lindera_dictionary::dictionary::Dictionary;
+use haqumei_jpreprocess_dictionary::mecab::Model;
+use std::path::PathBuf;
 
 pub mod kind;
 
-/// System dictionary configuration for JPreprocess.
+/// 形態素解析に使うシステム辞書を指定します。
 pub enum SystemDictionaryConfig {
-    /// Use self-contained dictionary. This is only valid if appropreate feature is enabled.
+    /// 同梱の辞書を使います。
     Bundled(kind::JPreprocessDictionaryKind),
-    /// Use pre-built external lindera/haqumei_jpreprocess dictionary. The PathBuf is the path to dictionary.
-    ///
-    /// - When you are using lindera dictionary: Normal dictionary cannot be used;
-    ///   it must contain the accent position and accent rule.
-    /// - When you are using haqumei_jpreprocess dictionary: The JPreprocess version needs to be same as the
-    ///   JPreprocess that built the dictionary.
+    /// UTF-8 の MeCab 互換辞書をディレクトリーから読み込みます。
     File(PathBuf),
 }
 
 impl SystemDictionaryConfig {
-    pub fn load(self) -> JPreprocessResult<Dictionary> {
-        let dictionary = match self {
-            Self::Bundled(kind) => kind.load(),
-            Self::File(dictionary_path) => load_fs_dictionary(dictionary_path.as_path())?,
-        };
+    /// システム辞書を読み込みます。
+    pub fn load(self) -> JPreprocessResult<Model> {
+        self.load_with_user_dictionaries(&[])
+    }
 
-        Ok(dictionary)
+    /// システム辞書とコンパイル済みのユーザー辞書を読み込みます。
+    pub fn load_with_user_dictionaries(self, users: &[PathBuf]) -> JPreprocessResult<Model> {
+        Ok(match self {
+            Self::File(path) => Model::open(&path, users)?,
+            Self::Bundled(kind) => kind.load(users)?,
+        })
     }
 }

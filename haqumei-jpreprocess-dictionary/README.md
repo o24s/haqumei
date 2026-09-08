@@ -3,7 +3,7 @@
 The dictionary reader/writer library for [haqumei-jpreprocess](https://crates.io/crates/haqumei-jpreprocess),
 Japanese text preprocessor for Text-to-Speech application.
 
-This package contains dictionary building utilities for lindera/haqumei_jpreprocess dictionary.
+This package contains the shared MeCab-compatible dictionary compiler and vibrato-rkyv tokenizer used by Haqumei.
 
 This project is a rewrite of [OpenJTalk](http://open-jtalk.sourceforge.net/) in Rust language.
 

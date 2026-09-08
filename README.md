@@ -67,10 +67,6 @@
 
 ## Features
 
-The G2P pipeline uses Rust implementations of text normalization, MeCab-compatible morphological analysis, NJD processing, and JPCommon label generation. The `haqumei-jpreprocess*` workspace crates are adapted from [jpreprocess](https://github.com/jpreprocess/jpreprocess), retaining Haqumei’s dictionary, label, and word-to-phoneme APIs. Open JTalk and MeCab C/C++ code is no longer compiled.
-
-The optional Lindera backend in `haqumei-jpreprocess` uses Lindera 6. Its structured word entries use validated rkyv 0.8 archives; dictionaries built with the previous bincode format or Lindera 3 require rebuilding from their source CSV files. Haqumei’s MeCab-compatible `.dic` format is unchanged.
-
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | Provides mapping information between words ($\approx$ surface forms / dictionary entries) and phonemes, which was previously difficult to obtain directly. Enables retrieval of detailed analysis results with minimal loss of information from the input text, including unknown-word information. (See [Advanced Features](#advanced-features)) |
@@ -648,17 +644,15 @@ HaqumeiOptions {
 
 ## Benchmark
 
-The measurements below describe the former Open JTalk backend. They have not been repeated for the Rust pipeline.
-
-Here are the comparison results between `pyopenjtalk` (Baseline) and `haqumei` using approximately 318,000 characters of Japanese text.
+The following benchmark compares `pyopenjtalk` (Baseline) with `haqumei`, using approximately 318,000 characters of Japanese text.
 
 Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407 chars / 8,451 lines (Average 37 chars/line) (Ruby characters have been removed)
 
 | Execution Mode | Execution Time (Mean) | Throughput | Speedup |
 | :--- | :--- | :--- | :--- |
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 1.303 s | 244k chars/s | **1.81x** |
-| **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
+| **haqumei** (Default) | 1.359 s | 234k chars/s | **1.73x** |
+| **haqumei** (`g2p_batch`, Default) | 0.133 s | 2.40M chars/s | 17.76x |
 
 The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk).
 

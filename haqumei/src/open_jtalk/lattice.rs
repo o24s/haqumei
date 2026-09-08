@@ -88,7 +88,7 @@ impl OpenJTalk {
     pub fn analyze_lattice(&mut self, text: &str) -> Result<Vec<LatticeNode>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
         let text = self.text2mecab_string(text)?;
-        let analysis = self.mecab.analyze(&text)?;
+        let analysis = self.mecab.analyze_lattice(&text)?;
         let mut cursor = CharCursor::new(text.as_bytes());
         Ok(analysis
             .nodes

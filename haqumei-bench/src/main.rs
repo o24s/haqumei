@@ -18,7 +18,7 @@ fn bench_g2p(c: &mut Criterion) {
 
     let mut haqumei = Haqumei::new().unwrap();
     group.bench_function("MultiThread (Default)", |b| {
-        b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
+        b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines)).unwrap()))
     });
 
     let mut ojt = OpenJTalk::new().unwrap();
@@ -29,7 +29,7 @@ fn bench_g2p(c: &mut Criterion) {
     });
 
     group.bench_function("G2P Mapping", |b| {
-        b.iter(|| black_box(haqumei.g2p_mapping_batch(black_box(&lines))))
+        b.iter(|| black_box(haqumei.g2p_mapping_batch(black_box(&lines)).unwrap()))
     });
 
     group.finish();
@@ -54,7 +54,7 @@ fn bench_context_reading(c: &mut Criterion) {
         })
         .unwrap();
         group.bench_function(label, |b| {
-            b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines))))
+            b.iter(|| black_box(haqumei.g2p_batch(black_box(&lines)).unwrap()))
         });
     }
 

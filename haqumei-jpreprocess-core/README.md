@@ -3,7 +3,7 @@
 The core library for [haqumei-jpreprocess](https://crates.io/crates/haqumei-jpreprocess),
 Japanese text preprocessor for Text-to-Speech application.
 
-This package contains basic data structures and their parsers.
+This package contains basic data structures and their parsers. The optional `vibrato` feature implements the `Tokenizer` adapter for `vibrato-rkyv`, with legacy bincode support disabled.
 
 This project is a rewrite of [OpenJTalk](http://open-jtalk.sourceforge.net/) in Rust language.
 

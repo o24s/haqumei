@@ -76,14 +76,9 @@ haqumei-jpreprocess-jpcommon = { path = "haqumei-jpreprocess-jpcommon", version 
 haqumei-jpreprocess-naist-jdic = { path = "haqumei-jpreprocess-naist-jdic", version = "0.1.0" }
 haqumei-jpreprocess-njd = { path = "haqumei-jpreprocess-njd", version = "0.1.0" }
 haqumei-jpreprocess-window = { path = "haqumei-jpreprocess-window", version = "0.1.0" }
-lindera = "6.0.0"
-lindera-dictionary = { version = "6.0.0", default-features = false }
-vibrato = { version = "0.5.2", default-features = false }
+vibrato = { package = "vibrato-rkyv", version = "0.7.16", default-features = false }
 rkyv = { version = "0.8.18", features = ["bytecheck", "little_endian", "aligned", "pointer_width_32"] }
-byteorder = "1.5.0"
-derive_builder = "0.20.2"
 encoding_rs = "0.8.40"
-encoding_rs_io = "0.1.8"
 md5 = "0.8.1"
 flate2 = "1.1.10"
 aho-corasick = "1.1.5"

@@ -17,23 +17,22 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-lindera = ["dep:lindera", "dep:lindera-dictionary"]
 vibrato = ["dep:vibrato"]
 
 [dependencies]
 thiserror.workspace = true
 rkyv.workspace = true
 
-lindera = { workspace = true, optional = true }
-lindera-dictionary = { workspace = true, optional = true }
-
 vibrato = { workspace = true, optional = true }
 
 serde = { workspace = true, features = ["derive"] }
 
 regex.workspace = true
-aho-corasick.workspace = true
+daachorse.workspace = true
 
 [package.metadata.upstream]
 repository = "https://github.com/jpreprocess/jpreprocess"
 revision = "54cf9bc2d40a5d6f25144333e9cd03fd3258a126"
+
+[dev-dependencies]
+aho-corasick.workspace = true

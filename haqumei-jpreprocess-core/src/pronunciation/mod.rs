@@ -218,7 +218,7 @@ impl Pronunciation {
         let mut segment_start_point = 0;
         let mut current_moras = Vec::new();
         let mut current_position = 0;
-        for match_result in mora_dict::MORA_DICT_AHO_CORASICK.find_iter(s) {
+        for match_result in mora_dict::MORA_DICT_AHO_CORASICK.leftmost_find_iter(s) {
             if current_position != match_result.start() {
                 if !current_moras.is_empty() {
                     result.push((segment_start_point..current_position, current_moras.clone()));
@@ -239,7 +239,7 @@ impl Pronunciation {
             let quotation = s[match_result.end()..].starts_with(QUOTATION);
 
             current_moras.extend(
-                mora_dict::get_mora_enum(match_result.pattern().as_usize())
+                mora_dict::get_mora_enum(match_result.value())
                     .into_iter()
                     .map(|mora_enum| Mora {
                         mora_enum,

@@ -4,11 +4,6 @@ use std::path::PathBuf;
 use haqumei_jpreprocess::*;
 
 use clap::{Args, Parser};
-use lindera_dictionary::{
-    builder::DictionaryBuilder, dictionary::metadata::Metadata,
-    loader::user_dictionary::UserDictionaryLoader,
-};
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -48,19 +43,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         SystemDictionaryConfig::Bundled(kind::JPreprocessDictionaryKind::NaistJdic)
     };
 
-    let user_dictionary = cli
-        .user_dictionary
-        .map(|path| match path.extension() {
-            Some(ext) if ext == "csv" => UserDictionaryLoader::load_from_csv(
-                DictionaryBuilder::new(Metadata::default()),
-                path,
-            ),
-            Some(ext) if ext == "bin" => UserDictionaryLoader::load_from_bin(path),
-            _ => panic!("Unsupported user dictionary format: {}", path.display()),
-        })
-        .transpose()?;
-
-    let haqumei_jpreprocess = JPreprocess::with_dictionaries(dictionary.load()?, user_dictionary);
+    let users = cli.user_dictionary.into_iter().collect::<Vec<_>>();
+    let haqumei_jpreprocess =
+        JPreprocess::from_tokenizer(dictionary.load_with_user_dictionaries(&users)?);
 
     let njd_texts: Vec<String> = haqumei_jpreprocess.text_to_njd(&cli.input)?.into();
     for line in njd_texts {

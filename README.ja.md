@@ -68,10 +68,6 @@
 
 ## 特徴 (Features)
 
-テキスト正規化、MeCab 互換の形態素解析、NJD、JPCommon によるラベル生成を Rust で実装しています。ワークスペースの `haqumei-jpreprocess*` は [jpreprocess](https://github.com/jpreprocess/jpreprocess) を基に、Haqumei の辞書・ラベル・単語と音素の対応 API に合わせて改修したクレートです。Open JTalk と MeCab の C/C++ コードはビルドしません。
-
-`haqumei-jpreprocess` のオプションの形態素解析器には Lindera 6 を使用しています。構造化した単語情報は rkyv 0.8 で保存し、読み込み時にバイト列を検査します。従来の bincode 形式や Lindera 3 で構築した辞書は、元の CSV からの再構築が必要です。Haqumei が扱う MeCab 互換の `.dic` 形式は変わりません。
-
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features)) |
@@ -651,8 +647,6 @@ HaqumeiOptions {
 
 ## ベンチマーク
 
-以下は旧 Open JTalk 実装での測定値です。Rust へ移行したパイプラインでは再測定していません。
-
 約31.8万文字の日本語テキストを対象にした、`pyopenjtalk` (Baseline) と `haqumei` の比較結果です。
 
 入力データ: [「吾輩は猫である」](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407文字 / 8,451行 (平均 37文字/行) (※ ルビは消去済み)
@@ -660,8 +654,8 @@ HaqumeiOptions {
 | 実行モード | 実行時間 (Mean) | スループット | スピードアップ |
 | :--- | :--- | :--- | :--- |
 | **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 1.303 s | 244k chars/s | 1.81x |
-| **haqumei** (`g2p_batch`, Default) | 0.098 s | 3.24M chars/s | 24.04x |
+| **haqumei** (Default) | 1.359 s | 234k chars/s | 1.73x |
+| **haqumei** (`g2p_batch`, Default) | 0.133 s | 2.40M chars/s | 17.76x |
 
 ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
 

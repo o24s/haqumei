@@ -13,7 +13,7 @@ rust-version = "1.88.0"
 documentation = "https://docs.rs/haqumei-jpreprocess"
 
 [features]
-binary = ["dep:clap", "dep:serde_json", "tokenizer"]
+binary = ["dep:clap", "tokenizer"]
 naist-jdic = [
   "dep:haqumei-jpreprocess-naist-jdic",
   "haqumei-jpreprocess-naist-jdic/naist-jdic",
@@ -21,8 +21,6 @@ naist-jdic = [
 ]
 tokenizer = [
   "dep:haqumei-jpreprocess-dictionary",
-  "dep:lindera",
-  "dep:lindera-dictionary",
 ]
 default = ["tokenizer"]
 
@@ -32,8 +30,6 @@ path = "src/bin/jpreprocess.rs"
 required-features = ["binary"]
 
 [dependencies]
-lindera = { workspace = true, optional = true }
-lindera-dictionary = { workspace = true, optional = true }
 haqumei-jpreprocess-dictionary = { workspace = true, optional = true }
 
 phf = { workspace = true, features = ["macros"] }
@@ -46,7 +42,6 @@ haqumei-jpreprocess-jpcommon.workspace = true
 haqumei-jpreprocess-naist-jdic = { workspace = true, optional = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }
-serde_json = { workspace = true, optional = true }
 
 [package.metadata.upstream]
 repository = "https://github.com/jpreprocess/jpreprocess"

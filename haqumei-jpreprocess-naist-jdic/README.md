@@ -3,7 +3,7 @@
 Naist-jdic dictionary for [haqumei-jpreprocess](https://crates.io/crates/haqumei-jpreprocess),
 Japanese text preprocessor for Text-to-Speech application.
 
-This package builds and embeds NAIST-JDIC for Lindera 6 with rkyv word entries. The `naist-jdic` feature downloads the source archive pinned in `build.json`, checks its checksum, and compiles it with the workspace dictionary builder. The source archive is cached in Cargo’s build directory; dictionary files are rebuilt when the builder changes.
+This package builds and embeds NAIST-JDIC in Haqumei’s MeCab-compatible format. The `naist-jdic` feature downloads the source archive pinned in `build.json`, checks its checksum, and compiles it with the workspace dictionary builder. The source archive is cached in Cargo’s build directory; dictionary files are rebuilt when the builder changes.
 
 This project is a rewrite of [OpenJTalk](http://open-jtalk.sourceforge.net/) in Rust language.
 

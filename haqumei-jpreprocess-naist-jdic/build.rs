@@ -1,6 +1,6 @@
 #[cfg(feature = "naist-jdic")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use haqumei_jpreprocess_dictionary::dictionary::to_dict::JPreprocessDictionaryBuilder;
+    use haqumei_jpreprocess_dictionary::mecab_compile::{build_system, BuildOptions};
     use std::{fs, path::PathBuf};
 
     #[derive(serde::Deserialize)]
@@ -11,7 +11,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(serde::Deserialize)]
     struct Config {
         src: Source,
-        metadata: lindera_dictionary::dictionary::metadata::Metadata,
     }
 
     println!("cargo:rerun-if-changed=build.rs");
@@ -25,17 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&dictionary)?;
 
     if std::env::var_os("DOCS_RS").is_some() {
-        for name in [
-            "metadata.json",
-            "char_def.bin",
-            "matrix.mtx",
-            "dict.trie",
-            "dict.valsidx",
-            "dict.vals",
-            "unk.bin",
-            "dict.wordsidx",
-            "dict.words",
-        ] {
+        for name in ["sys.dic", "unk.dic", "char.bin", "matrix.bin"] {
             fs::write(dictionary.join(name), b"{}")?;
         }
         return Ok(());
@@ -77,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("source dictionary is empty")??
         .path();
     // 保存形式はビルダーの依存クレートでも変わるため、アーカイブだけ再利用して辞書は再構築する。
-    JPreprocessDictionaryBuilder::new(config.metadata).build_dictionary(&root, &dictionary)?;
+    build_system(&root, &dictionary, &BuildOptions::default())?;
     Ok(())
 }
 

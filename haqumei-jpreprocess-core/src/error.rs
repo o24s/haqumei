@@ -9,9 +9,6 @@ pub enum JPreprocessError {
     Io(#[from] std::io::Error),
     #[error("Failed to fetch word from dictionary: {0}")]
     DictionaryError(#[from] DictionaryError),
-    #[cfg(feature = "lindera")]
-    #[error("Lindera error: {0}")]
-    LinderaError(#[from] lindera::error::LinderaError),
     #[error("Failed to parse pronunciation: {0}")]
     PronunciationParseError(#[from] PronunciationParseError),
     #[error("Failed to parse part of speech (POS): {0}")]
@@ -34,7 +31,7 @@ pub enum DictionaryError {
     IdNotFound(u32),
     #[error("Failed to decode: {0}")]
     FailDecode(#[from] rkyv::rancor::Error),
-    #[error("The word is flagged as UserDictionary, but Lindera UserDictionary is empty")]
+    #[error("The word is flagged as UserDictionary, but UserDictionary is empty")]
     UserDictionaryNotProvided,
     #[error("The word is flagged as UserDictionary, but UserDictionary mode is not set")]
     UserDictionaryModeNotSet,

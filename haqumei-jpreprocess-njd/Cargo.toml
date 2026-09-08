@@ -18,7 +18,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 phf = { workspace = true, features = ["macros"] }
-aho-corasick.workspace = true
 
 haqumei-jpreprocess-core.workspace = true
 haqumei-jpreprocess-window.workspace = true

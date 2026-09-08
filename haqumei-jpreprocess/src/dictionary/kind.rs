@@ -1,19 +1,17 @@
-use lindera_dictionary::dictionary::Dictionary;
+use haqumei_jpreprocess_dictionary::mecab::Model;
+use std::path::PathBuf;
 
-/// Specifies the kind of self-contained dictionary used for tokenization and preprocessing.
+/// 同梱するシステム辞書の種類です。
 pub enum JPreprocessDictionaryKind {
     #[cfg(feature = "naist-jdic")]
     NaistJdic,
 }
 
 impl JPreprocessDictionaryKind {
-    pub(crate) fn load(&self) -> Dictionary {
-        match &self {
+    pub(crate) fn load(&self, _users: &[PathBuf]) -> std::io::Result<Model> {
+        match *self {
             #[cfg(feature = "naist-jdic")]
-            Self::NaistJdic => haqumei_jpreprocess_naist_jdic::lindera::load().unwrap(),
-
-            #[allow(unreachable_patterns)]
-            _ => unreachable!(),
+            Self::NaistJdic => haqumei_jpreprocess_naist_jdic::load_with_user_dictionaries(_users),
         }
     }
 }

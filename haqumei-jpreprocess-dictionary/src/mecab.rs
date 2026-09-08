@@ -7,6 +7,9 @@ use std::{
     sync::Arc,
 };
 
+mod backend;
+pub use backend::Worker;
+
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
@@ -187,7 +190,7 @@ impl CharInfo {
 }
 
 /// 解析された候補形態素。特徴量には表層形を含みません。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Node {
     /// 解析文字列上のバイト位置。
     pub byte_span: Range<usize>,
@@ -212,7 +215,7 @@ pub struct Node {
 }
 
 /// 全候補と、最良経路に選ばれた候補の添字。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Analysis {
     /// 位置の昇順で並べた候補。BOS と EOS は含みません。
     pub nodes: Vec<Node>,
@@ -226,7 +229,10 @@ pub struct Analysis {
 struct Data {
     dictionaries: Vec<Lexicon>,
     unknown: Lexicon,
+    #[cfg(test)]
     unknown_values: Vec<u32>,
+    category_names: Vec<String>,
+    tokenizer: std::sync::OnceLock<Result<backend::SharedTokenizer, String>>,
     chars: Vec<CharInfo>,
     matrix: Vec<i16>,
     left_size: usize,
@@ -274,13 +280,18 @@ impl Model {
                     .ok_or_else(|| invalid("文字種が多すぎます"))?,
             )
             .ok_or_else(|| invalid("文字種が多すぎます"))?;
-        if count == 0 || names_end.checked_add(4 * 0xffff) != Some(bytes.len()) {
+        if count == 0 || count > 18 || names_end.checked_add(4 * 0xffff) != Some(bytes.len()) {
             return Err(invalid("文字種のファイル長が不正です"));
         }
         let mut unknown_values = Vec::with_capacity(count);
+        let mut category_names = Vec::with_capacity(count);
         for i in 0..count {
             let name = &bytes[4 + 32 * i..4 + 32 * (i + 1)];
             let end = name.iter().position(|b| *b == 0).unwrap_or(name.len());
+            category_names.push(
+                String::from_utf8(name[..end].to_vec())
+                    .map_err(|_| invalid("文字種名が UTF-8 ではありません"))?,
+            );
             let value = unknown
                 .prefixes(&name[..end])
                 .into_iter()
@@ -322,7 +333,10 @@ impl Model {
         Ok(Self(Arc::new(Data {
             dictionaries,
             unknown,
+            #[cfg(test)]
             unknown_values,
+            category_names,
+            tokenizer: std::sync::OnceLock::new(),
             chars,
             matrix,
             left_size,
@@ -376,6 +390,7 @@ impl Model {
         (at, failed, width, count)
     }
 
+    #[cfg(test)]
     fn lookup(&self, text: &str, position: usize) -> io::Result<Vec<Node>> {
         let mut end = text.len().min(position.saturating_add(65535));
         while !text.is_char_boundary(end) {
@@ -450,6 +465,11 @@ impl Model {
 
     /// 正規化済み文字列の全候補を生成し、Viterbi で最良経路を求めます。
     pub fn analyze(&self, text: &str) -> io::Result<Analysis> {
+        self.worker()?.analyze_lattice(text)
+    }
+
+    #[cfg(test)]
+    fn analyze_reference(&self, text: &str) -> io::Result<Analysis> {
         struct State {
             node: Node,
             previous: usize,
@@ -662,8 +682,11 @@ mod tests {
         let unknown = lexicon(&[("DEFAULT", 100, 0, "unknown")], 2);
         let unknown_values = vec![unknown.prefixes(b"DEFAULT").last().unwrap().1];
         Model(Arc::new(Data {
+            category_names: Vec::new(),
+            tokenizer: std::sync::OnceLock::new(),
             dictionaries: vec![lexicon(entries, 0)],
             unknown,
+            #[cfg(test)]
             unknown_values,
             chars: vec![CharInfo(1 | (1 << 26)); 0xffff],
             matrix: vec![0; 4],
@@ -750,7 +773,7 @@ mod tests {
         fs::write(&path, user.bytes).unwrap();
         let model = Model::open(directory.path(), &[path]).unwrap();
         assert_eq!(
-            model.analyze("あ").unwrap_err().kind(),
+            model.analyze_reference("あ").unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
     }
@@ -762,7 +785,7 @@ mod tests {
         data.chars.fill(CharInfo(1 | (1 << 26) | (1 << 30)));
         data.chars[0x20] = CharInfo(2);
         let text = "x".repeat(100_000);
-        let analysis = model.analyze(&text).unwrap();
+        let analysis = model.analyze_reference(&text).unwrap();
         let mut position = 0;
         for index in analysis.best_path {
             let node = &analysis.nodes[index];
@@ -782,7 +805,7 @@ mod tests {
             ("aa", 0, 0, "long"),
         ]);
         Arc::get_mut(&mut model.0).unwrap().chars[0x20] = CharInfo(2);
-        let analysis = model.analyze("aa").unwrap();
+        let analysis = model.analyze_reference("aa").unwrap();
         let best: Vec<_> = analysis
             .best_path
             .iter()
@@ -798,7 +821,7 @@ mod tests {
         let data = Arc::get_mut(&mut model.0).unwrap();
         data.chars[0x20] = CharInfo(2);
         data.matrix = vec![0, 5, 7, -2];
-        let analysis = model.analyze("ab").unwrap();
+        let analysis = model.analyze_reference("ab").unwrap();
         assert_eq!(analysis.total_cost, 13);
         let long = analysis.nodes.iter().find(|n| n.feature == "ab").unwrap();
         let short = analysis.nodes.iter().find(|n| n.feature == "a").unwrap();
@@ -817,7 +840,7 @@ mod tests {
             .fill(CharInfo(1 | (1 << 26) | (1 << 30) | (1 << 31)));
         data.chars[0x20] = CharInfo(2);
         data.dictionaries.push(lexicon(&[("a", -1, 0, "user")], 1));
-        let analysis = model.analyze("a").unwrap();
+        let analysis = model.analyze_reference("a").unwrap();
         assert_eq!(analysis.nodes[analysis.best_path[0]].dictionary_index, 1);
         assert!(analysis
             .nodes
@@ -839,8 +862,141 @@ mod tests {
     fn supplementary_plane_characters_use_default_category() {
         let mut model = model(&[("a", 0, 0, "system")]);
         Arc::get_mut(&mut model.0).unwrap().chars[0x20] = CharInfo(2);
-        let analysis = model.analyze("𠮷").unwrap();
+        let analysis = model.analyze_reference("𠮷").unwrap();
         assert_eq!(analysis.nodes[0].byte_span, 0..4);
         assert!(analysis.nodes[0].is_unknown);
+    }
+}
+
+#[cfg(test)]
+mod comparison_tests {
+    use super::*;
+
+    #[test]
+    fn converted_dictionary_preserves_ties_users_and_unknowns() {
+        use crate::mecab_compile::{build_system, build_user, BuildOptions};
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path();
+        fs::write(src.join("matrix.def"), "1 1\n0 0 3\n").unwrap();
+        fs::write(
+            src.join("char.def"),
+            "DEFAULT 1 0 1\nSPACE 0 1 0\nALPHA 1 1 2\n0x0020 SPACE\n0x0061..0x007A ALPHA\n",
+        )
+        .unwrap();
+        fs::write(
+            src.join("unk.def"),
+            "DEFAULT,0,0,100,unknown-default\nSPACE,0,0,100,space\nALPHA,0,0,0,unknown-alpha\n",
+        )
+        .unwrap();
+        fs::write(
+            src.join("lex.csv"),
+            "a,0,0,0,first\na,0,0,0,second\nb,0,0,-10,bee\n",
+        )
+        .unwrap();
+        let output = src.join("compiled");
+        build_system(src, &output, &BuildOptions::default()).unwrap();
+        let mut users = Vec::new();
+        for i in 1..=2 {
+            let csv = src.join(format!("user{i}.csv"));
+            fs::write(&csv, format!("a,0,0,0,user{i}\nx,0,0,-20,user{i}\n")).unwrap();
+            let path = src.join(format!("user{i}.dic"));
+            build_user(src, &[csv], &path).unwrap();
+            users.push(path);
+        }
+        let model = Model::open(&output, &users).unwrap();
+        let mut worker = model.worker().unwrap();
+        for text in [
+            "",
+            "   ",
+            "a",
+            "b a ",
+            "axb",
+            "a?b",
+            "𠮷",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            let expected = model.analyze_reference(text).unwrap();
+            let actual = worker.analyze_lattice(text).unwrap();
+            assert_eq!(expected, actual, "{text:?}");
+            let best = worker.analyze(text).unwrap();
+            assert_eq!(
+                best.nodes,
+                expected
+                    .best_path
+                    .iter()
+                    .map(|&i| expected.nodes[i].clone())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(best.total_cost, expected.total_cost);
+        }
+    }
+
+    #[test]
+    #[ignore = "HAQUMEI_TEST_DICTIONARY と HAQUMEI_TEST_SENTENCES の指定が必要です"]
+    fn vibrato_matches_reference() {
+        let directory = std::env::var_os("HAQUMEI_TEST_DICTIONARY").unwrap();
+        let input =
+            fs::read_to_string(std::env::var_os("HAQUMEI_TEST_SENTENCES").unwrap()).unwrap();
+        let model = Model::open(Path::new(&directory), &[]).unwrap();
+        let mut worker = model.worker().unwrap();
+        let mut failures = Vec::new();
+        let mut order_only = 0;
+        let mut best_diff = 0;
+        for (index, text) in input.lines().enumerate() {
+            let expected = model.analyze_reference(text).unwrap();
+            let actual = worker.analyze_lattice(text).unwrap();
+            if expected != actual {
+                let mut old_counts = std::collections::HashMap::new();
+                let mut new_counts = std::collections::HashMap::new();
+                for n in &expected.nodes {
+                    *old_counts.entry(n).or_insert(0usize) += 1;
+                }
+                for n in &actual.nodes {
+                    *new_counts.entry(n).or_insert(0usize) += 1;
+                }
+                let old_best: Vec<_> = expected
+                    .best_path
+                    .iter()
+                    .map(|&i| &expected.nodes[i])
+                    .collect();
+                let new_best: Vec<_> = actual.best_path.iter().map(|&i| &actual.nodes[i]).collect();
+                if old_best != new_best {
+                    best_diff += 1;
+                    eprintln!(
+                        "best differs line {}\nold={old_best:?}\nnew={new_best:?}",
+                        index + 1
+                    );
+                }
+                if old_counts == new_counts && old_best == new_best {
+                    order_only += 1;
+                }
+
+                if failures.len() < 5 {
+                    eprintln!(
+                        "line {}: nodes {} vs {}, costs {} vs {}",
+                        index + 1,
+                        expected.nodes.len(),
+                        actual.nodes.len(),
+                        expected.total_cost,
+                        actual.total_cost
+                    );
+                    for (old, new) in expected.nodes.iter().zip(&actual.nodes) {
+                        if old != new {
+                            eprintln!("old={old:?}\nnew={new:?}");
+                            break;
+                        }
+                    }
+                }
+                failures.push(index + 1);
+            }
+        }
+        eprintln!("order_only={order_only}, best_diff={best_diff}");
+        assert!(
+            failures.is_empty(),
+            "{} / {} sentences differ: {:?}",
+            failures.len(),
+            input.lines().count(),
+            &failures[..failures.len().min(20)]
+        );
     }
 }

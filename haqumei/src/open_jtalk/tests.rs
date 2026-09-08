@@ -16,8 +16,8 @@ fn test_global_dictionary() {
 #[cfg(feature = "embed-dictionary")]
 fn test_mecab_model_is_shared() {
     let model = Dictionary::from_embedded().unwrap().model;
-    let first = Mecab::from_model(&model).unwrap();
-    let second = Mecab::from_model(&model).unwrap();
+    let mut first = Mecab::from_model(&model).unwrap();
+    let mut second = Mecab::from_model(&model).unwrap();
     let expected = first.analyze("こんにちは").unwrap();
     drop(first);
     drop(model);

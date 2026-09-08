@@ -37,10 +37,10 @@ naist-jdic = [
 ]
 
 [dependencies]
-lindera-dictionary.workspace = true
+haqumei-jpreprocess-dictionary.workspace = true
+tempfile.workspace = true
 
 [build-dependencies]
-lindera-dictionary.workspace = true
 haqumei-jpreprocess-dictionary.workspace = true
 
 reqwest = { workspace = true, optional = true }
