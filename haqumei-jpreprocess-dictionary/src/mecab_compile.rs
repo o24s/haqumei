@@ -1,6 +1,6 @@
 //! MeCab 互換バイナリ辞書を Rust で構築します。
 
-use encoding_rs::{Encoding, EUC_JP, SHIFT_JIS, UTF_8};
+use encoding_rs::{EUC_JP, Encoding, SHIFT_JIS, UTF_8};
 
 use std::{
     borrow::Cow,
@@ -455,10 +455,10 @@ fn rewrite_feature(
 fn context_id(input: &Path, feature: &[&str], side: &str, charset: &Charset) -> io::Result<u16> {
     let key = rewrite_feature(input, feature, side, charset)?;
     for line in charset.read(&input.join(format!("{side}-id.def")))?.lines() {
-        if let Some((id, name)) = line.split_once(char::is_whitespace) {
-            if name.trim() == key {
-                return number(id);
-            }
+        if let Some((id, name)) = line.split_once(char::is_whitespace)
+            && name.trim() == key
+        {
+            return number(id);
         }
     }
     Err(invalid(format!("文脈 ID がありません: {key}")))
@@ -1006,10 +1006,10 @@ impl CostModel {
             };
             let key = fingerprint(&self.charset.encode(feature.split('\0').next().unwrap())?);
             let index = self.weights.partition_point(|(value, _)| *value < key);
-            if let Some(&(value, weight)) = self.weights.get(index) {
-                if value == key {
-                    sum += weight;
-                }
+            if let Some(&(value, weight)) = self.weights.get(index)
+                && value == key
+            {
+                sum += weight;
             }
         }
         Ok((-800.0 * sum).clamp(-32767.0, 32767.0) as i16)

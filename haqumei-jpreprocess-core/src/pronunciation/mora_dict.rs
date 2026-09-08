@@ -486,7 +486,7 @@ const MORA_IRREGULAR_KATAKANA: [(&str, MoraEnum); 4] = [
 mod tests {
     use crate::pronunciation::MoraEnum;
 
-    use super::{get_mora_enum, MORA_STR_LIST};
+    use super::{MORA_STR_LIST, get_mora_enum};
 
     #[test]
     fn long() {

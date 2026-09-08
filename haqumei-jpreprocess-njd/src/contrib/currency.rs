@@ -4,7 +4,7 @@
 
 use haqumei_jpreprocess_window::{IterQuintMutTrait, Triple};
 
-use crate::{NJDNode, NJD};
+use crate::{NJD, NJDNode};
 
 const CURRENCY_TABLE: phf::Map<&str, &str> = phf::phf_map! {
     "￥" => "円,名詞,接尾,助数詞,*,*,*,円,エン,エン,1/2,C3,1",
@@ -28,21 +28,20 @@ pub fn process_currency(njd: &mut NJD) {
             Triple::Full(prev, curr, next) => (Some(prev), curr, Some(next)),
         };
 
-        if is_currency {
-            if let Some(prev) = prev {
-                if is_kazu(curr) {
-                    std::mem::swap(prev, curr);
-                } else {
-                    is_currency = false;
-                }
+        if is_currency && let Some(prev) = prev {
+            if is_kazu(curr) {
+                std::mem::swap(prev, curr);
+            } else {
+                is_currency = false;
             }
         }
 
-        if !is_kazu(curr) && next.map(|next| is_kazu(next)) == Some(true) {
-            if let Some(substitute) = CURRENCY_TABLE.get(curr.get_string()) {
-                *curr = NJDNode::new_single(substitute);
-                is_currency = true;
-            }
+        if !is_kazu(curr)
+            && next.map(|next| is_kazu(next)) == Some(true)
+            && let Some(substitute) = CURRENCY_TABLE.get(curr.get_string())
+        {
+            *curr = NJDNode::new_single(substitute);
+            is_currency = true;
         }
     }
 }

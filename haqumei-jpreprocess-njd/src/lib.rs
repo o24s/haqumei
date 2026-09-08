@@ -4,7 +4,7 @@ mod contrib;
 mod node;
 mod open_jtalk;
 
-use haqumei_jpreprocess_core::{token::Token, word_entry::WordEntry, JPreprocessResult};
+use haqumei_jpreprocess_core::{JPreprocessResult, token::Token, word_entry::WordEntry};
 use haqumei_jpreprocess_window::{IterQuintMut, IterQuintMutTrait};
 
 pub use contrib::*;

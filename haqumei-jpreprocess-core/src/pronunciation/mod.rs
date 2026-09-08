@@ -177,10 +177,10 @@ impl Pronunciation {
         };
         let mut pronunciation = Self::parse(pron, accent.unwrap_or(0))?;
 
-        if let Some(mora_size) = mora_size {
-            if pronunciation.mora_size() != mora_size {
-                pronunciation.set_mora_size(mora_size);
-            }
+        if let Some(mora_size) = mora_size
+            && pronunciation.mora_size() != mora_size
+        {
+            pronunciation.set_mora_size(mora_size);
         }
 
         Ok(pronunciation)

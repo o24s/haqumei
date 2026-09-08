@@ -3,13 +3,13 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    JPreprocessResult,
     accent_rule::ChainRules,
     cform::CForm,
     ctype::CType,
     pos::{Meishi, POS},
     pronunciation::Pronunciation,
     word_line::WordDetailsLine,
-    JPreprocessResult,
 };
 
 #[derive(

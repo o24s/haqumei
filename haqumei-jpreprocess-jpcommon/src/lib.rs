@@ -222,13 +222,15 @@ mod tests {
     #[test]
     fn empty_and_punctuation_only_inputs_have_no_labels() {
         assert!(njdnodes_to_features(&[]).is_empty());
-        assert!(njdnodes_to_features(&[
-            node("ー", 0, false),
-            node("？", 0, false),
-            node("！", 0, false),
-            node("、", 0, false),
-            node("*", 0, false),
-        ])
-        .is_empty());
+        assert!(
+            njdnodes_to_features(&[
+                node("ー", 0, false),
+                node("？", 0, false),
+                node("！", 0, false),
+                node("、", 0, false),
+                node("*", 0, false),
+            ])
+            .is_empty()
+        );
     }
 }

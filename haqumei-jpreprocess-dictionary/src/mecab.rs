@@ -112,10 +112,11 @@ impl Lexicon {
             if base < 0 {
                 break;
             }
-            if let Some((value, check)) = self.unit(base as usize) {
-                if check == base as u32 && value < 0 {
-                    results.push((offset, value.wrapping_neg().wrapping_sub(1) as u32));
-                }
+            if let Some((value, check)) = self.unit(base as usize)
+                && check == base as u32
+                && value < 0
+            {
+                results.push((offset, value.wrapping_neg().wrapping_sub(1) as u32));
             }
             let Some(&byte) = key.get(offset) else {
                 break;
@@ -842,20 +843,26 @@ mod tests {
         data.dictionaries.push(lexicon(&[("a", -1, 0, "user")], 1));
         let analysis = model.analyze_reference("a").unwrap();
         assert_eq!(analysis.nodes[analysis.best_path[0]].dictionary_index, 1);
-        assert!(analysis
-            .nodes
-            .iter()
-            .any(|node| node.is_unknown && node.dictionary_index == 255));
-        assert!(model
-            .lookup(&"x".repeat(25), 0)
-            .unwrap()
-            .iter()
-            .any(|n| n.byte_span.end == 25));
-        assert!(model
-            .lookup(&"x".repeat(26), 0)
-            .unwrap()
-            .iter()
-            .all(|n| n.byte_span.end != 26));
+        assert!(
+            analysis
+                .nodes
+                .iter()
+                .any(|node| node.is_unknown && node.dictionary_index == 255)
+        );
+        assert!(
+            model
+                .lookup(&"x".repeat(25), 0)
+                .unwrap()
+                .iter()
+                .any(|n| n.byte_span.end == 25)
+        );
+        assert!(
+            model
+                .lookup(&"x".repeat(26), 0)
+                .unwrap()
+                .iter()
+                .all(|n| n.byte_span.end != 26)
+        );
     }
 
     #[test]
@@ -874,7 +881,7 @@ mod comparison_tests {
 
     #[test]
     fn converted_dictionary_preserves_ties_users_and_unknowns() {
-        use crate::mecab_compile::{build_system, build_user, BuildOptions};
+        use crate::mecab_compile::{BuildOptions, build_system, build_user};
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path();
         fs::write(src.join("matrix.def"), "1 1\n0 0 3\n").unwrap();

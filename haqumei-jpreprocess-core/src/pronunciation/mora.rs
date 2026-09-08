@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
 use super::{
+    EXCLAMATION, QUESTION, QUOTATION, TOUTEN,
     mora_dict::INTO_STR,
     mora_enum::MoraEnum,
-    phoneme::{mora_to_phoneme, Consonant, Vowel},
-    EXCLAMATION, QUESTION, QUOTATION, TOUTEN,
+    phoneme::{Consonant, Vowel, mora_to_phoneme},
 };
 
 use serde::{Deserialize, Serialize};

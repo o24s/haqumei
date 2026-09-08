@@ -11,8 +11,8 @@
 //!    - 例外：`s->s`, `s->sh`, `f->f`, `f->h`, `f->hy`, `h->f`, `h->h`, `h->hy`
 
 use haqumei_jpreprocess_core::pronunciation::{
-    phoneme::{Consonant, Vowel},
     Mora, MoraEnum,
+    phoneme::{Consonant, Vowel},
 };
 
 use crate::NJD;
@@ -217,7 +217,7 @@ fn apply_unvoice_rule(mora_curr: &Mora, mora_next: Option<&Mora>) -> Option<bool
 mod tests {
     use haqumei_jpreprocess_core::pronunciation::{Mora, MoraEnum};
 
-    use crate::{unvoiced_vowel::njd_set_unvoiced_vowel, NJD};
+    use crate::{NJD, unvoiced_vowel::njd_set_unvoiced_vowel};
 
     #[test]
     fn exclamation_keeps_the_desu_unvoicing_rule() {

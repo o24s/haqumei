@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use haqumei_jpreprocess_dictionary::{
     mecab::Model,
-    mecab_compile::{build_system_with_charsets, build_user, BuildOptions},
+    mecab_compile::{BuildOptions, build_system_with_charsets, build_user},
 };
 use std::path::PathBuf;
 

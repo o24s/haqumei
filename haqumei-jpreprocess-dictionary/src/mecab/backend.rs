@@ -1,4 +1,4 @@
-use super::{invalid, Analysis, Lexicon, Model, Node};
+use super::{Analysis, Lexicon, Model, Node, invalid};
 use sha2::{Digest, Sha256};
 use std::{
     fmt, fs,
@@ -39,23 +39,24 @@ impl Lexicon {
             if base < 0 {
                 return Err(invalid("トライの遷移先が不正です"));
             }
-            if let Some((value, check)) = self.unit(base as usize) {
-                if value < 0 && check == base as u32 {
-                    result.push((
-                        String::from_utf8(key.clone())
-                            .map_err(|_| invalid("辞書の見出し語が UTF-8 ではありません"))?,
-                        value.wrapping_neg().wrapping_sub(1) as u32,
-                    ));
-                }
+            if let Some((value, check)) = self.unit(base as usize)
+                && value < 0
+                && check == base as u32
+            {
+                result.push((
+                    String::from_utf8(key.clone())
+                        .map_err(|_| invalid("辞書の見出し語が UTF-8 ではありません"))?,
+                    value.wrapping_neg().wrapping_sub(1) as u32,
+                ));
             }
             for byte in (0u8..=255).rev() {
                 let next = base as usize + byte as usize + 1;
-                if let Some((_, check)) = self.unit(next) {
-                    if check == base as u32 {
-                        let mut child = key.clone();
-                        child.push(byte);
-                        stack.push((next, child));
-                    }
+                if let Some((_, check)) = self.unit(next)
+                    && check == base as u32
+                {
+                    let mut child = key.clone();
+                    child.push(byte);
+                    stack.push((next, child));
                 }
             }
         }
@@ -117,10 +118,10 @@ impl Model {
                 .join("vibrato")
                 .join(format!("{}.dict", hex::encode(hash.finalize())))
         });
-        if let Some(path) = &cache {
-            if let Ok(dict) = vibrato::Dictionary::from_path(path, vibrato::LoadMode::Validate) {
-                return Self::tokenizer_from(dict);
-            }
+        if let Some(path) = &cache
+            && let Ok(dict) = vibrato::Dictionary::from_path(path, vibrato::LoadMode::Validate)
+        {
+            return Self::tokenizer_from(dict);
         }
         let mut chars = String::new();
         use std::fmt::Write as _;
@@ -188,16 +189,15 @@ impl Model {
         .map_err(io::Error::other)?;
         let mut bytes = Vec::new();
         dict.write(&mut bytes).map_err(io::Error::other)?;
-        if let Some(path) = cache {
-            if let Some(parent) = path.parent() {
-                if fs::create_dir_all(parent).is_ok() {
-                    // 読み込み中の mmap を切り詰めないよう、別ファイルへの書き込み後に置き換える。
-                    if let Ok(mut file) = tempfile::NamedTempFile::new_in(parent) {
-                        if file.write_all(&bytes).is_ok() {
-                            let _ = file.persist(path);
-                        }
-                    }
-                }
+        if let Some(path) = cache
+            && let Some(parent) = path.parent()
+            && fs::create_dir_all(parent).is_ok()
+        {
+            // 読み込み中の mmap を切り詰めないよう、別ファイルへの書き込み後に置き換える。
+            if let Ok(mut file) = tempfile::NamedTempFile::new_in(parent)
+                && file.write_all(&bytes).is_ok()
+            {
+                let _ = file.persist(path);
             }
         }
         Self::tokenizer_from(vibrato::Dictionary::from_bytes(&bytes).map_err(io::Error::other)?)

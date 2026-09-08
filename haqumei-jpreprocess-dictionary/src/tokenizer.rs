@@ -1,7 +1,7 @@
 //! MeCab 互換辞書の解析結果を NJD の単語情報に変換します。
 
 use crate::mecab::Model;
-use haqumei_jpreprocess_core::{token::Tokenizer, word_entry::WordEntry, JPreprocessResult};
+use haqumei_jpreprocess_core::{JPreprocessResult, token::Tokenizer, word_entry::WordEntry};
 
 impl Tokenizer for Model {
     fn tokenize<'a>(

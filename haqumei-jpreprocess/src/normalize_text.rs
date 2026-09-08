@@ -1,4 +1,4 @@
-use phf::{phf_map, phf_set, Map, Set};
+use phf::{Map, Set, phf_map, phf_set};
 
 /// Normalize input text
 pub fn normalize_text_for_naist_jdic(input_text: &str) -> String {
@@ -230,7 +230,9 @@ mod tests {
         );
         assert_eq!(normalize_text_for_naist_jdic("｡｢｣､･"), "。「」、・");
         assert_eq!(
-            normalize_text_for_naist_jdic("ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ"),
+            normalize_text_for_naist_jdic(
+                "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ"
+            ),
             "ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン"
         );
     }

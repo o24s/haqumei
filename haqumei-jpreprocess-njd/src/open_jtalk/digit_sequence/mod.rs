@@ -4,7 +4,7 @@
 //! - 数字を順に読み上げるのか（例：123=いちにーさん），一つの数として読み上げるのか（例：123=ひゃくにじゅうさん）を判別して読む．
 //! - 小数点を正しく読む．例えば「0.1」は「ぜろてんいち」ではなく「れーてんいち」．
 
-use crate::{NJDNode, NJD};
+use crate::{NJD, NJDNode};
 use haqumei_jpreprocess_core::pron;
 
 mod builder;
@@ -120,11 +120,12 @@ pub fn njd_digit_sequence(njd: &mut NJD) {
 
     // normalize digit
     for node in &mut njd.nodes {
-        if node.get_string() != "*" && node.get_pos().is_kazu() {
-            if let Some(replace) = DIGIT_NORMALIZE.get(node.get_string()) {
-                node.replace_string(replace);
-                node.set_orig(replace);
-            }
+        if node.get_string() != "*"
+            && node.get_pos().is_kazu()
+            && let Some(replace) = DIGIT_NORMALIZE.get(node.get_string())
+        {
+            node.replace_string(replace);
+            node.set_orig(replace);
         }
     }
 

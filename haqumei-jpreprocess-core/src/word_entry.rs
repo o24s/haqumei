@@ -1,4 +1,4 @@
-use crate::{word_details::WordDetails, word_line::WordDetailsLine, JPreprocessResult};
+use crate::{JPreprocessResult, word_details::WordDetails, word_line::WordDetailsLine};
 use serde::{Deserialize, Serialize};
 
 #[derive(

@@ -139,7 +139,7 @@ fn ends_in_a_i_e(mora: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pronunciation::njd_set_pronunciation, NJD};
+    use crate::{NJD, pronunciation::njd_set_pronunciation};
 
     #[test]
     fn auxiliary_u_preserves_separate_vowels() {

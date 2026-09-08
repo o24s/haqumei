@@ -1,16 +1,16 @@
-use phf::{phf_map, Map};
+use phf::{Map, phf_map};
 
 /// Open JTalk と同じ変換表で正規化します。ASCII の制御文字は出力しません。
 pub fn normalize_text_for_open_jtalk(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut chars = input.char_indices().peekable();
     while let Some((start, current)) = chars.next() {
-        if let Some(&(next, ch)) = chars.peek() {
-            if let Some(replacement) = COMPOSED.get(&input[start..next + ch.len_utf8()]) {
-                result.push_str(replacement);
-                chars.next();
-                continue;
-            }
+        if let Some(&(next, ch)) = chars.peek()
+            && let Some(replacement) = COMPOSED.get(&input[start..next + ch.len_utf8()])
+        {
+            result.push_str(replacement);
+            chars.next();
+            continue;
         }
         if let Some(replacement) = SINGLE.get(&current) {
             result.push_str(replacement);

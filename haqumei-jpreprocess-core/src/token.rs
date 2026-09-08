@@ -1,4 +1,4 @@
-use crate::{word_entry::WordEntry, JPreprocessResult};
+use crate::{JPreprocessResult, word_entry::WordEntry};
 
 pub trait Tokenizer {
     fn tokenize<'a>(&'a self, text: &'a str) -> JPreprocessResult<Vec<impl 'a + Token>>;

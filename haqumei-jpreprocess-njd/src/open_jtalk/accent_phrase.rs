@@ -1,4 +1,4 @@
-use crate::{NJDNode, NJD};
+use crate::{NJD, NJDNode};
 use haqumei_jpreprocess_core::pos::*;
 
 use haqumei_jpreprocess_window::*;

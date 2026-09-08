@@ -13,7 +13,7 @@ use haqumei_jpreprocess_core::{pos::*, pron};
 use haqumei_jpreprocess_window::*;
 
 use self::lut::{
-    class1, class2, class3, find_pron_conv_map, find_pron_conv_set, numeral, others, DigitType,
+    DigitType, class1, class2, class3, find_pron_conv_map, find_pron_conv_set, numeral, others,
 };
 
 pub fn is_period(s: &str) -> bool {

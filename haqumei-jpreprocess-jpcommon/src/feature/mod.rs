@@ -4,7 +4,7 @@ pub mod limit;
 use std::rc::Rc;
 
 use haqumei_jlabel::{Label, Phoneme};
-use haqumei_jpreprocess_core::pronunciation::{phoneme::Consonant, Mora};
+use haqumei_jpreprocess_core::pronunciation::{Mora, phoneme::Consonant};
 
 use super::label::*;
 use crate::{LabelWithSource, PhonemeWithSource};
@@ -339,14 +339,14 @@ mod tests {
         let v = utterance_to_phoneme_vec(&utterance);
         let phonemes = ["sil", "b", "o", "N", "s", "a", "i", "sil"];
         let features = [
-          "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:4_4%0_0_xx/H:xx_xx/I:xx-xx@xx+xx&xx-xx|xx+xx/J:1_4/K:1+1-4",
-          "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-2+2+3/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:0+4+1/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:4_4!0_0-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:xx_xx%xx_xx_xx/H:1_4/I:xx-xx@xx+xx&xx-xx|xx+xx/J:xx_xx/K:1+1-4",
+            "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:4_4%0_0_xx/H:xx_xx/I:xx-xx@xx+xx&xx-xx|xx+xx/J:1_4/K:1+1-4",
+            "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-2+2+3/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:0+4+1/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#0_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:4_4!0_0-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:xx_xx%xx_xx_xx/H:1_4/I:xx-xx@xx+xx&xx-xx|xx+xx/J:xx_xx/K:1+1-4",
         ];
         for i in 0..8 {
             assert_eq!(v[i].0.as_str(), phonemes[i]);
@@ -364,14 +364,14 @@ mod tests {
         let v = utterance_to_phoneme_vec(&utterance);
         let phonemes = ["sil", "b", "o", "N", "s", "a", "i", "sil"];
         let features = [
-          "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:4_4%1_0_xx/H:xx_xx/I:xx-xx@xx+xx&xx-xx|xx+xx/J:1_4/K:1+1-4",
-          "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-2+2+3/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:0+4+1/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
-          "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:4_4!1_0-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:xx_xx%xx_xx_xx/H:1_4/I:xx-xx@xx+xx&xx-xx|xx+xx/J:xx_xx/K:1+1-4",
+            "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:4_4%1_0_xx/H:xx_xx/I:xx-xx@xx+xx&xx-xx|xx+xx/J:1_4/K:1+1-4",
+            "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-3+1+4/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-2+2+3/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:-1+3+2/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:0+4+1/B:xx-xx_xx/C:02_xx+xx/D:xx+xx_xx/E:xx_xx!xx_xx-xx/F:4_4#1_0@1_1|1_4/G:xx_xx%xx_xx_xx/H:xx_xx/I:1-4@1+1&1-1|1+4/J:xx_xx/K:1+1-4",
+            "/A:xx+xx+xx/B:xx-xx_xx/C:xx_xx+xx/D:xx+xx_xx/E:4_4!1_0-xx/F:xx_xx#xx_xx@xx_xx|xx_xx/G:xx_xx%xx_xx_xx/H:1_4/I:xx-xx@xx+xx&xx-xx|xx+xx/J:xx_xx/K:1+1-4",
         ];
         for i in 0..8 {
             assert_eq!(v[i].0.as_str(), phonemes[i]);
@@ -383,12 +383,18 @@ mod tests {
     fn generate_is_this_bonsai() {
         let njd = vec![
             NJDNode::new_single("これ,名詞,代名詞,一般,*,*,*,これ,コレ,コレ,0/2,C3,-1"),
-            NJDNode::new_single("は,助詞,係助詞,*,*,*,*,は,ハ,ワ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1"),
+            NJDNode::new_single(
+                "は,助詞,係助詞,*,*,*,*,は,ハ,ワ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1",
+            ),
             NJDNode::new_single("，,記号,読点,*,*,*,*,，,、,、,0/0,*,0"),
             NJDNode::new_single("盆栽,名詞,一般,*,*,*,*,盆栽,ボンサイ,ボンサイ,5/4,C2,0"),
-            NJDNode::new_single("です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1"),
-            NJDNode::new_single("か,助詞,副助詞／並立助詞／終助詞,*,*,*,*,か,カ,カ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1"),
-            NJDNode::new_single("？,記号,一般,*,*,*,*,？,？,？,0/0,*,0")
+            NJDNode::new_single(
+                "です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1",
+            ),
+            NJDNode::new_single(
+                "か,助詞,副助詞／並立助詞／終助詞,*,*,*,*,か,カ,カ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1",
+            ),
+            NJDNode::new_single("？,記号,一般,*,*,*,*,？,？,？,0/0,*,0"),
         ];
         let utterance = Utterance::from(njd.as_slice());
         let v = utterance_to_phoneme_vec(&utterance);
@@ -430,17 +436,29 @@ mod tests {
         let njd = vec![
             NJDNode::new_single("なに,名詞,代名詞,一般,*,*,*,なに,ナニ,ナニ,1/2,C3,-1"),
             NJDNode::new_single("を,助詞,格助詞,一般,*,*,*,を,ヲ,ヲ,0/1,動詞%F5/名詞%F1,1"),
-            NJDNode::new_single("言っ,動詞,自立,*,*,五段・ワ行促音便,連用タ接続,言う,イッ,イッ,0/2,*,0"),
-            NJDNode::new_single("て,助詞,接続助詞,*,*,*,*,て,テ,テ,0/1,動詞%F1/形容詞%F1/名詞%F5,1"),
+            NJDNode::new_single(
+                "言っ,動詞,自立,*,*,五段・ワ行促音便,連用タ接続,言う,イッ,イッ,0/2,*,0",
+            ),
+            NJDNode::new_single(
+                "て,助詞,接続助詞,*,*,*,*,て,テ,テ,0/1,動詞%F1/形容詞%F1/名詞%F5,1",
+            ),
             NJDNode::new_single("いる,動詞,非自立,*,*,一段,基本形,いる,イル,イル,0/2,動詞%F4@1,0"),
             NJDNode::new_single("の,名詞,非自立,一般,*,*,*,の,ノ,ノ,2/1,動詞%F2@0/形容詞%F2@-1,0"),
-            NJDNode::new_single("です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1"),
-            NJDNode::new_single("か,助詞,副助詞／並立助詞／終助詞,*,*,*,*,か,カ,カ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1"),
+            NJDNode::new_single(
+                "です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1",
+            ),
+            NJDNode::new_single(
+                "か,助詞,副助詞／並立助詞／終助詞,*,*,*,*,か,カ,カ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1",
+            ),
             NJDNode::new_single("，,記号,読点,*,*,*,*,，,、,、,0/0,*,0"),
             NJDNode::new_single("それ,名詞,代名詞,一般,*,*,*,それ,ソレ,ソレ,0/2,C3,0"),
-            NJDNode::new_single("は,助詞,係助詞,*,*,*,*,は,ハ,ワ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1"),
+            NJDNode::new_single(
+                "は,助詞,係助詞,*,*,*,*,は,ハ,ワ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0,1",
+            ),
             NJDNode::new_single("スマホ,名詞,一般,*,*,*,*,スマホ,スマホ,スマホ,4/3,*,0"),
-            NJDNode::new_single("です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1"),
+            NJDNode::new_single(
+                "です,助動詞,*,*,*,特殊・デス,基本形,です,デス,デス’,1/2,名詞%F2@1/動詞%F1/形容詞%F2@0,1",
+            ),
             NJDNode::new_single("よ,助詞,終助詞,*,*,*,*,よ,ヨ,ヨ,0/1,名詞%F1/動詞%F1/形容詞%F1,1"),
             NJDNode::new_single("．,記号,句点,*,*,*,*,．,、,、,0/0,*,0"),
         ];

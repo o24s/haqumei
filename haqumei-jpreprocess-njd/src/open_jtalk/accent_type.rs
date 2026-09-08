@@ -23,7 +23,7 @@ const IKU: &str = "幾";
 
 use haqumei_jpreprocess_core::accent_rule::AccentType;
 
-use crate::{NJDNode, NJD};
+use crate::{NJD, NJDNode};
 
 pub fn njd_set_accent_type(njd: &mut NJD) {
     if njd.nodes.is_empty() {
@@ -166,7 +166,7 @@ fn calc_digit_acc(prev: &NJDNode, current: &NJDNode, next: Option<&NJDNode>) -> 
 
 #[cfg(test)]
 mod tests {
-    use crate::{accent_type::njd_set_accent_type, NJD};
+    use crate::{NJD, accent_type::njd_set_accent_type};
 
     #[test]
     fn prefix_p2_preserves_its_original_nucleus() {

@@ -2,7 +2,7 @@
 
 use haqumei_jpreprocess::{JPreprocess, SystemDictionaryConfig};
 use haqumei_jpreprocess_core::token::Tokenizer;
-use haqumei_jpreprocess_dictionary::mecab_compile::{build_system, build_user, BuildOptions};
+use haqumei_jpreprocess_dictionary::mecab_compile::{BuildOptions, build_system, build_user};
 use std::path::Path;
 
 #[test]
@@ -55,12 +55,14 @@ fn system_and_user_dictionaries_share_the_haqumei_backend() {
             }
         }
         if !users.is_empty() {
-            assert!(model
-                .analyze("生麦生米生卵")
-                .unwrap()
-                .nodes
-                .iter()
-                .any(|node| node.dictionary_index == 1));
+            assert!(
+                model
+                    .analyze("生麦生米生卵")
+                    .unwrap()
+                    .nodes
+                    .iter()
+                    .any(|node| node.dictionary_index == 1)
+            );
         }
     }
 }
