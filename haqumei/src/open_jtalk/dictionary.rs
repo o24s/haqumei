@@ -368,7 +368,8 @@ impl MecabDictIndexCompiler {
     /// 設定されたオプションを使用して辞書のコンパイルを実行します。
     ///
     /// Rust のコンパイラで MeCab 互換のバイナリ辞書を作ります。
-    /// CSV の文字コードは UTF-8 です。ユーザー辞書のコストを省略する場合は、
+    /// 入出力は UTF-8、EUC-JP、Shift_JIS に対応し、既定は UTF-8 です。
+    /// ユーザー辞書のコストを省略する場合は、
     /// [`Self::model_in`] で指定した学習モデルから推定します。
     ///
     /// # デフォルトの挙動
@@ -378,27 +379,19 @@ impl MecabDictIndexCompiler {
     /// 完全なシステム辞書をコンパイルします。
     pub fn run(&self) -> Result<(), DictCompilerError> {
         use haqumei_jpreprocess_dictionary::mecab_compile::{self, BuildOptions};
-        for charset in [&self.charset, &self.dictionary_charset]
-            .into_iter()
-            .flatten()
-        {
-            if !matches!(charset.to_ascii_lowercase().as_str(), "utf8" | "utf-8") {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Rust 辞書コンパイラは UTF-8 の辞書を構築します",
-                )
-                .into());
-            }
-        }
+        let charset = self.charset.as_deref().unwrap_or("utf-8");
+        let dictionary_charset = self.dictionary_charset.as_deref().unwrap_or("utf-8");
         if let Some(output) = &self.userdict_out {
-            mecab_compile::build_user_with_model(
+            mecab_compile::build_user_with_model_and_charsets(
                 &self.dict_dir,
                 &self.input_files,
                 output,
                 self.model_in.as_deref(),
+                dictionary_charset,
+                charset,
             )?;
         } else {
-            mecab_compile::build_system(
+            mecab_compile::build_system_with_charsets(
                 &self.dict_dir,
                 &self.out_dir,
                 &BuildOptions {
@@ -408,6 +401,8 @@ impl MecabDictIndexCompiler {
                     matrix: self.build_matrix,
                     model: self.build_model,
                 },
+                dictionary_charset,
+                charset,
             )?;
         }
         Ok(())
@@ -417,6 +412,57 @@ impl MecabDictIndexCompiler {
 impl Default for MecabDictIndexCompiler {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod compiler_tests {
+    use super::MecabDictIndexCompiler;
+    use std::fs;
+
+    #[test]
+    fn compiler_forwards_input_and_output_charsets() {
+        let cases: [(&str, &str, &[u8], &[u8]); 3] = [
+            (
+                "utf-8",
+                "Shift_JIS",
+                "あ,0,0,1,名詞\n".as_bytes(),
+                b"\x96\xbc\x8e\x8c\0",
+            ),
+            (
+                "EUC-JP",
+                "utf-8",
+                b"\xa4\xa2,0,0,1,\xcc\xbe\xbb\xec\n",
+                "名詞\0".as_bytes(),
+            ),
+            (
+                "Shift_JIS",
+                "EUC-JP",
+                b"\x82\xa0,0,0,1,\x96\xbc\x8e\x8c\n",
+                b"\xcc\xbe\xbb\xec\0",
+            ),
+        ];
+        for (input_charset, output_charset, csv, feature) in cases {
+            let directory = tempfile::tempdir().unwrap();
+            let source = directory.path().join("user.csv");
+            let output = directory.path().join("user.dic");
+            fs::write(directory.path().join("matrix.def"), "1 1\n0 0 0\n").unwrap();
+            fs::write(&source, csv).unwrap();
+            MecabDictIndexCompiler::new()
+                .dict_dir(directory.path())
+                .add_input_file(&source)
+                .userdict_out_path(&output)
+                .dictionary_charset(input_charset)
+                .charset(output_charset)
+                .run()
+                .unwrap();
+            let bytes = fs::read(output).unwrap();
+            assert_eq!(
+                &bytes[40..40 + output_charset.len()],
+                output_charset.as_bytes()
+            );
+            assert!(bytes.ends_with(feature));
+        }
     }
 }
 

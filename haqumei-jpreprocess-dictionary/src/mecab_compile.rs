@@ -1,6 +1,9 @@
 //! MeCab 互換バイナリ辞書を Rust で構築します。
 
+use encoding_rs::{Encoding, EUC_JP, SHIFT_JIS, UTF_8};
+
 use std::{
+    borrow::Cow,
     collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
@@ -13,6 +16,89 @@ fn invalid(message: impl Into<String>) -> io::Error {
 fn number<T: std::str::FromStr>(s: &str) -> io::Result<T> {
     s.parse()
         .map_err(|_| invalid(format!("数値が不正です: {s}")))
+}
+
+#[derive(Clone)]
+struct Charset {
+    name: String,
+    encoding: &'static Encoding,
+}
+
+impl Charset {
+    fn new(name: &str) -> io::Result<Self> {
+        let encoding = match name.to_ascii_lowercase().as_str() {
+            "utf-8" | "utf8" | "utf_8" => UTF_8,
+            "euc-jp" | "euc_jp" | "euc" => EUC_JP,
+            "shift_jis" | "shift-jis" | "sjis" | "cp932" | "windows-31j" => SHIFT_JIS,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("対応していない辞書の文字コードです: {name}"),
+                ));
+            }
+        };
+        Ok(Self {
+            name: name.to_owned(),
+            encoding,
+        })
+    }
+
+    fn decode<'a>(&self, bytes: &'a [u8]) -> io::Result<Cow<'a, str>> {
+        self.encoding
+            .decode_without_bom_handling_and_without_replacement(bytes)
+            .ok_or_else(|| invalid(format!("{} として解釈できない文字があります", self.name)))
+    }
+
+    fn encode<'a>(&self, value: &'a str) -> io::Result<Cow<'a, [u8]>> {
+        let (bytes, _, malformed) = self.encoding.encode(value);
+        if malformed {
+            Err(invalid(format!(
+                "{} に変換できない文字があります",
+                self.name
+            )))
+        } else {
+            Ok(bytes)
+        }
+    }
+
+    fn read(&self, path: &Path) -> io::Result<String> {
+        Ok(self.decode(&fs::read(path)?)?.into_owned())
+    }
+
+    fn header(&self) -> [u8; 32] {
+        let mut header = [0; 32];
+        header[..self.name.len()].copy_from_slice(self.name.as_bytes());
+        header
+    }
+}
+
+struct Charsets {
+    input: Charset,
+    output: Charset,
+    config: Charset,
+}
+
+impl Charsets {
+    fn new(directory: &Path, input: &str, output: &str) -> io::Result<Self> {
+        let input = Charset::new(input)?;
+        let output = Charset::new(output)?;
+        let config = match fs::read(directory.join("dicrc")) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes)
+                .lines()
+                .filter_map(|line| line.split_once('='))
+                .find(|(name, _)| name.trim() == "config-charset")
+                .map(|(_, value)| Charset::new(value.trim()))
+                .transpose()?
+                .unwrap_or_else(|| input.clone()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => input.clone(),
+            Err(error) => return Err(error),
+        };
+        Ok(Self {
+            input,
+            output,
+            config,
+        })
+    }
 }
 
 /// 構築する辞書ファイルを指定します。すべて false なら一式を構築します。
@@ -32,6 +118,19 @@ pub struct BuildOptions {
 
 /// CSV と定義ファイルから MeCab 互換のシステム辞書を構築します。
 pub fn build_system(input: &Path, output: &Path, options: &BuildOptions) -> io::Result<()> {
+    build_system_with_charsets(input, output, options, "utf-8", "utf-8")
+}
+
+/// 入力 CSV と出力辞書の文字コードを指定して、システム辞書を構築します。
+/// UTF-8、EUC-JP、Shift_JIS と、それぞれの別名を受け付けます。
+pub fn build_system_with_charsets(
+    input: &Path,
+    output: &Path,
+    options: &BuildOptions,
+    dictionary_charset: &str,
+    charset: &str,
+) -> io::Result<()> {
+    let charsets = Charsets::new(input, dictionary_charset, charset)?;
     fs::create_dir_all(output)?;
     let all = !(options.unknown
         || options.charcategory
@@ -44,13 +143,20 @@ pub fn build_system(input: &Path, output: &Path, options: &BuildOptions) -> io::
         (1, 1)
     };
     if all || options.charcategory || options.unknown {
-        build_characters(input, &output.join("char.bin"))?;
+        build_characters(input, &output.join("char.bin"), &charsets.config)?;
     }
     if all || options.matrix {
         build_matrix(input, &output.join("matrix.bin"), sizes)?;
     }
     if (all || options.model) && input.join("model.def").is_file() {
-        build_model(&input.join("model.def"), &output.join("model.bin"))?;
+        fs::write(
+            output.join("model.bin"),
+            encode_model(
+                &fs::read(input.join("model.def"))?,
+                Some(&charsets.input),
+                &charsets.output,
+            )?,
+        )?;
     }
     if all || options.unknown {
         build_lexicon(
@@ -60,6 +166,7 @@ pub fn build_system(input: &Path, output: &Path, options: &BuildOptions) -> io::
             2,
             sizes,
             None,
+            &charsets,
         )?;
     }
     if all || options.sysdic {
@@ -73,7 +180,15 @@ pub fn build_system(input: &Path, output: &Path, options: &BuildOptions) -> io::
                     .is_some_and(|e| e.eq_ignore_ascii_case("csv"))
         });
         files.sort();
-        build_lexicon(input, &files, &output.join("sys.dic"), 0, sizes, None)?;
+        build_lexicon(
+            input,
+            &files,
+            &output.join("sys.dic"),
+            0,
+            sizes,
+            None,
+            &charsets,
+        )?;
     }
     if input.join("dicrc").is_file() && input != output {
         fs::copy(input.join("dicrc"), output.join("dicrc"))?;
@@ -93,7 +208,29 @@ pub fn build_user_with_model(
     output: &Path,
     model: Option<&Path>,
 ) -> io::Result<()> {
-    build_lexicon(input, files, output, 1, matrix_sizes(input)?, model)
+    build_user_with_model_and_charsets(input, files, output, model, "utf-8", "utf-8")
+}
+
+/// 入力 CSV と出力辞書の文字コードを指定して、ユーザー辞書を構築します。
+/// コストが空欄のエントリは、指定した学習モデルから推定します。
+pub fn build_user_with_model_and_charsets(
+    input: &Path,
+    files: &[PathBuf],
+    output: &Path,
+    model: Option<&Path>,
+    dictionary_charset: &str,
+    charset: &str,
+) -> io::Result<()> {
+    let charsets = Charsets::new(input, dictionary_charset, charset)?;
+    build_lexicon(
+        input,
+        files,
+        output,
+        1,
+        matrix_sizes(input)?,
+        model,
+        &charsets,
+    )
 }
 
 fn matrix_sizes(input: &Path) -> io::Result<(u16, u16)> {
@@ -152,12 +289,12 @@ fn build_matrix(input: &Path, output: &Path, (left, right): (u16, u16)) -> io::R
     fs::write(output, bytes)
 }
 
-fn build_characters(input: &Path, output: &Path) -> io::Result<()> {
-    fs::write(output, character_bytes(input)?)
+fn build_characters(input: &Path, output: &Path, charset: &Charset) -> io::Result<()> {
+    fs::write(output, character_bytes(input, charset)?)
 }
 
-fn character_bytes(input: &Path) -> io::Result<Vec<u8>> {
-    let text = fs::read_to_string(input.join("char.def"))?;
+fn character_bytes(input: &Path, charset: &Charset) -> io::Result<Vec<u8>> {
+    let text = charset.read(&input.join("char.def"))?;
     let mut categories = Vec::<(String, u32)>::new();
     let mut ranges = Vec::new();
     for line in text.lines() {
@@ -223,7 +360,11 @@ fn character_bytes(input: &Path) -> io::Result<Vec<u8>> {
     bytes.extend((categories.len() as u32).to_le_bytes());
     for (name, _) in categories {
         let mut field = [0; 32];
-        field[..name.len()].copy_from_slice(name.as_bytes());
+        let encoded = charset.encode(&name)?;
+        if encoded.len() >= field.len() {
+            return Err(invalid("文字種の名前が長すぎます"));
+        }
+        field[..encoded.len()].copy_from_slice(&encoded);
         bytes.extend(field);
     }
     for value in table {
@@ -276,8 +417,13 @@ fn expand_rewrite(template: &str, fields: &[&str]) -> io::Result<String> {
     Ok(escape_field(&result))
 }
 
-fn rewrite_feature(input: &Path, feature: &[&str], side: &str) -> io::Result<String> {
-    let rewrite = fs::read_to_string(input.join("rewrite.def"))?;
+fn rewrite_feature(
+    input: &Path,
+    feature: &[&str],
+    side: &str,
+    charset: &Charset,
+) -> io::Result<String> {
+    let rewrite = charset.read(&input.join("rewrite.def"))?;
     let mut section = false;
     for line in rewrite
         .lines()
@@ -306,9 +452,9 @@ fn rewrite_feature(input: &Path, feature: &[&str], side: &str) -> io::Result<Str
     Err(invalid("文脈 ID の書き換え規則がありません"))
 }
 
-fn context_id(input: &Path, feature: &[&str], side: &str) -> io::Result<u16> {
-    let key = rewrite_feature(input, feature, side)?;
-    for line in fs::read_to_string(input.join(format!("{side}-id.def")))?.lines() {
+fn context_id(input: &Path, feature: &[&str], side: &str, charset: &Charset) -> io::Result<u16> {
+    let key = rewrite_feature(input, feature, side, charset)?;
+    for line in charset.read(&input.join(format!("{side}-id.def")))?.lines() {
         if let Some((id, name)) = line.split_once(char::is_whitespace) {
             if name.trim() == key {
                 return number(id);
@@ -318,8 +464,7 @@ fn context_id(input: &Path, feature: &[&str], side: &str) -> io::Result<u16> {
     Err(invalid(format!("文脈 ID がありません: {key}")))
 }
 
-fn entry_columns(line: &str) -> io::Result<(Vec<String>, &str)> {
-    let bytes = line.as_bytes();
+fn entry_columns(bytes: &[u8]) -> io::Result<(Vec<Vec<u8>>, &[u8])> {
     let mut offset = 0;
     let mut columns = Vec::new();
     for _ in 0..4 {
@@ -352,12 +497,12 @@ fn entry_columns(line: &str) -> io::Result<(Vec<String>, &str)> {
             return Err(invalid("CSV の列が足りません"));
         }
         offset += 1;
-        columns.push(
-            String::from_utf8(value)
-                .map_err(|_| invalid("CSV の文字コードが UTF-8 ではありません"))?,
-        );
+        columns.push(value);
     }
-    let feature = line[offset..].trim_start_matches([' ', '\t']);
+    while bytes.get(offset).is_some_and(|b| *b == b' ' || *b == b'\t') {
+        offset += 1;
+    }
+    let feature = &bytes[offset..];
     if feature.is_empty() {
         return Err(invalid("CSV の素性がありません"));
     }
@@ -371,9 +516,13 @@ fn build_lexicon(
     kind: u32,
     (left, right): (u16, u16),
     model_path: Option<&Path>,
+    charsets: &Charsets,
 ) -> io::Result<()> {
-    let pos_text =
-        fs::read_to_string(input.join("pos-id.def")).unwrap_or_else(|_| "* 1".to_owned());
+    let pos_text = match charsets.config.read(&input.join("pos-id.def")) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => "* 1".to_owned(),
+        Err(error) => return Err(error),
+    };
     let pos: Vec<_> = pos_text
         .lines()
         .filter_map(|line| {
@@ -381,16 +530,27 @@ fn build_lexicon(
             Some((fields.next()?, fields.next()?.parse::<u16>().ok()?))
         })
         .collect();
-    let mut entries = Vec::<(String, [u8; 16])>::new();
+    let mut entries = Vec::<(Vec<u8>, [u8; 16])>::new();
     let mut features = Vec::new();
     let mut ids = HashMap::new();
     let mut model = None;
     let mut skipped = 0;
     for path in files {
-        for line in fs::read_to_string(path)?.lines() {
-            let parsed = (|| -> io::Result<(String, [u8; 16], String)> {
-                let (record, feature) = entry_columns(line)?;
-                let surface = &record[0];
+        let bytes = fs::read(path)?;
+        for line in bytes.split(|byte| *byte == b'\n') {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if line.is_empty() {
+                continue;
+            }
+            let parsed = (|| -> io::Result<(Vec<u8>, [u8; 16], Vec<u8>)> {
+                let (raw_record, raw_feature) = entry_columns(line)?;
+                let record = raw_record
+                    .iter()
+                    .map(|value| charsets.input.decode(value))
+                    .collect::<io::Result<Vec<_>>>()?;
+                let feature = charsets.input.decode(raw_feature)?;
+                let feature = feature.as_ref();
+                let surface = record[0].as_ref();
                 if surface.is_empty() || surface.contains('\0') || feature.contains('\0') {
                     return Err(invalid("辞書のエントリが空か NUL を含んでいます"));
                 }
@@ -415,8 +575,8 @@ fn build_lexicon(
                         lid = l;
                         rid = r;
                     } else {
-                        lid = i32::from(context_id(input, &fields, "left")?);
-                        rid = i32::from(context_id(input, &fields, "right")?);
+                        lid = i32::from(context_id(input, &fields, "left", &charsets.config)?);
+                        rid = i32::from(context_id(input, &fields, "right", &charsets.config)?);
                         ids.insert(feature.to_owned(), (lid, rid));
                     }
                 }
@@ -428,9 +588,14 @@ fn build_lexicon(
                         return Err(invalid("システム辞書と未知語辞書のコストは省略できません"));
                     }
                     if model.is_none() {
-                        model = Some(CostModel::open(input, model_path)?);
+                        model = Some(CostModel::open(input, model_path, charsets)?);
                     }
-                    i32::from(model.as_ref().unwrap().cost(input, surface, &fields)?)
+                    i32::from(model.as_ref().unwrap().cost(
+                        input,
+                        surface,
+                        &fields,
+                        &charsets.config,
+                    )?)
                 } else {
                     number::<i32>(&record[3])?
                 };
@@ -446,12 +611,21 @@ fn build_lexicon(
                 token[4..6].copy_from_slice(&pid.to_le_bytes());
                 token[6..8].copy_from_slice(&(cost as i16).to_le_bytes());
                 token[8..12].copy_from_slice(&offset.to_le_bytes());
-                Ok((surface.to_owned(), token, feature.to_owned()))
+                // 同じ文字コードでも再符号化すると、Shift_JIS の重複符号が変わることがある。
+                let (surface, feature) = if charsets.input.encoding == charsets.output.encoding {
+                    (raw_record[0].clone(), raw_feature.to_vec())
+                } else {
+                    (
+                        charsets.output.encode(surface)?.into_owned(),
+                        charsets.output.encode(feature)?.into_owned(),
+                    )
+                };
+                Ok((surface, token, feature))
             })();
             match parsed {
                 Ok((surface, token, feature)) => {
                     entries.push((surface, token));
-                    features.extend(feature.as_bytes());
+                    features.extend(feature);
                     features.push(0);
                 }
                 Err(error) if error.kind() != io::ErrorKind::InvalidData => return Err(error),
@@ -478,7 +652,7 @@ fn build_lexicon(
             return Err(invalid("MeCab の辞書形式の上限を超えています"));
         }
         keys.push((
-            entries[start].0.as_bytes(),
+            entries[start].0.as_slice(),
             ((start as u32) << 8) | (end - start) as u32,
         ));
         start = end;
@@ -501,9 +675,7 @@ fn build_lexicon(
     ] {
         bytes.extend(value.to_le_bytes());
     }
-    let mut charset = [0; 32];
-    charset[..5].copy_from_slice(b"utf-8");
-    bytes.extend(charset);
+    bytes.extend(charsets.output.header());
     for (base, check) in trie {
         bytes.extend(base.to_le_bytes());
         bytes.extend(check.to_le_bytes());
@@ -602,9 +774,12 @@ impl DoubleArray {
     }
 }
 
-/// UTF-8 の学習モデルを MeCab 形式の model.bin に変換します。
+/// 学習モデルを UTF-8 の MeCab 形式の model.bin に変換します。
 pub fn build_model(input: &Path, output: &Path) -> io::Result<()> {
-    fs::write(output, encode_model(&fs::read(input)?)?)
+    fs::write(
+        output,
+        encode_model(&fs::read(input)?, None, &Charset::new("utf-8")?)?,
+    )
 }
 
 fn fingerprint(bytes: &[u8]) -> u64 {
@@ -612,8 +787,8 @@ fn fingerprint(bytes: &[u8]) -> u64 {
     let mut h = [0xfd14deffu32; 4];
     let rotations = [19, 17, 15, 13];
     let additions = [0x561ccd1b, 0x0bcaa747, 0x96cd1c35, 0x32ac3b17];
-    let mut blocks = bytes.chunks_exact(16);
-    for block in &mut blocks {
+    let (blocks, remainder) = bytes.as_chunks::<16>();
+    for block in blocks {
         for index in 0..4 {
             let key = u32::from_le_bytes(block[4 * index..4 * index + 4].try_into().unwrap());
             h[index] ^= key
@@ -627,7 +802,7 @@ fn fingerprint(bytes: &[u8]) -> u64 {
                 .wrapping_add(additions[index]);
         }
     }
-    for (index, tail) in blocks.remainder().chunks(4).enumerate() {
+    for (index, tail) in remainder.chunks(4).enumerate() {
         let mut bytes = [0; 4];
         bytes[..tail.len()].copy_from_slice(tail);
         h[index] ^= u32::from_le_bytes(bytes)
@@ -654,35 +829,53 @@ fn fingerprint(bytes: &[u8]) -> u64 {
     u64::from(h[0]) | (u64::from(h[1]) << 32)
 }
 
-fn encode_model(bytes: &[u8]) -> io::Result<Vec<u8>> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|_| invalid("学習モデルの文字コードが UTF-8 ではありません"))?;
-    let mut lines = text.lines();
+fn encode_model(
+    bytes: &[u8],
+    expected_input: Option<&Charset>,
+    output: &Charset,
+) -> io::Result<Vec<u8>> {
+    let mut lines = bytes.split(|byte| *byte == b'\n');
     let mut charset = None;
     for line in lines.by_ref() {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line.is_empty() {
             break;
         }
+        let line = std::str::from_utf8(line).map_err(|_| invalid("モデルのヘッダーが不正です"))?;
         let (name, value) = line
             .split_once(':')
             .ok_or_else(|| invalid("モデルのヘッダーが不正です"))?;
         if name == "charset" {
-            charset = Some(value.trim());
+            charset = Some(Charset::new(value.trim())?);
         }
     }
-    if !charset.is_some_and(|c| c.eq_ignore_ascii_case("utf-8") || c.eq_ignore_ascii_case("utf8")) {
-        return Err(invalid("学習モデルの文字コードが UTF-8 ではありません"));
+    let input = charset.ok_or_else(|| invalid("学習モデルに文字コードの指定がありません"))?;
+    if expected_input.is_some_and(|expected| expected.encoding != input.encoding) {
+        return Err(invalid(
+            "入力 CSV と学習モデルの文字コードが一致していません",
+        ));
     }
     let mut entries = Vec::new();
-    for line in lines {
-        let (weight, feature) = line
-            .split_once('\t')
+    for line in lines.filter(|line| !line.is_empty()) {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        let separator = line
+            .iter()
+            .position(|byte| *byte == b'\t')
             .ok_or_else(|| invalid("モデルの特徴量の行が不正です"))?;
-        let weight = number::<f64>(weight)?;
+        let weight = number::<f64>(
+            std::str::from_utf8(&line[..separator])
+                .map_err(|_| invalid("モデルの重みが不正です"))?,
+        )?;
         if !weight.is_finite() {
             return Err(invalid("モデルの重みが有限値ではありません"));
         }
-        entries.push((fingerprint(feature.as_bytes()), weight));
+        let feature = &line[separator + 1..];
+        let key = if input.encoding == output.encoding {
+            fingerprint(feature)
+        } else {
+            fingerprint(&output.encode(&input.decode(feature)?)?)
+        };
+        entries.push((key, weight));
     }
     entries.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
     let mut bytes = Vec::new();
@@ -691,9 +884,7 @@ fn encode_model(bytes: &[u8]) -> io::Result<Vec<u8>> {
             .map_err(|_| invalid("モデルが大きすぎます"))?
             .to_le_bytes(),
     );
-    let mut charset = [0; 32];
-    charset[..5].copy_from_slice(b"utf-8");
-    bytes.extend(charset);
+    bytes.extend(output.header());
     for (_, weight) in &entries {
         bytes.extend(weight.to_le_bytes());
     }
@@ -707,10 +898,11 @@ struct CostModel {
     weights: Vec<(u64, f64)>,
     templates: Vec<String>,
     categories: Vec<u8>,
+    charset: Charset,
 }
 
 impl CostModel {
-    fn open(input: &Path, model: Option<&Path>) -> io::Result<Self> {
+    fn open(input: &Path, model: Option<&Path>, charsets: &Charsets) -> io::Result<Self> {
         let model = model
             .map(Path::to_path_buf)
             .unwrap_or_else(|| input.join("model.bin"));
@@ -721,7 +913,7 @@ impl CostModel {
                 .map(|b| u32::from_le_bytes(b.try_into().unwrap()) as usize)
         };
         if length(&bytes).and_then(|n| n.checked_mul(16)?.checked_add(36)) != Some(bytes.len()) {
-            bytes = encode_model(&bytes)?;
+            bytes = encode_model(&bytes, Some(&charsets.input), &charsets.output)?;
         }
         let count = length(&bytes).ok_or_else(|| invalid("モデルのヘッダーがありません"))?;
         let charset = &bytes[4..36];
@@ -729,10 +921,12 @@ impl CostModel {
             .iter()
             .position(|b| *b == 0)
             .unwrap_or(charset.len());
-        if !charset[..end].eq_ignore_ascii_case(b"utf-8")
-            && !charset[..end].eq_ignore_ascii_case(b"utf8")
-        {
-            return Err(invalid("モデルの文字コードが UTF-8 ではありません"));
+        let charset = Charset::new(
+            std::str::from_utf8(&charset[..end])
+                .map_err(|_| invalid("モデルの文字コード名が不正です"))?,
+        )?;
+        if charset.encoding != charsets.output.encoding {
+            return Err(invalid("モデルと出力辞書の文字コードが一致していません"));
         }
         let mut weights = Vec::with_capacity(count);
         for i in 0..count {
@@ -749,17 +943,20 @@ impl CostModel {
         }
         let template_bytes = fs::read(input.join("feature.def"))?;
         // 元の定義ファイルには UTF-8 以外のコメントがある。特徴量の定義行だけを読む。
-        let templates = String::from_utf8_lossy(&template_bytes)
-            .lines()
-            .filter_map(|line| {
-                line.strip_prefix("UNIGRAM")
+        let templates = template_bytes
+            .split(|byte| *byte == b'\n')
+            .filter_map(|line| line.strip_prefix(b"UNIGRAM"))
+            .map(|line| {
+                charsets
+                    .config
+                    .decode(line)
                     .map(|line| line.trim().to_owned())
             })
-            .collect();
+            .collect::<io::Result<Vec<_>>>()?;
         let chars = if input.join("char.bin").is_file() {
             fs::read(input.join("char.bin"))?
         } else {
-            character_bytes(input)?
+            character_bytes(input, &charsets.config)?
         };
         let names = chars
             .get(..4)
@@ -773,18 +970,27 @@ impl CostModel {
             return Err(invalid("文字種のファイル長が不正です"));
         }
         let categories = chars[start..]
-            .chunks_exact(4)
-            .map(|b| ((u32::from_le_bytes(b.try_into().unwrap()) >> 18) & 0xff) as u8)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| ((u32::from_le_bytes(*b) >> 18) & 0xff) as u8)
             .collect();
         Ok(Self {
             weights,
             templates,
             categories,
+            charset,
         })
     }
 
-    fn cost(&self, input: &Path, surface: &str, fields: &[&str]) -> io::Result<i16> {
-        let rewritten = rewrite_feature(input, fields, "unigram")?;
+    fn cost(
+        &self,
+        input: &Path,
+        surface: &str,
+        fields: &[&str],
+        config: &Charset,
+    ) -> io::Result<i16> {
+        let rewritten = rewrite_feature(input, fields, "unigram", config)?;
         let record = csv::ReaderBuilder::new()
             .has_headers(false)
             .from_reader(rewritten.as_bytes())
@@ -798,7 +1004,7 @@ impl CostModel {
             let Some(feature) = expand_template(template, &record, &rewritten, category)? else {
                 continue;
             };
-            let key = fingerprint(feature.split('\0').next().unwrap().as_bytes());
+            let key = fingerprint(&self.charset.encode(feature.split('\0').next().unwrap())?);
             let index = self.weights.partition_point(|(value, _)| *value < key);
             if let Some(&(value, weight)) = self.weights.get(index) {
                 if value == key {
@@ -925,9 +1131,12 @@ mod tests {
     #[test]
     fn csv_keeps_quoted_features_and_decodes_the_surface() {
         let (fields, feature) =
-            entry_columns("\"仮,名\",1,1,2,名詞,一般,*,*,*,*,\"仮,名\",カナ").unwrap();
-        assert_eq!(fields, ["仮,名", "1", "1", "2"]);
-        assert_eq!(feature, "名詞,一般,*,*,*,*,\"仮,名\",カナ");
+            entry_columns("\"仮,名\",1,1,2,名詞,一般,*,*,*,*,\"仮,名\",カナ".as_bytes()).unwrap();
+        assert_eq!(
+            fields,
+            ["仮,名", "1", "1", "2"].map(|value| value.as_bytes().to_vec())
+        );
+        assert_eq!(feature, "名詞,一般,*,*,*,*,\"仮,名\",カナ".as_bytes());
         assert_eq!(
             expand_rewrite("prefix-$2/$1", &["a", "b,c"]).unwrap(),
             "\"prefix-b,c/a\""
@@ -1023,5 +1232,154 @@ mod tests {
         input.write("model.def", "charset: utf-8\n\n1.0\tU1:名詞\n");
         build_system(&input.0, &output.0, &options).unwrap();
         assert_eq!(fs::metadata(output.0.join("model.bin")).unwrap().len(), 52);
+    }
+    fn encoded_source(charset: &str) -> Fixture {
+        let input = source();
+        input.write("dicrc", "cost-factor = 800\n");
+        input.write("pos-id.def", "名詞 4\n記号 2\n* 1\n");
+        input.write("words.csv", "表,1,1,110,名詞,一般,*,*,*,*,表\nあ,1,1,120,名詞,一般,*,*,*,*,あ\n音,1,1,130,名詞,一般,*,*,*,*,音\n声,1,1,140,名詞,一般,*,*,*,*,声\n\"仮,名\",1,1,150,名詞,一般,*,*,*,*,\"仮,名\"\n");
+        input.write("user.txt", "仮名,,0,,名詞,一般,*,*,*,*,仮名\n");
+        input.write(
+            "model.def",
+            &format!("charset: {charset}\n\n1.25\tU:名詞\n"),
+        );
+        let encoding = Charset::new(charset).unwrap();
+        for entry in fs::read_dir(&input.0).unwrap() {
+            let path = entry.unwrap().path();
+            let text = fs::read_to_string(&path).unwrap();
+            fs::write(path, encoding.encode(&text).unwrap()).unwrap();
+        }
+        input
+    }
+
+    fn checksum(bytes: &[u8]) -> u64 {
+        bytes.iter().fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+    }
+
+    #[test]
+    fn all_charset_pairs_match_mecab_dictionary_and_model_bytes() {
+        // C のコンパイラで各文字コードの入力と出力を揃えて作った辞書と比較する。
+        let expected = [
+            (
+                "utf-8",
+                [
+                    0x2199b7d333bc03f9,
+                    0xf1e807a11861b3e8,
+                    0x4186be172367dbef,
+                    0xe5d4a1e5af88dd28,
+                ],
+            ),
+            (
+                "EUC-JP",
+                [
+                    0x055d5af8c37cff4f,
+                    0x1ffa04cf05d52dd9,
+                    0x363a132f4a3c1ad7,
+                    0xefda5e09bcbeecdd,
+                ],
+            ),
+            (
+                "Shift_JIS",
+                [
+                    0x0960cbb3a4fb660b,
+                    0x4a7d19b45fea98aa,
+                    0xe7d6fff1b4807ed9,
+                    0x4d76fdc824d394bc,
+                ],
+            ),
+        ];
+        for (from, _) in expected {
+            let input = encoded_source(from);
+            for (to, hashes) in expected {
+                let output = Fixture::new();
+                build_system_with_charsets(&input.0, &output.0, &BuildOptions::default(), from, to)
+                    .unwrap();
+                for model in [input.0.join("model.def"), output.0.join("model.bin")] {
+                    build_user_with_model_and_charsets(
+                        &input.0,
+                        &[input.0.join("user.txt")],
+                        &output.0.join("user.dic"),
+                        Some(&model),
+                        from,
+                        to,
+                    )
+                    .unwrap();
+                    for (file, hash) in ["sys.dic", "unk.dic", "model.bin", "user.dic"]
+                        .into_iter()
+                        .zip(hashes)
+                    {
+                        assert_eq!(
+                            checksum(&fs::read(output.0.join(file)).unwrap()),
+                            hash,
+                            "{from} -> {to}: {file}"
+                        );
+                    }
+                }
+                assert_eq!(
+                    checksum(&fs::read(output.0.join("char.bin")).unwrap()),
+                    0x4f67f89e8525a404
+                );
+                assert_eq!(
+                    checksum(&fs::read(output.0.join("matrix.bin")).unwrap()),
+                    0x94a03aa4ae95f2b3
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn definition_files_can_use_a_different_charset_from_the_csv() {
+        let input = encoded_source("EUC-JP");
+        for file in [
+            "pos-id.def",
+            "rewrite.def",
+            "left-id.def",
+            "right-id.def",
+            "feature.def",
+        ] {
+            let path = input.0.join(file);
+            let text = Charset::new("EUC-JP").unwrap().read(&path).unwrap();
+            fs::write(path, text).unwrap();
+        }
+        input.write("dicrc", "config-charset = UTF-8\ncost-factor = 800\n");
+        input.write(
+            "char.def",
+            "# 文字種の定義\nDEFAULT 0 1 1\nSPACE 0 1 0\n0x0020 SPACE\n",
+        );
+        let output = Fixture::new();
+        build_user_with_model_and_charsets(
+            &input.0,
+            &[input.0.join("user.txt")],
+            &output.0.join("user.dic"),
+            Some(&input.0.join("model.def")),
+            "EUC-JP",
+            "utf-8",
+        )
+        .unwrap();
+        assert_eq!(
+            checksum(&fs::read(output.0.join("user.dic")).unwrap()),
+            0xe5d4a1e5af88dd28
+        );
+    }
+
+    #[test]
+    fn unmappable_entries_are_skipped_without_character_replacement() {
+        let input = encoded_source("utf-8");
+        input.write("words.csv", "仮名,1,1,100,名詞,一般,*,*,*,*,仮名\n\u{1f600},1,1,100,名詞,一般,*,*,*,*,仮名\n音,1,1,100,名詞,一般,*,*,*,*,\u{1f600}\n");
+        let output = Fixture::new();
+        let options = BuildOptions {
+            sysdic: true,
+            ..Default::default()
+        };
+        build_system_with_charsets(&input.0, &output.0, &options, "utf-8", "Shift_JIS").unwrap();
+        let bytes = fs::read(output.0.join("sys.dic")).unwrap();
+        assert_eq!(u32::from_le_bytes(bytes[12..16].try_into().unwrap()), 1);
+        assert_eq!(&bytes[40..49], b"Shift_JIS");
+        assert!(Charset::new("UTF-16").is_err());
+        assert_eq!(Charset::new("euc").unwrap().encoding, EUC_JP);
+        assert_eq!(Charset::new("CP932").unwrap().encoding, SHIFT_JIS);
+        assert_eq!(Charset::new("utf_8").unwrap().encoding, UTF_8);
     }
 }
