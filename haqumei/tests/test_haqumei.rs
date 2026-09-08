@@ -57,19 +57,21 @@ mod tests {
     }
 
     #[test]
-    fn test_huge_input_range_error() {
+    fn test_g2p_accepts_input_beyond_the_former_buffer_limit() {
         let mut haqumei = Haqumei::new().unwrap();
-        // BUFFER_SIZE (16384) を超える入力を生成
-        let huge_text = "あ".repeat(20000);
+        let text = "あ".repeat(20000);
+        assert_eq!(haqumei.g2p(&text).unwrap(), vec!["a"; 20000]);
+    }
 
-        let result = haqumei.g2p(&huge_text);
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            HaqumeiError::Text2MecabError(msg) => {
-                assert!(msg.contains("too long"));
-            }
-            err => panic!("Unexpected error type: {:?}", err),
+    #[test]
+    fn test_normalization_has_no_fixed_byte_limit() {
+        let engine = haqumei::OpenJTalk::new().unwrap();
+        for length in [16383, 16384, 16385] {
+            let text = "a".repeat(length);
+            assert_eq!(
+                engine.text2mecab_string(&text).unwrap(),
+                "ａ".repeat(length)
+            );
         }
     }
 

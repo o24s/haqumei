@@ -768,8 +768,6 @@ impl OpenJTalk {
         self.make_phoneme_mapping(morphs, mapping)
     }
 
-    const BUFFER_SIZE: usize = 16384;
-
     /// MeCab解析を実行し、feature のリストを返します。
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
@@ -802,9 +800,6 @@ impl OpenJTalk {
     pub fn text2mecab_string(&self, text: &str) -> Result<String, HaqumeiError> {
         CString::new(text)?;
         let normalized = haqumei_jpreprocess::normalize_text_for_open_jtalk(text);
-        if normalized.len() >= Self::BUFFER_SIZE {
-            return Err(HaqumeiError::Text2MecabError("Text is too long".to_owned()));
-        }
         Ok(normalized)
     }
 
