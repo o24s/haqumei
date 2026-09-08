@@ -3,12 +3,13 @@ use std::path::PathBuf;
 
 use haqumei_jpreprocess::*;
 
-use clap::{Args, Parser};
+use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    #[command(flatten)]
-    dict: DictionaryArgs,
+    /// システム辞書のディレクトリー。
+    #[arg(short, long)]
+    dictionary: PathBuf,
 
     /// The location of the user dictionary
     #[arg(short, long)]
@@ -18,30 +19,10 @@ struct Cli {
     input: String,
 }
 
-#[derive(Args, Debug)]
-#[group(required = true, multiple = false)]
-struct DictionaryArgs {
-    /// The location of the system dictionary
-    #[arg(short, long)]
-    dictionary: Option<PathBuf>,
-
-    /// Use bundled naist-jdic dictionary
-    #[cfg(feature = "naist-jdic")]
-    #[arg(short, long)]
-    naist_jdic: bool,
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    let dictionary = if let Some(dict) = cli.dict.dictionary {
-        SystemDictionaryConfig::File(dict)
-    } else {
-        #[cfg(not(feature = "naist-jdic"))]
-        unreachable!("This build of haqumei_jpreprocess does not have the bundled dictionary, and it is not supporsed to reach here.");
-        #[cfg(feature = "naist-jdic")]
-        SystemDictionaryConfig::Bundled(kind::JPreprocessDictionaryKind::NaistJdic)
-    };
+    let dictionary = SystemDictionaryConfig::File(cli.dictionary);
 
     let users = cli.user_dictionary.into_iter().collect::<Vec<_>>();
     let haqumei_jpreprocess =

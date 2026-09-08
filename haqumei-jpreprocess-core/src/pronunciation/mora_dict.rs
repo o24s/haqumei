@@ -527,19 +527,35 @@ mod tests {
 mod matcher_compatibility_tests {
     use super::*;
 
+    fn reference_matches(text: &str) -> Vec<(usize, usize, usize)> {
+        let mut result = Vec::new();
+        let mut consumed = 0;
+        for (start, _) in text.char_indices() {
+            if start < consumed {
+                continue;
+            }
+            let mut longest = None;
+            for (id, pattern) in MORA_STR_LIST.iter().enumerate() {
+                if text[start..].starts_with(pattern)
+                    && longest.is_none_or(|(_, length)| pattern.len() > length)
+                {
+                    longest = Some((id, pattern.len()));
+                }
+            }
+            if let Some((id, length)) = longest {
+                consumed = start + length;
+                result.push((start, consumed, id));
+            }
+        }
+        result
+    }
+
     #[test]
     fn longest_matches_preserve_pattern_order_and_byte_spans() {
-        let reference = aho_corasick::AhoCorasickBuilder::new()
-            .match_kind(aho_corasick::MatchKind::LeftmostLongest)
-            .build(MORA_STR_LIST.as_slice())
-            .unwrap();
         for first in MORA_STR_LIST.iter() {
             for second in MORA_STR_LIST.iter() {
                 let text = format!("?{first}{second}’ー!");
-                let expected = reference
-                    .find_iter(&text)
-                    .map(|m| (m.start(), m.end(), m.pattern().as_usize()))
-                    .collect::<Vec<_>>();
+                let expected = reference_matches(&text);
                 let actual = MORA_DICT_AHO_CORASICK
                     .leftmost_find_iter(&text)
                     .map(|m| (m.start(), m.end(), m.value()))

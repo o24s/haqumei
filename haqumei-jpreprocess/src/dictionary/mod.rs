@@ -2,12 +2,8 @@ use haqumei_jpreprocess_core::JPreprocessResult;
 use haqumei_jpreprocess_dictionary::mecab::Model;
 use std::path::PathBuf;
 
-pub mod kind;
-
 /// 形態素解析に使うシステム辞書を指定します。
 pub enum SystemDictionaryConfig {
-    /// 同梱の辞書を使います。
-    Bundled(kind::JPreprocessDictionaryKind),
     /// UTF-8 の MeCab 互換辞書をディレクトリーから読み込みます。
     File(PathBuf),
 }
@@ -22,7 +18,6 @@ impl SystemDictionaryConfig {
     pub fn load_with_user_dictionaries(self, users: &[PathBuf]) -> JPreprocessResult<Model> {
         Ok(match self {
             Self::File(path) => Model::open(&path, users)?,
-            Self::Bundled(kind) => kind.load(users)?,
         })
     }
 }

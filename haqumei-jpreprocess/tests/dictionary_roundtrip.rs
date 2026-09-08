@@ -65,18 +65,6 @@ fn system_and_user_dictionaries_share_the_haqumei_backend() {
     }
 }
 
-#[cfg(feature = "naist-jdic")]
-#[test]
-fn embedded_naist_dictionary_produces_labels() {
-    let model = haqumei_jpreprocess_naist_jdic::load().unwrap();
-    let engine = JPreprocess::from_tokenizer(model);
-    let labels = engine
-        .extract_fullcontext("日本語の音声合成です。")
-        .unwrap();
-    assert!(labels.len() > 10);
-    assert_eq!(labels[0].phoneme.c.as_deref(), Some("sil"));
-}
-
 #[test]
 fn tokenizer_is_send_and_sync() {
     fn check<T: Send + Sync>() {}

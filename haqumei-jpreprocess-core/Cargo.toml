@@ -35,4 +35,3 @@ revision = "54cf9bc2d40a5d6f25144333e9cd03fd3258a126"
 
 [dev-dependencies]
 regex.workspace = true
-aho-corasick.workspace = true

@@ -14,11 +14,6 @@ documentation = "https://docs.rs/haqumei-jpreprocess"
 
 [features]
 binary = ["dep:clap", "tokenizer"]
-naist-jdic = [
-  "dep:haqumei-jpreprocess-naist-jdic",
-  "haqumei-jpreprocess-naist-jdic/naist-jdic",
-  "tokenizer",
-]
 tokenizer = [
   "dep:haqumei-jpreprocess-dictionary",
 ]
@@ -38,8 +33,6 @@ haqumei-jlabel.workspace = true
 haqumei-jpreprocess-core.workspace = true
 haqumei-jpreprocess-njd.workspace = true
 haqumei-jpreprocess-jpcommon.workspace = true
-
-haqumei-jpreprocess-naist-jdic = { workspace = true, optional = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }
 
