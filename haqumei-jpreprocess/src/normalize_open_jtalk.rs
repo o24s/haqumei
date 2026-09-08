@@ -21,35 +21,6 @@ pub fn normalize_text_for_open_jtalk(input: &str) -> String {
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::normalize_text_for_open_jtalk;
-
-    #[test]
-    fn ascii_symbols_keep_open_jtalk_spellings() {
-        assert_eq!(
-            normalize_text_for_open_jtalk("AZaz09 \"'`-~\\!?"),
-            "ＡＺａｚ０９　”’‘−〜￥！？"
-        );
-    }
-
-    #[test]
-    fn halfwidth_voicing_marks_only_compose_with_supported_kana() {
-        assert_eq!(
-            normalize_text_for_open_jtalk("ｳﾞｶﾞﾊﾟﾜﾞｶﾟﾞﾟ「か\u{3099}」"),
-            "ヴガパワカ「か\u{3099}」"
-        );
-    }
-
-    #[test]
-    fn controls_are_omitted_without_changing_unicode_text() {
-        assert_eq!(
-            normalize_text_for_open_jtalk("\0\tA\r\n\u{7f}𠮷🙂\u{85}Ｂ"),
-            "Ａ𠮷🙂\u{85}Ｂ"
-        );
-    }
-}
-
 const SINGLE: Map<char, &str> = phf_map! {
     ' ' => "　",
     '!' => "！",
@@ -239,3 +210,32 @@ const COMPOSED: Map<&str, &str> = phf_map! {
     "ﾍﾟ" => "ペ",
     "ﾎﾟ" => "ポ",
 };
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_text_for_open_jtalk;
+
+    #[test]
+    fn ascii_symbols_keep_open_jtalk_spellings() {
+        assert_eq!(
+            normalize_text_for_open_jtalk("AZaz09 \"'`-~\\!?"),
+            "ＡＺａｚ０９　”’‘−〜￥！？"
+        );
+    }
+
+    #[test]
+    fn halfwidth_voicing_marks_only_compose_with_supported_kana() {
+        assert_eq!(
+            normalize_text_for_open_jtalk("ｳﾞｶﾞﾊﾟﾜﾞｶﾟﾞﾟ「か\u{3099}」"),
+            "ヴガパワカ「か\u{3099}」"
+        );
+    }
+
+    #[test]
+    fn controls_are_omitted_without_changing_unicode_text() {
+        assert_eq!(
+            normalize_text_for_open_jtalk("\0\tA\r\n\u{7f}𠮷🙂\u{85}Ｂ"),
+            "Ａ𠮷🙂\u{85}Ｂ"
+        );
+    }
+}

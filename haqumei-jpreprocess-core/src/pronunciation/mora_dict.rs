@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use super::mora_enum::MoraEnum;
 
-pub static MORA_STR_LIST: Lazy<Vec<&str>> = Lazy::new(|| {
+pub static MORA_STR_LIST: LazyLock<Vec<&str>> = LazyLock::new(|| {
     let mut result = Vec::new();
     result.push("ー");
     result.extend(MORA_KATAKANA.iter().map(|(from, _to)| from));
@@ -15,7 +15,7 @@ pub static MORA_STR_LIST: Lazy<Vec<&str>> = Lazy::new(|| {
     result
 });
 
-pub static MORA_DICT_AHO_CORASICK: Lazy<AhoCorasick> = Lazy::new(|| {
+pub static MORA_DICT_AHO_CORASICK: LazyLock<AhoCorasick> = LazyLock::new(|| {
     AhoCorasickBuilder::new()
         .match_kind(MatchKind::LeftmostLongest)
         .build(MORA_STR_LIST.as_slice())
@@ -40,7 +40,7 @@ pub fn get_mora_enum(position: usize) -> Vec<MoraEnum> {
     vec![MORA_IRREGULAR_KATAKANA[index].1]
 }
 
-pub static INTO_STR: Lazy<HashMap<MoraEnum, &'static str>> = Lazy::new(|| {
+pub static INTO_STR: LazyLock<HashMap<MoraEnum, &'static str>> = LazyLock::new(|| {
     let mut map = HashMap::from_iter(
         MORA_KATAKANA
             .iter()

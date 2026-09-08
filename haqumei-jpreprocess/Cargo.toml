@@ -51,3 +51,6 @@ serde_json = { workspace = true, optional = true }
 [package.metadata.upstream]
 repository = "https://github.com/jpreprocess/jpreprocess"
 revision = "54cf9bc2d40a5d6f25144333e9cd03fd3258a126"
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -83,11 +83,11 @@ impl<T: Tokenizer> JPreprocess<T> {
     /// // Use `from_tokenizer` only if you need a customized `Tokenizer` or
     /// // want to plug in a non-Lindera tokenizer (see example-vibrato).
     /// let system = lindera::dictionary::load_fs_dictionary(path.as_path())?;
-    /// let tokenizer = lindera::tokenizer::Tokenizer::new(lindera::segmenter::Segmenter::new(
+    /// let tokenizer = lindera::segmenter::Segmenter::new(
     ///     lindera::mode::Mode::Normal,
     ///     system,
     ///     None,
-    /// ));
+    /// );
     ///
     /// let haqumei_jpreprocess = JPreprocess::from_tokenizer(tokenizer);
     ///
@@ -122,13 +122,7 @@ impl<T: Tokenizer> JPreprocess<T> {
         NJD::from_tokens(tokens)
     }
 
-    /// Tokenize a text, preprocess, and return NJD converted to string.
-    ///
-    /// The returned string does not match that of openjtalk.
-    /// JPreprocess drops orig string and some of the CForm information,
-    /// which is unnecessary to preprocessing.
-    ///
-    /// If you need these infomation, please raise a feature request as an issue.
+    /// テキストを形態素解析し、前処理済みの NJD 特徴量を返します。
     pub fn run_frontend(&self, text: &str) -> JPreprocessResult<Vec<String>> {
         let mut njd = Self::text_to_njd(self, text)?;
         njd.preprocess();
@@ -287,11 +281,11 @@ mod default_tokenizer_impl {
             dictionary: Dictionary,
             user_dictionary: Option<UserDictionary>,
         ) -> Self {
-            let tokenizer = lindera::tokenizer::Tokenizer::new(lindera::segmenter::Segmenter::new(
+            let tokenizer = lindera::segmenter::Segmenter::new(
                 lindera_dictionary::mode::Mode::Normal,
                 dictionary,
                 user_dictionary,
-            ));
+            );
 
             let tokenizer = DefaultTokenizer::new(tokenizer);
 

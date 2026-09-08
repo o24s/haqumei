@@ -1178,7 +1178,7 @@ mod tests {
         let binary = output.0.join("binary.dic");
         build_user_with_model(
             &input.0,
-            &[user.clone()],
+            std::slice::from_ref(&user),
             &text,
             Some(&input.0.join("model.def")),
         )

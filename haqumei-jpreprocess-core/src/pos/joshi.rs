@@ -4,7 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use super::{POSKind, POSParseError};
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 助詞
 pub enum Joshi {
     /// 格助詞
@@ -48,7 +58,17 @@ impl Joshi {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 格助詞
 pub enum KakuJoshi {
     /// 一般

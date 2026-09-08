@@ -3,7 +3,18 @@ use std::{fmt::Display, str::FromStr};
 
 use crate::JPreprocessError;
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, Default)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 活用形
 pub enum CForm {
     /// ガル接続

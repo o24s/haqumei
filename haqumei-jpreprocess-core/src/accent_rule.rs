@@ -3,9 +3,9 @@ use std::{
     str::FromStr,
 };
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 use crate::JPreprocessResult;
 
@@ -19,12 +19,21 @@ pub enum AccentRuleParseError {
     SyntaxError(String),
 }
 
-static PARSE_REGEX: Lazy<Regex> = Lazy::new(|| {
+static PARSE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new("^((?P<pos>名詞|形容詞|助詞|特殊助動詞|動詞|助動詞|連体詞|副詞|接頭詞|接続詞|感動詞|記号|フィラー|その他)%)?(?P<accent>[FC][1-5]|P1|P2|P6|P14)?(@(?P<add>[-0-9]+))?$")
         .expect("Failed to compile accent rule regex")
 });
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum AccentType {
     F1,
     F2,
@@ -93,7 +102,16 @@ impl Display for AccentType {
 }
 
 // Accent sandhi rule
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct ChainRule {
     pub accent_type: AccentType,
     pub add_type: isize,
@@ -118,7 +136,16 @@ impl Display for ChainRule {
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum POSMatch {
     Default,
     Named(String),
@@ -143,7 +170,17 @@ impl FromStr for POSMatch {
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
+#[derive(
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Debug,
+    Default,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct ChainRules {
     ordered: Vec<(POSMatch, ChainRule)>,
     original: Option<String>,

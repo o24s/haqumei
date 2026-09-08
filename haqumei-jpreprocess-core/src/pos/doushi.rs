@@ -4,7 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use super::{POSKind, POSParseError};
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 動詞
 pub enum Doushi {
     /// 自立

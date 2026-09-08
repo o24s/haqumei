@@ -1,7 +1,16 @@
 use crate::{word_details::WordDetails, word_line::WordDetailsLine, JPreprocessResult};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 // Single を Box にすると、1 語のエントリを復元するたびにヒープ確保が増える。
 #[allow(clippy::large_enum_variant)]
 pub enum WordEntry {

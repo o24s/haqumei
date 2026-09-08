@@ -31,12 +31,15 @@ pub fn build_word_entry_map<P: CSVParser>(
             continue;
         };
 
-        word_entry_map.entry(surface).or_default().push(WordEntry {
-            word_id: WordId::new(lex_type, row_id as u32),
-            word_cost,
-            left_id,
-            right_id,
-        });
+        word_entry_map
+            .entry(surface)
+            .or_default()
+            .push(WordEntry::new(
+                WordId::new(lex_type, row_id as u32),
+                word_cost,
+                left_id,
+                right_id,
+            ));
     }
 
     Ok(word_entry_map)
@@ -45,7 +48,6 @@ pub fn build_word_entry_map<P: CSVParser>(
 /// Generate double array (dict.da)
 pub fn generate_double_array(
     word_entry_map: &BTreeMap<String, Vec<WordEntry>>,
-    is_system: bool,
 ) -> LinderaResult<Vec<u8>> {
     let mut id = 0u32;
     let mut keyset: Vec<(&[u8], u32)> = vec![];
@@ -53,13 +55,11 @@ pub fn generate_double_array(
     for (key, word_entries) in word_entry_map {
         let len = word_entries.len() as u32;
 
-        // System dictionary: 24bit for word ID, 8bit for different parts of speech on the same surface.
-        // User dictionary: 27bit for word ID, 5bit for different parts of speech on the same surface.
-        let val = if is_system {
-            (id << 8) | len
-        } else {
-            (id << 5) | len
-        };
+        if len > 255 || id > 0x00ff_ffff {
+            return Err(LinderaErrorKind::Build
+                .with_error(anyhow::anyhow!("user dictionary exceeds entry limits")));
+        }
+        let val = (id << 8) | len;
 
         keyset.push((key.as_bytes(), val));
         id += len;
@@ -87,19 +87,15 @@ pub fn generate_double_array(
 pub fn generate_values(
     word_entry_map: &BTreeMap<String, Vec<WordEntry>>,
 ) -> LinderaResult<Vec<u8>> {
-    let mut dict_vals_buffer = Vec::new();
-    for word_entries in word_entry_map.values() {
-        for word_entry in word_entries.iter().rev() {
-            word_entry.serialize(&mut dict_vals_buffer).map_err(|err| {
-                LinderaErrorKind::Serialize
-                    .with_error(anyhow::anyhow!(err))
-                    .add_context(format!(
-                        "Failed to serialize word entry (id: {})",
-                        word_entry.word_id.id
-                    ))
-            })?;
+    let mut bytes = Vec::new();
+    // Lindera 6 の dict.vals は ID、単語コスト、左右の文脈 ID をリトルエンディアンで保存する。
+    for entries in word_entry_map.values() {
+        for entry in entries.iter().rev() {
+            bytes.extend_from_slice(&entry.word_id().id().to_le_bytes());
+            bytes.extend_from_slice(&entry.word_cost().to_le_bytes());
+            bytes.extend_from_slice(&(entry.left_id() as u16).to_le_bytes());
+            bytes.extend_from_slice(&(entry.right_id() as u16).to_le_bytes());
         }
     }
-
-    Ok(dict_vals_buffer)
+    Ok(bytes)
 }

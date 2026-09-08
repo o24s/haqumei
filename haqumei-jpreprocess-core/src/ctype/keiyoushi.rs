@@ -4,7 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use super::{CTypeKind, CTypeParseError};
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 形容詞
 pub enum Keiyoushi {
     /// アウオ段

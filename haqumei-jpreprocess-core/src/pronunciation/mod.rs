@@ -47,9 +47,21 @@ pub enum PronunciationParseError {
 /// Pronunciation.
 ///
 /// Do not access moras and accent directly unless through [`pron`] macro.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug, Default)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Debug,
+    Default,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct Pronunciation {
     #[doc(hidden)]
+    #[rkyv(with = rkyv::with::AsOwned)]
     pub moras: Cow<'static, [Mora]>,
     #[doc(hidden)]
     pub accent: usize,

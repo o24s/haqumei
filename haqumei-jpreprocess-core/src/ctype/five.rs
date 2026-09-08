@@ -4,7 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use super::{CTypeKind, CTypeParseError};
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 /// 五段
 pub enum Five {
     /// カ行イ音便

@@ -25,7 +25,8 @@ pub fn njd_set_pronunciation(njd: &mut NJD) {
             })
             .collect::<Vec<_>>();
         if node.get_orig().is_none() {
-            node.set_orig(&node.get_string().to_owned());
+            let orig = node.get_string().to_owned();
+            node.set_orig(&orig);
         }
         if moras.is_empty() {
             moras.push(haqumei_jpreprocess_core::pronunciation::Mora {

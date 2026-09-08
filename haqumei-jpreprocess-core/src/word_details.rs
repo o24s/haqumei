@@ -12,7 +12,16 @@ use crate::{
     JPreprocessResult,
 };
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Debug,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct WordDetails {
     pub pos: POS,
     #[doc(hidden)]

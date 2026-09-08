@@ -19,7 +19,6 @@ include = [
   "build.json",
   "build.rs",
   "NOTICE.txt",
-  "prebuilt.json",
   "README.md",
 ]
 
@@ -29,25 +28,21 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 naist-jdic = [
-  "dep:tokio",
   "dep:reqwest",
   "dep:md5",
   "dep:flate2",
   "dep:tar",
-  "dep:bincode",
   "dep:serde",
   "dep:serde_json",
 ]
 
 [dependencies]
 lindera-dictionary.workspace = true
-bincode = { workspace = true, optional = true }
 
 [build-dependencies]
 lindera-dictionary.workspace = true
 haqumei-jpreprocess-dictionary.workspace = true
 
-tokio = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 md5 = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }

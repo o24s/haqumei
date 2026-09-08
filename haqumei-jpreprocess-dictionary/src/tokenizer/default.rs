@@ -1,9 +1,9 @@
 use haqumei_jpreprocess_core::{
+    error::DictionaryError,
     token::{Token, Tokenizer},
     word_entry::WordEntry,
     JPreprocessResult,
 };
-use lindera_dictionary::dictionary::prefix_dictionary::PrefixDictionary;
 
 use super::{
     identify_dictionary::DictionaryIdent,
@@ -11,7 +11,7 @@ use super::{
 };
 
 pub struct DefaultTokenizer {
-    lindera_tokenizer: lindera::tokenizer::Tokenizer,
+    lindera_tokenizer: lindera::segmenter::Segmenter,
     system: TokenizerType,
     user: Option<TokenizerType>,
 }
@@ -19,28 +19,29 @@ pub struct DefaultTokenizer {
 enum TokenizerType {
     JPreprocessTokenizer,
     LinderaTokenizer,
+    Unsupported(String),
 }
 
 impl DefaultTokenizer {
-    pub fn new(tokenizer: lindera::tokenizer::Tokenizer) -> Self {
-        fn identify_tokenizer(prefix_dictionary: &PrefixDictionary) -> TokenizerType {
-            let ident = DictionaryIdent::from_idx_data(
-                &prefix_dictionary.words_idx_data,
-                &prefix_dictionary.words_data,
-            );
+    pub fn new(tokenizer: lindera::segmenter::Segmenter) -> Self {
+        fn identify_tokenizer(idx: &[u8], words: &[u8]) -> TokenizerType {
+            let ident = DictionaryIdent::from_idx_data(idx, words);
             match ident {
                 DictionaryIdent::JPreprocess => TokenizerType::JPreprocessTokenizer,
                 DictionaryIdent::Lindera => TokenizerType::LinderaTokenizer,
+                DictionaryIdent::Unsupported(format) => TokenizerType::Unsupported(format),
             }
         }
 
         Self {
-            system: identify_tokenizer(&tokenizer.segmenter.dictionary.prefix_dictionary),
+            system: identify_tokenizer(
+                &tokenizer.dictionary.prefix_dictionary.words_idx_data,
+                &tokenizer.dictionary.prefix_dictionary.words_data,
+            ),
             user: tokenizer
-                .segmenter
                 .user_dictionary
                 .as_ref()
-                .map(|d| identify_tokenizer(&d.dict)),
+                .map(|d| identify_tokenizer(&d.dict.words_idx_data, &d.dict.words_data)),
             lindera_tokenizer: tokenizer,
         }
     }
@@ -48,41 +49,52 @@ impl DefaultTokenizer {
 
 impl Tokenizer for DefaultTokenizer {
     fn tokenize<'a>(&'a self, text: &'a str) -> JPreprocessResult<Vec<impl 'a + Token>> {
-        let tokens = self.lindera_tokenizer.tokenize(text)?;
+        for kind in std::iter::once(&self.system).chain(self.user.iter()) {
+            if let TokenizerType::Unsupported(format) = kind {
+                return Err(DictionaryError::UnsupportedFormat(format.clone()).into());
+            }
+        }
+        let tokens = self.lindera_tokenizer.segment(text.into())?;
 
         tokens
             .into_iter()
             .map(|token| {
                 if token.word_id.is_unknown() {
-                    Ok(DefaultToken::from_token(token))
+                    Ok(DefaultToken::Lindera(token))
                 } else if token.word_id.is_system() {
-                    match self.system {
+                    match &self.system {
                         TokenizerType::JPreprocessTokenizer => {
-                            Ok(DefaultToken::from_token(JPreprocessToken::new(
+                            Ok(DefaultToken::JPreprocess(JPreprocessToken::new(
                                 token.surface,
-                                JPreprocessTokenizer::get_word_from_prefixdict(
-                                    &token.dictionary.prefix_dictionary,
+                                JPreprocessTokenizer::get_word_from_data(
+                                    &token.dictionary.prefix_dictionary.words_idx_data,
+                                    &token.dictionary.prefix_dictionary.words_data,
                                     token.word_id,
                                 )?,
                             )))
                         }
-                        TokenizerType::LinderaTokenizer => Ok(DefaultToken::from_token(token)),
+                        TokenizerType::LinderaTokenizer => Ok(DefaultToken::Lindera(token)),
+                        TokenizerType::Unsupported(format) => {
+                            Err(DictionaryError::UnsupportedFormat(format.clone()).into())
+                        }
                     }
                 } else {
-                    match self.user {
+                    match &self.user {
                         Some(TokenizerType::JPreprocessTokenizer) => {
-                            Ok(DefaultToken::from_token(JPreprocessToken::new(
+                            Ok(DefaultToken::JPreprocess(JPreprocessToken::new(
                                 token.surface,
-                                JPreprocessTokenizer::get_word_from_prefixdict(
-                                    &token.user_dictionary.as_ref().unwrap().dict,
+                                JPreprocessTokenizer::get_word_from_data(
+                                    &token.user_dictionary.as_ref().unwrap().dict.words_idx_data,
+                                    &token.user_dictionary.as_ref().unwrap().dict.words_data,
                                     token.word_id,
                                 )?,
                             )))
                         }
-                        Some(TokenizerType::LinderaTokenizer) => {
-                            Ok(DefaultToken::from_token(token))
+                        Some(TokenizerType::LinderaTokenizer) => Ok(DefaultToken::Lindera(token)),
+                        None => Ok(DefaultToken::Lindera(token)),
+                        Some(TokenizerType::Unsupported(format)) => {
+                            Err(DictionaryError::UnsupportedFormat(format.clone()).into())
                         }
-                        None => Ok(DefaultToken::from_token(token)),
                     }
                 }
             })
@@ -90,20 +102,16 @@ impl Tokenizer for DefaultTokenizer {
     }
 }
 
-struct DefaultToken<'a> {
-    inner: Box<dyn 'a + Token>,
-}
-
-impl<'a> DefaultToken<'a> {
-    fn from_token(inner: impl 'a + Token) -> Self {
-        DefaultToken {
-            inner: Box::new(inner),
-        }
-    }
+enum DefaultToken<'a> {
+    Lindera(lindera::token::Token<'a>),
+    JPreprocess(JPreprocessToken<'a>),
 }
 
 impl Token for DefaultToken<'_> {
     fn fetch(&mut self) -> JPreprocessResult<(&str, WordEntry)> {
-        self.inner.fetch()
+        match self {
+            Self::Lindera(token) => token.fetch(),
+            Self::JPreprocess(token) => token.fetch(),
+        }
     }
 }

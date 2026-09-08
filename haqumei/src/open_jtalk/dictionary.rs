@@ -415,6 +415,26 @@ impl Default for MecabDictIndexCompiler {
     }
 }
 
+#[cfg(feature = "embed-dictionary")]
+pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut paths = Vec::new();
+
+    for entry in walkdir::WalkDir::new(dir) {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file()
+            && let Some(extension) = path.extension()
+            && (extension == "dic" || extension == "bin")
+        {
+            paths.push(path.to_path_buf());
+        }
+    }
+
+    paths.sort();
+
+    Ok(paths)
+}
+
 #[cfg(test)]
 mod compiler_tests {
     use super::MecabDictIndexCompiler;
@@ -464,24 +484,4 @@ mod compiler_tests {
             assert!(bytes.ends_with(feature));
         }
     }
-}
-
-#[cfg(feature = "embed-dictionary")]
-pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
-    let mut paths = Vec::new();
-
-    for entry in walkdir::WalkDir::new(dir) {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file()
-            && let Some(extension) = path.extension()
-            && (extension == "dic" || extension == "bin")
-        {
-            paths.push(path.to_path_buf());
-        }
-    }
-
-    paths.sort();
-
-    Ok(paths)
 }

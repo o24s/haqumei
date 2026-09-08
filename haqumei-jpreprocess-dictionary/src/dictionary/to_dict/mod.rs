@@ -85,7 +85,10 @@ impl JPreprocessDictionaryBuilder {
     }
 
     pub fn build_metadata(&self, output_dir: &Path) -> LinderaResult<()> {
-        MetadataBuilder::new().build(&self.metadata, output_dir)
+        let mut metadata = self.metadata.clone();
+        metadata.format_version =
+            lindera_dictionary::dictionary::metadata::DICTIONARY_FORMAT_VERSION;
+        MetadataBuilder::new().build(&metadata, output_dir)
     }
 
     pub fn build_user_dictionary(
@@ -105,7 +108,6 @@ impl JPreprocessDictionaryBuilder {
         CharacterDefinitionBuilderOptions::default()
             .encoding(self.metadata.encoding.clone())
             .builder()
-            .unwrap()
             .build(input_dir, output_dir)
     }
 
@@ -118,7 +120,6 @@ impl JPreprocessDictionaryBuilder {
         UnknownDictionaryBuilderOptions::default()
             .encoding(self.metadata.encoding.clone())
             .builder()
-            .unwrap()
             .build(input_dir, chardef, output_dir)
     }
 
@@ -155,7 +156,6 @@ impl JPreprocessDictionaryBuilder {
         ConnectionCostMatrixBuilderOptions::default()
             .encoding(self.metadata.encoding.clone())
             .builder()
-            .unwrap()
             .build(input_dir, output_dir)
     }
 
@@ -235,7 +235,27 @@ pub fn build_user_dict_from_data(data: Vec<Vec<&str>>) -> LinderaResult<UserDict
 
 #[cfg(test)]
 mod tests {
-    use lindera_dictionary::viterbi::{LexType, WordEntry, WordId};
+    fn find_surface(
+        dict: &lindera_dictionary::dictionary::prefix_dictionary::UserPrefixDictionary,
+        surface: &str,
+    ) -> Vec<(u32, i16, u16, u16)> {
+        dict.da
+            .find_overlapping_iter(surface.as_bytes())
+            .filter(|m| m.start() == 0 && m.end() == surface.len())
+            .flat_map(|m| {
+                let (start, count) = dict.decode_val(m.value());
+                (start..start + count).map(|id| {
+                    let row = &dict.vals_data[id as usize * 10..][..10];
+                    (
+                        u32::from_le_bytes(row[..4].try_into().unwrap()),
+                        i16::from_le_bytes(row[4..6].try_into().unwrap()),
+                        u16::from_le_bytes(row[6..8].try_into().unwrap()),
+                        u16::from_le_bytes(row[8..10].try_into().unwrap()),
+                    )
+                })
+            })
+            .collect()
+    }
 
     use super::*;
 
@@ -284,30 +304,12 @@ mod tests {
 
         let user_dict = builder.build_user_dict_from_data(data).unwrap();
         assert_eq!(
-            user_dict.dict.find_surface("東京スカイツリー"),
-            vec![WordEntry {
-                word_id: WordId {
-                    id: 0,
-                    is_system: false,
-                    lex_type: LexType::User,
-                },
-                word_cost: -3000,
-                left_id: 1285,
-                right_id: 1285,
-            },]
+            find_surface(&user_dict.dict, "東京スカイツリー"),
+            vec![(0, -3000, 1285, 1285),]
         );
         assert_eq!(
-            user_dict.dict.find_surface("すもももももももものうち"),
-            vec![WordEntry {
-                word_id: WordId {
-                    id: 1,
-                    is_system: false,
-                    lex_type: LexType::User,
-                },
-                word_cost: -3000,
-                left_id: 1285,
-                right_id: 1285,
-            },]
+            find_surface(&user_dict.dict, "すもももももももものうち"),
+            vec![(1, -3000, 1285, 1285),]
         );
     }
 
@@ -330,30 +332,12 @@ mod tests {
 
         let user_dict = builder.build_user_dict_from_data(data).unwrap();
         assert_eq!(
-            user_dict.dict.find_surface("東京スカイツリー"),
-            vec![WordEntry {
-                word_id: WordId {
-                    id: 0,
-                    is_system: false,
-                    lex_type: LexType::User,
-                },
-                word_cost: -10000,
-                left_id: 1288,
-                right_id: 1288,
-            },]
+            find_surface(&user_dict.dict, "東京スカイツリー"),
+            vec![(0, -10000, 1288, 1288),]
         );
         assert_eq!(
-            user_dict.dict.find_surface("すもももももももものうち"),
-            vec![WordEntry {
-                word_id: WordId {
-                    id: 1,
-                    is_system: false,
-                    lex_type: LexType::User,
-                },
-                word_cost: -10000,
-                left_id: 1288,
-                right_id: 1288,
-            },]
+            find_surface(&user_dict.dict, "すもももももももものうち"),
+            vec![(1, -10000, 1288, 1288),]
         );
     }
 }

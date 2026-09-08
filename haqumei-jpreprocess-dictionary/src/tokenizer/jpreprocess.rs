@@ -8,15 +8,16 @@ use haqumei_jpreprocess_core::{
 };
 
 use crate::{
-    dictionary::word_encoding::JPreprocessDictionaryWordEncoding, word_data::get_word_data,
+    dictionary::word_encoding::{DictionaryWordEncoding, JPreprocessDictionaryWordEncoding},
+    word_data::get_word_data,
 };
 
 pub struct JPreprocessTokenizer {
-    tokenizer: lindera::tokenizer::Tokenizer,
+    tokenizer: lindera::segmenter::Segmenter,
 }
 
 impl JPreprocessTokenizer {
-    pub fn new(tokenizer: lindera::tokenizer::Tokenizer) -> Self {
+    pub fn new(tokenizer: lindera::segmenter::Segmenter) -> Self {
         Self { tokenizer }
     }
 
@@ -27,33 +28,41 @@ impl JPreprocessTokenizer {
         if word_id.is_unknown() {
             Ok(WordEntry::default())
         } else if word_id.is_system() {
-            Self::get_word_from_prefixdict(
-                &self.tokenizer.segmenter.dictionary.prefix_dictionary,
+            Self::get_word_from_data(
+                &self.tokenizer.dictionary.prefix_dictionary.words_idx_data,
+                &self.tokenizer.dictionary.prefix_dictionary.words_data,
                 word_id,
             )
         } else {
-            let user = &self.tokenizer.segmenter.user_dictionary;
+            let user = &self.tokenizer.user_dictionary;
             user.as_ref()
                 .map_or(Err(DictionaryError::UserDictionaryNotProvided), |user| {
-                    Self::get_word_from_prefixdict(&user.dict, word_id)
+                    Self::get_word_from_data(
+                        &user.dict.words_idx_data,
+                        &user.dict.words_data,
+                        word_id,
+                    )
                 })
         }
     }
 
     /// PANIC: It must be ensured that the prefix_dict is the correct dictionary for the word_id.
-    pub(super) fn get_word_from_prefixdict(
-        prefix_dict: &lindera_dictionary::dictionary::prefix_dictionary::PrefixDictionary,
+    pub(super) fn get_word_from_data(
+        idx: &[u8],
+        words: &[u8],
         word_id: lindera_dictionary::viterbi::WordId,
     ) -> Result<WordEntry, DictionaryError> {
+        let header = get_word_data(idx, words, None).unwrap_or_default();
+        if header != JPreprocessDictionaryWordEncoding::identifier().as_bytes() {
+            return Err(DictionaryError::UnsupportedFormat(
+                String::from_utf8_lossy(header).into_owned(),
+            ));
+        }
         if word_id.is_unknown() {
             Ok(WordEntry::default())
         } else {
-            let data = get_word_data(
-                &prefix_dict.words_idx_data,
-                &prefix_dict.words_data,
-                Some(word_id.id as usize),
-            )
-            .ok_or(DictionaryError::IdNotFound(word_id.id))?;
+            let data = get_word_data(idx, words, Some(word_id.id() as usize))
+                .ok_or(DictionaryError::IdNotFound(word_id.id()))?;
             Ok(JPreprocessDictionaryWordEncoding::deserialize(data)?)
         }
     }
@@ -61,7 +70,7 @@ impl JPreprocessTokenizer {
 
 impl Tokenizer for JPreprocessTokenizer {
     fn tokenize<'a>(&'a self, text: &'a str) -> JPreprocessResult<Vec<impl 'a + Token>> {
-        let words = self.tokenizer.tokenize(text).unwrap();
+        let words = self.tokenizer.segment(text.into())?;
         words
             .into_iter()
             .map(|token| {

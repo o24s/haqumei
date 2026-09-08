@@ -28,10 +28,12 @@ pub enum JPreprocessError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DictionaryError {
+    #[error("Unsupported dictionary format: {0}; rebuild the dictionary from source")]
+    UnsupportedFormat(String),
     #[error("Word with id {0} not found")]
     IdNotFound(u32),
     #[error("Failed to decode: {0}")]
-    FailDecode(#[from] bincode::error::DecodeError),
+    FailDecode(#[from] rkyv::rancor::Error),
     #[error("The word is flagged as UserDictionary, but Lindera UserDictionary is empty")]
     UserDictionaryNotProvided,
     #[error("The word is flagged as UserDictionary, but UserDictionary mode is not set")]

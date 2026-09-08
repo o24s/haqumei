@@ -32,7 +32,7 @@ use derive_builder::Builder;
 use encoding_rs::{Encoding, UTF_8};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use glob::glob;
-use lindera_dictionary::dictionary::prefix_dictionary::PrefixDictionary;
+use lindera_dictionary::dictionary::prefix_dictionary::{PrefixDictionary, UserPrefixDictionary};
 use lindera_dictionary::viterbi::LexType;
 use log::debug;
 
@@ -180,14 +180,12 @@ pub fn write_system_prefix_dictionary<P: CSVParser, E: DictionaryWordEncoding>(
 ) -> LinderaResult<()> {
     let word_entry_map = build_word_entry_map(parser, rows, LexType::System)?;
 
-    // Write dict.da
-    let mut dict_da_writer = File::create(output_dir.join("dict.da")).map_err(|err| {
-        LinderaErrorKind::Io
-            .with_error(anyhow::anyhow!(err))
-            .add_context("Failed to create dict.da file")
-    })?;
-    let da = generate_double_array(&word_entry_map, true)?;
-    write(&da, &mut dict_da_writer)?;
+    let (trie, vals_idx) = PrefixDictionary::serialize_trie(&word_entry_map)?;
+    for (name, bytes) in [("dict.trie", trie), ("dict.valsidx", vals_idx)] {
+        let mut writer = File::create(output_dir.join(name))
+            .map_err(|err| LinderaErrorKind::Io.with_error(err))?;
+        write(&bytes, &mut writer)?;
+    }
 
     // Write dict.vals
     let mut dict_vals_writer = File::create(output_dir.join("dict.vals")).map_err(|err| {
@@ -220,15 +218,15 @@ pub fn write_system_prefix_dictionary<P: CSVParser, E: DictionaryWordEncoding>(
 pub fn generate_user_prefix_dictionary<P: CSVParser, E: DictionaryWordEncoding>(
     parser: &P,
     rows: &[StringRecord],
-) -> LinderaResult<PrefixDictionary> {
-    let word_entry_map = build_word_entry_map(parser, rows, LexType::System)?;
+) -> LinderaResult<UserPrefixDictionary> {
+    let word_entry_map = build_word_entry_map(parser, rows, LexType::User)?;
 
-    let da = generate_double_array(&word_entry_map, false)?;
+    let da = generate_double_array(&word_entry_map)?;
     let vals = generate_values(&word_entry_map)?;
 
     let (words, wordsidx) = generate_words_files::<P, E>(parser, rows)?;
 
-    PrefixDictionary::load(da, vals, wordsidx, words, false)
+    UserPrefixDictionary::load(da, vals, wordsidx, words)
 }
 
 fn write(data: &[u8], writer: &mut impl std::io::Write) -> LinderaResult<()> {
