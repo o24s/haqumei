@@ -7,6 +7,13 @@ members = [
     "haqumei-dict-tool",
     "haqumei-eval",
     "haqumei-jlabel",
+    "haqumei-jpreprocess",
+    "haqumei-jpreprocess-core",
+    "haqumei-jpreprocess-dictionary",
+    "haqumei-jpreprocess-jpcommon",
+    "haqumei-jpreprocess-naist-jdic",
+    "haqumei-jpreprocess-njd",
+    "haqumei-jpreprocess-window",
     "haqumei-kanalizer",
     "haqumei-macros",
     "haqumei-python",
@@ -17,8 +24,6 @@ exclude = ["haqumei-dict-lab"]
 [workspace.dependencies]
 anyhow = "1.0.104"
 arc-swap = "1.9.2"
-bindgen = "0.72.1"
-cc = "1.4.4"
 clap = { version = "4.6.6", features = ["derive"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 csv = "1.4.0"
@@ -32,7 +37,6 @@ haqumei-jlabel = { version = "0.1.2", path = "haqumei-jlabel" }
 haqumei-kanalizer = { version = "0.1.5", path = "haqumei-kanalizer" }
 haqumei-macros = { version = "0.1.4", path = "haqumei-macros" }
 hex = "0.4.3"
-libc = "0.2.189"
 log = "0.4.34"
 moka = { version = "0.12.16", features = ["sync"] }
 ndarray = "0.17.2"
@@ -64,3 +68,25 @@ thiserror = "2.0.20"
 unicode-normalization = "0.1.25"
 walkdir = "2.5.0"
 zstd = "0.13.3"
+
+haqumei-jpreprocess = { path = "haqumei-jpreprocess", version = "0.1.0", default-features = false }
+haqumei-jpreprocess-core = { path = "haqumei-jpreprocess-core", version = "0.1.0" }
+haqumei-jpreprocess-dictionary = { path = "haqumei-jpreprocess-dictionary", version = "0.1.0" }
+haqumei-jpreprocess-jpcommon = { path = "haqumei-jpreprocess-jpcommon", version = "0.1.0" }
+haqumei-jpreprocess-naist-jdic = { path = "haqumei-jpreprocess-naist-jdic", version = "0.1.0" }
+haqumei-jpreprocess-njd = { path = "haqumei-jpreprocess-njd", version = "0.1.0" }
+haqumei-jpreprocess-window = { path = "haqumei-jpreprocess-window", version = "0.1.0" }
+lindera = "~3.0.7"
+lindera-dictionary = { version = "~3.0.7", default-features = false }
+vibrato = "0.5.2"
+bincode = { version = "2.0.1", features = ["serde"] }
+byteorder = "1.5.0"
+derive_builder = "0.20.2"
+encoding = "0.2.33"
+once_cell = "1.19.0"
+encoding_rs = "0.8.35"
+encoding_rs_io = "0.1.7"
+tokio = { version = "1.43.0", features = ["rt", "macros", "time", "sync", "io-util"] }
+md5 = "0.8.0"
+flate2 = "1.1.2"
+aho-corasick = "1.1"

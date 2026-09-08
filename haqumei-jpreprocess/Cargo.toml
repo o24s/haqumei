@@ -1,0 +1,53 @@
+[package]
+name = "haqumei-jpreprocess"
+edition = "2021"
+
+version = "0.1.0"
+description = "Japanese text preprocessor for Text-to-Speech application (OpenJTalk rewrite in rust language)."
+license = "BSD-3-Clause"
+repository = "https://github.com/o24s/haqumei"
+keywords = ["tts", "openjtalk", "library"]
+categories = ["text-processing"]
+rust-version = "1.88.0"
+
+documentation = "https://docs.rs/haqumei-jpreprocess"
+
+[features]
+binary = ["dep:clap", "dep:serde_json", "tokenizer"]
+naist-jdic = [
+  "dep:haqumei-jpreprocess-naist-jdic",
+  "haqumei-jpreprocess-naist-jdic/naist-jdic",
+  "tokenizer",
+]
+tokenizer = [
+  "dep:haqumei-jpreprocess-dictionary",
+  "dep:lindera",
+  "dep:lindera-dictionary",
+]
+default = ["tokenizer"]
+
+[[bin]]
+name = "haqumei-jpreprocess"
+path = "src/bin/jpreprocess.rs"
+required-features = ["binary"]
+
+[dependencies]
+lindera = { workspace = true, optional = true }
+lindera-dictionary = { workspace = true, optional = true }
+haqumei-jpreprocess-dictionary = { workspace = true, optional = true }
+
+phf = { workspace = true, features = ["macros"] }
+
+haqumei-jlabel.workspace = true
+haqumei-jpreprocess-core.workspace = true
+haqumei-jpreprocess-njd.workspace = true
+haqumei-jpreprocess-jpcommon.workspace = true
+
+haqumei-jpreprocess-naist-jdic = { workspace = true, optional = true }
+
+clap = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+
+[package.metadata.upstream]
+repository = "https://github.com/jpreprocess/jpreprocess"
+revision = "54cf9bc2d40a5d6f25144333e9cd03fd3258a126"

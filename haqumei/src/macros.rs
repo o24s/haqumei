@@ -1,27 +1,3 @@
-macro_rules! get_ptr {
-    ($ptr:expr, $field:ident) => {
-        {
-            let p = $ptr;
-            if p.is_null() {
-                std::ptr::null_mut()
-            } else {
-                #[allow(unused_unsafe)]
-                unsafe { (*p).$field }
-            }
-        }
-    };
-    ($ptr:expr, $field:ident $(, $rest:ident)+) => {
-        {
-            let p = $ptr;
-            if p.is_null() {
-                std::ptr::null_mut()
-            } else {
-                get_ptr!(unsafe { (*p).$field } $(, $rest)+)
-            }
-        }
-    };
-}
-
 macro_rules! impl_batch_method_haqumei {
     (
         $(#[$meta:meta])*
@@ -49,6 +25,7 @@ macro_rules! impl_batch_method_haqumei {
                     return Err(HaqumeiError::GlobalDictionaryNotInitialized);
                 }
                 let options = self.options;
+                let filter = self.morph_filter.clone();
 
                 texts
                     .par_iter()
@@ -59,6 +36,8 @@ macro_rules! impl_batch_method_haqumei {
                         Haqumei {
                             open_jtalk: ojt,
                             options,
+                            // 各ワーカーが同じ手続きを共有する
+                            morph_filter: filter.clone(),
                         }
                     },
                     |haqumei, text| haqumei.$inner_method(text.as_ref(), $( $($arg),* )?),

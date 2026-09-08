@@ -1,9 +1,0 @@
-Makefile
-*.in
-open_jtalk
-.deps
-*.idb
-njd2lab
-njd2wav
-txt2lab
-txt2njd

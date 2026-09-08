@@ -1,8 +1,4 @@
 pub mod dictionary;
-mod jpcommon;
-mod jpcommon_label;
-mod jpcommon_push_word;
-pub(crate) mod jpcommon_rule;
 mod lattice;
 pub(crate) mod mapping;
 mod mecab;
@@ -12,29 +8,26 @@ pub(crate) mod njd;
 pub(crate) mod reading_protection;
 
 #[cfg(test)]
+mod label_tests;
+#[cfg(test)]
 mod tests;
 
 use crate::cursor::CharCursor;
 use crate::errors::HaqumeiError;
-use crate::open_jtalk::{
-    jpcommon::JpCommon,
-    model::MecabModel,
-    njd::{Njd, apply_plus_rules, njd_to_features, restore_unknown_word_pos},
-};
+#[cfg(not(feature = "embed-dictionary"))]
+use crate::open_jtalk::model::MecabModel;
 use crate::phoneme::Phoneme;
 use crate::utils::{default_is_non_pause_symbol, get_known_symbol_feature};
 use crate::word_phoneme::WordPhonemeProsody;
 use crate::{NjdFeature, WordPhonemeDetail, WordPhonemeMap};
-use crate::{PitchAccent, ProsodyFormat, ffi};
+use crate::{PitchAccent, ProsodyFormat};
 
 use arc_swap::ArcSwap;
 use haqumei_jlabel::Label;
 use mecab::Mecab;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use std::cell::Cell;
-use std::ffi::{CStr, CString, c_char};
-use std::marker::PhantomData;
+use std::ffi::CString;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -67,30 +60,6 @@ pub static GLOBAL_MECAB_DICTIONARY: LazyLock<ArcSwap<Dictionary>> = LazyLock::ne
     }
 });
 
-/// # Safety
-///
-/// これらの実装は、以下の条件を満たす。
-///
-/// - `Drop` 実装は純粋に `free` 相当の解放のみである。
-///   - (TLSを触っておらず、スレッドセーフな `free` を通して唯一の C/C++ のヒープ上のリソースを、Rustの RAII モデルに則って安全に解放できる)
-/// - C/C++ 側が Thread Local Storage に依存していない。
-/// - C/C++ 側で非 atomic な参照カウントや非同期変更されうる可変なグローバル状態を持たない。
-unsafe impl Send for Mecab {}
-unsafe impl Send for Njd {}
-unsafe impl Send for JpCommon {}
-
-/// # Safety
-///
-/// `MecabModel` は `Dictionary` を通しアクセスされる共有オブジェクトとして `Send` / `Sync` を実装している。
-///
-/// - `Drop` 実装は純粋に `free` 相当の解放のみである。
-///   - (TLSを触っておらず、スレッドセーフな `free` を通して唯一の C/C++ のヒープ上のリソースを、Rustの RAII モデルに則って安全に解放できる)
-/// - C/C++ 側が Thread Local Storage に依存していない。
-/// - C/C++ 側で非 atomic な参照カウントや非同期変更されうる可変なグローバル状態を持たない。
-/// - これは不変オブジェクトとして、`Dictionary` を通して `Arc` で保護されるため、スレッド間で `*mut mecab_model_t` は変更されない。
-unsafe impl Send for MecabModel {}
-unsafe impl Sync for MecabModel {}
-
 /// `Haqumei`, `OpenJTalk` から使用されるグローバル辞書を更新します (設定します)。
 ///
 /// この関数を呼び出した後、新たに `g2p_*` や `extract_fullcontext` などを呼び出す際には、この辞書が使用されるようになります。
@@ -108,11 +77,9 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
     Ok(())
 }
 
-/// Open JTalk をバインディングしたG2Pエンジン。
+/// Open JTalk 互換の形態素解析・NJD・ラベル生成を行う Rust 実装。
 ///
-/// Sync ではありませんが、代わりに `haqumei` は辞書を
-/// グローバルに共有しており、 [OpenJTalk::new] の二回目実行
-/// 以降は Mecab・NJD・JPCommon のポインタをコピーするため、比較的軽量です。
+/// [`OpenJTalk::new`] で作ったインスタンスは、読み込み済みの辞書を共有します。
 ///
 /// 辞書の更新には `update_global_dictionary`,
 /// グローバル辞書のユーザー辞書の解除には `unset_user_dictionary`
@@ -120,8 +87,6 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
-    pub(crate) njd: Njd,
-    pub(crate) jp_common: JpCommon,
     pub(crate) dict: Option<Arc<Dictionary>>,
     /// グローバル辞書の更新に追従するかどうか。
     ///
@@ -129,7 +94,6 @@ pub struct OpenJTalk {
     /// `from_dictionary` や `from_path` で辞書を明示した場合は、
     /// [update_global_dictionary] で勝手に差し替えられては困るので追従しない。
     pub(crate) follows_global: bool,
-    _marker: PhantomData<Cell<()>>,
 }
 
 impl OpenJTalk {
@@ -137,7 +101,7 @@ impl OpenJTalk {
     ///
     /// `embed-dictionary` feature が有効である場合、バイナリ埋め込みされた辞書を自動で使用します。
     ///
-    /// グローバル辞書は `update_global_mecab_dictionary` を使っていつでも更新できます。
+    /// グローバル辞書は [`update_global_dictionary`] で更新できます。
     pub fn new() -> Result<Self, HaqumeiError> {
         let initial_dict = GLOBAL_MECAB_DICTIONARY.load_full();
 
@@ -146,16 +110,11 @@ impl OpenJTalk {
         }
 
         let mecab = Mecab::from_model(&initial_dict.model)?;
-        let njd = Njd::new()?;
-        let jp_common = JpCommon::new()?;
 
         Ok(Self {
             mecab,
-            njd,
-            jp_common,
             dict: Some(initial_dict),
             follows_global: true,
-            _marker: PhantomData,
         })
     }
 
@@ -181,32 +140,22 @@ impl OpenJTalk {
     /// [Dictionary] から [OpenJTalk] を作成します。
     pub fn from_dictionary(dict: Dictionary) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::from_model(&dict.model)?;
-        let njd = Njd::new()?;
-        let jp_common = JpCommon::new()?;
 
         Ok(Self {
             mecab,
-            njd,
-            jp_common,
             dict: Some(Arc::new(dict)),
             follows_global: false,
-            _marker: PhantomData,
         })
     }
 
     /// `Arc` でラップされた [Dictionary] からインスタンスを作成します。
     pub fn from_shared_dictionary(dict: Arc<Dictionary>) -> Result<Self, HaqumeiError> {
         let mecab = Mecab::from_model(&dict.model)?;
-        let njd = Njd::new()?;
-        let jp_common = JpCommon::new()?;
 
         Ok(Self {
             mecab,
-            njd,
-            jp_common,
             dict: Some(dict),
             follows_global: false,
-            _marker: PhantomData,
         })
     }
 
@@ -825,83 +774,17 @@ impl OpenJTalk {
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
-        let c_text = CString::new(text)?;
-
-        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
-
-        let result = unsafe {
-            ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut _,
-                Self::BUFFER_SIZE,
-                c_text.as_ptr(),
-            )
-        };
-
-        match result {
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {}
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_RANGE_ERROR => {
-                return Err(HaqumeiError::Text2MecabError(
-                    "Text is too long".to_string(),
-                ));
-            }
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_INVALID_ARGUMENT => {
-                return Err(HaqumeiError::Text2MecabError(
-                    "Invalid argument for text2mecab".to_string(),
-                ));
-            }
-            _ => {
-                return Err(HaqumeiError::Text2MecabError(format!(
-                    "Unknown error from text2mecab: {}",
-                    result
-                )));
-            }
-        }
-
-        let result =
-            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const _) };
-
-        if result != 1 {
-            return Err(HaqumeiError::MecabError(
-                "Mecab_analysis failed to parse the text".to_string(),
-            ));
-        }
-
-        let mut result_vec = Vec::new();
-        unsafe {
-            let mecab_ptr = self.mecab.inner.as_ptr();
-            let lattice = (*mecab_ptr).lattice as *mut ffi::mecab_lattice_t;
-            let mut node = ffi::mecab_lattice_get_bos_node(lattice);
-
-            while !node.is_null() {
-                let stat = (*node).stat;
-                if stat != 2 && stat != 3 {
-                    // BOS/EOS 以外
-                    let feat_ptr = (*node).feature;
-                    if !feat_ptr.is_null() {
-                        let c_feature = CStr::from_ptr(feat_ptr);
-                        let feature_str = c_feature.to_string_lossy();
-
-                        if !feature_str.contains("記号,空白") {
-                            let surface_ptr = (*node).surface;
-                            let length = (*node).length as usize;
-                            let surface = if !surface_ptr.is_null() && length > 0 {
-                                let bytes =
-                                    std::slice::from_raw_parts(surface_ptr as *const u8, length);
-                                String::from_utf8_lossy(bytes)
-                            } else {
-                                std::borrow::Cow::Borrowed("")
-                            };
-
-                            result_vec.push(format!("{},{}", surface, feature_str));
-                        }
-                    }
-                }
-                node = (*node).next;
-            }
-            ffi::Mecab_refresh(mecab_ptr);
-        }
-
-        Ok(result_vec)
+        let normalized = self.text2mecab_string(text)?;
+        let analysis = self.mecab.analyze(&normalized)?;
+        Ok(analysis
+            .best_path
+            .iter()
+            .filter_map(|&index| {
+                let node = &analysis.nodes[index];
+                (!node.feature.contains("記号,空白"))
+                    .then(|| format!("{},{}", &normalized[node.byte_span.clone()], node.feature))
+            })
+            .collect())
     }
 
     /// MeCab解析を実行し、詳細な形態素情報を返します。
@@ -917,209 +800,68 @@ impl OpenJTalk {
     /// 出力をもう一度通しても変わりません。変換表の右辺はどれも左辺に現れないので、
     /// [`OpenJTalk::run_mecab_detailed`] に渡し直しても同じ文字列になります。
     pub fn text2mecab_string(&self, text: &str) -> Result<String, HaqumeiError> {
-        let c_text = CString::new(text)?;
-        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
-        let result = unsafe {
-            ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut _,
-                Self::BUFFER_SIZE,
-                c_text.as_ptr(),
-            )
-        };
-        if result != ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS {
-            return Err(HaqumeiError::Text2MecabError(format!(
-                "text2mecab failed: {result}"
-            )));
+        CString::new(text)?;
+        let normalized = haqumei_jpreprocess::normalize_text_for_open_jtalk(text);
+        if normalized.len() >= Self::BUFFER_SIZE {
+            return Err(HaqumeiError::Text2MecabError("Text is too long".to_owned()));
         }
-        let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
-        Ok(String::from_utf8_lossy(&buffer[..end]).into_owned())
+        Ok(normalized)
     }
 
     pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
-
-        let c_text = CString::new(text)?;
-        let mut buffer = vec![0u8; Self::BUFFER_SIZE];
-
-        let result = unsafe {
-            ffi::text2mecab(
-                buffer.as_mut_ptr() as *mut _,
-                Self::BUFFER_SIZE,
-                c_text.as_ptr(),
-            )
-        };
-
-        match result {
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_SUCCESS => {}
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_RANGE_ERROR => {
-                return Err(HaqumeiError::Text2MecabError(
-                    "Text is too long".to_string(),
-                ));
-            }
-            ffi::text2mecab_result_t_TEXT2MECAB_RESULT_INVALID_ARGUMENT => {
-                return Err(HaqumeiError::Text2MecabError(
-                    "Invalid argument for text2mecab".to_string(),
-                ));
-            }
-            _ => {
-                return Err(HaqumeiError::Text2MecabError(format!(
-                    "Unknown error from text2mecab: {}",
-                    result
-                )));
-            }
-        }
-
-        // MeCab Analysis
-        let result =
-            unsafe { ffi::Mecab_analysis(self.mecab.inner.as_ptr(), buffer.as_ptr() as *const _) };
-
-        if result != 1 {
-            return Err(HaqumeiError::MecabError(
-                "Mecab_analysis failed to parse the text".to_string(),
-            ));
-        }
-
-        // ノードは解析対象のバッファを指すので、バイト位置を文字位置に直す。
-        // `char_span` を文字単位で持つのは、バイト単位だと利用者が入力を切り出す
-        // ときに UTF-8 の境界を自分で気にすることになるため。
-        //
-        // 最良経路のノードはバイト位置の昇順に並ぶので、ハッシュマップを作らず
-        // カーソルを前へ進めるだけで済む。
-        let analysed = buffer
-            .iter()
-            .position(|&b| b == 0)
-            .map_or(&buffer[..], |end| &buffer[..end]);
-        let mut cursor = CharCursor::new(analysed);
-
-        // Lattice Traversal
-        let morphs = unsafe {
-            let mecab_ptr = self.mecab.inner.as_ptr();
-            let lattice = (*mecab_ptr).lattice as *mut ffi::mecab_lattice_t;
-            let base = analysed.as_ptr() as usize;
-
-            let mut node = ffi::mecab_lattice_get_bos_node(lattice);
-
-            let mut results = Vec::new();
-
-            while !node.is_null() {
-                let stat = (*node).stat; // 0=NOR, 1=UNK, 2=BOS, 3=EOS
-
-                if stat != 2 && stat != 3 {
-                    let surface_ptr = (*node).surface;
-                    let length = (*node).length as usize;
-                    // sentence と同じバッファを指すノードだけ位置に直す。
-                    // 外部で確保されたノードの surface はこの範囲の外を指しうる
-                    let (char_start, char_end) = if !surface_ptr.is_null()
-                        && (surface_ptr as usize) >= base
-                        && (surface_ptr as usize) - base + length <= analysed.len()
-                    {
-                        let byte_start = (surface_ptr as usize) - base;
-                        let start = cursor.char_at(byte_start);
-                        let end = cursor.char_at(byte_start + length);
-                        (start, end)
-                    } else {
-                        (0, 0)
-                    };
-
-                    let surface = if !surface_ptr.is_null() && length > 0 {
-                        let bytes = std::slice::from_raw_parts(surface_ptr as *const u8, length);
-                        String::from_utf8_lossy(bytes)
-                    } else {
-                        std::borrow::Cow::Borrowed("")
-                    };
-
-                    let feat_ptr = (*node).feature;
-                    let raw_feature = if !feat_ptr.is_null() {
-                        CStr::from_ptr(feat_ptr).to_string_lossy()
-                    } else {
-                        std::borrow::Cow::Borrowed("")
-                    };
-
-                    // mecab.cpp:
-                    // ```cpp
-                    // m->feature = (char **) calloc(m->size, sizeof(char *));
-                    // int index = 0;
-                    // for (const MeCab::Node* node = lattice->bos_node(); node; node = node->next) {
-                    //     if(node->stat != MECAB_BOS_NODE && node->stat != MECAB_EOS_NODE) {
-                    //         std::string f(node->surface, node->length);
-                    //         f += ",";
-                    //         f += node->feature;
-                    //         m->feature[index] = strdup(f.c_str());
-                    //         index++;
-                    //     }
-                    // }
-                    // ```
-
-                    let is_unknown = stat == 1;
-                    let is_ignored = raw_feature.contains("記号,空白");
-
-                    if is_unknown
-                        && surface.chars().all(|c| !c.is_alphanumeric())
-                        && surface.chars().count() > 1
-                    {
-                        for (offset, ch) in surface.chars().enumerate() {
-                            let ch_str = ch.to_string();
-                            let span = char_start + offset..char_start + offset + 1;
-
-                            if let Some(known_feature) = get_known_symbol_feature(&ch_str) {
-                                let compatible_feature = format!("{},{}", ch_str, known_feature);
-                                results.push(MecabMorph {
-                                    surface: ch_str,
-                                    feature: compatible_feature,
-                                    left_id: (*node).lcAttr,
-                                    right_id: (*node).rcAttr,
-                                    pos_id: (*node).posid,
-                                    word_cost: (*node).wcost,
-                                    char_span: span.clone(),
-                                    // 既知記号の feature で作り直しているので、
-                                    // もとのノードを引いた辞書とは無関係になる
-                                    dictionary_index: 0,
-                                    is_unknown: false,
-                                    is_ignored: ch.is_whitespace(),
-                                });
-                            } else {
-                                let compatible_feature = format!("{},{}", ch_str, raw_feature);
-                                results.push(MecabMorph {
-                                    surface: ch_str,
-                                    feature: compatible_feature,
-                                    left_id: (*node).lcAttr,
-                                    right_id: (*node).rcAttr,
-                                    pos_id: (*node).posid,
-                                    word_cost: (*node).wcost,
-                                    char_span: span,
-                                    dictionary_index: (*node).dictionary_index,
-                                    is_unknown: true,
-                                    is_ignored,
-                                });
-                            }
-                        }
-                    } else {
-                        let compatible_feature = format!("{},{}", surface, raw_feature);
-                        results.push(MecabMorph {
-                            surface: surface.to_string(),
-                            feature: compatible_feature,
-                            left_id: (*node).lcAttr,
-                            right_id: (*node).rcAttr,
-                            pos_id: (*node).posid,
-                            word_cost: (*node).wcost,
-                            char_span: char_start..char_end,
-                            dictionary_index: (*node).dictionary_index,
-                            is_unknown,
-                            is_ignored,
-                        });
-                    }
+        let normalized = self.text2mecab_string(text)?;
+        let analysis = self.mecab.analyze(&normalized)?;
+        let mut cursor = CharCursor::new(normalized.as_bytes());
+        let mut results = Vec::new();
+        for &index in &analysis.best_path {
+            let node = &analysis.nodes[index];
+            let surface = &normalized[node.byte_span.clone()];
+            let char_start = cursor.char_at(node.byte_span.start);
+            let char_end = cursor.char_at(node.byte_span.end);
+            let is_ignored = node.feature.contains("記号,空白");
+            let base = MecabMorph {
+                surface: surface.to_owned(),
+                feature: format!("{},{}", surface, node.feature),
+                left_id: node.left_id,
+                right_id: node.right_id,
+                pos_id: node.pos_id,
+                word_cost: node.word_cost,
+                char_span: char_start..char_end,
+                dictionary_index: node.dictionary_index,
+                is_unknown: node.is_unknown,
+                is_ignored,
+            };
+            if node.is_unknown
+                && surface.chars().all(|c| !c.is_alphanumeric())
+                && surface.chars().count() > 1
+            {
+                for (offset, ch) in surface.chars().enumerate() {
+                    let surface = ch.to_string();
+                    let known = get_known_symbol_feature(&surface);
+                    results.push(MecabMorph {
+                        feature: format!("{},{}", surface, known.unwrap_or(&node.feature)),
+                        surface,
+                        char_span: char_start + offset..char_start + offset + 1,
+                        dictionary_index: if known.is_some() {
+                            0
+                        } else {
+                            node.dictionary_index
+                        },
+                        is_unknown: known.is_none(),
+                        is_ignored: if known.is_some() {
+                            ch.is_whitespace()
+                        } else {
+                            is_ignored
+                        },
+                        ..base.clone()
+                    });
                 }
-
-                node = (*node).next;
+            } else {
+                results.push(base);
             }
-            results
-        };
-
-        unsafe {
-            ffi::Mecab_refresh(self.mecab.inner.as_ptr());
         }
-
-        Ok(morphs)
+        Ok(results)
     }
 
     /// MeCab の feature 文字列の列を `mecab2njd` に渡し、[`NjdFeature`] の列を
@@ -1146,211 +888,40 @@ impl OpenJTalk {
             .into_iter()
             .map(|s| s.as_ref().to_string())
             .collect();
-        let c_strings: Vec<CString> = raw
-            .iter()
-            .map(|s| CString::new(s.as_str()))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        if c_strings.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut c_string_pointers: Vec<*const c_char> =
-            c_strings.iter().map(|cs| cs.as_ptr()).collect();
-
-        unsafe {
-            ffi::mecab2njd(
-                self.njd.inner.as_mut(),
-                c_string_pointers.as_mut_ptr() as *mut *mut c_char,
-                c_string_pointers.len() as i32,
-            );
-            ffi::njd_set_pronunciation(self.njd.inner.as_mut());
-        }
-
-        let mut features = njd_to_features(&self.njd);
-        let raw_refs: Vec<&str> = raw.iter().map(String::as_str).collect();
-        restore_unknown_word_pos(&mut features, &raw_refs);
-        apply_plus_rules(&mut features);
-
-        Self::features_to_njd(&features, &mut self.njd)?;
-
-        unsafe {
-            ffi::njd_set_digit(self.njd.inner.as_mut());
-            ffi::njd_set_accent_phrase(self.njd.inner.as_mut());
-            ffi::njd_set_accent_type(self.njd.inner.as_mut());
-            ffi::njd_set_unvoiced_vowel(self.njd.inner.as_mut());
-            ffi::njd_set_long_vowel(self.njd.inner.as_mut());
-        }
-
-        let final_features = njd_to_features(&self.njd);
-        unsafe {
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-        }
-
-        Ok(final_features)
+        njd::run_frontend(&raw)
     }
 
-    // JPCommon に features を渡し、音素ラベルのリストを取得します
+    /// NJD の特徴からフルコンテキストラベル文字列を生成します。
     pub fn make_label(&mut self, features: &[NjdFeature]) -> Result<Vec<String>, HaqumeiError> {
-        Self::features_to_njd(features, &mut self.njd)?;
-
-        let (label_size, label_feature_ptr) = unsafe {
-            ffi::njd2jpcommon(self.jp_common.inner.as_mut(), self.njd.inner.as_mut());
-
-            ffi::JPCommon_make_label(self.jp_common.inner.as_mut());
-
-            let size = ffi::JPCommon_get_label_size(self.jp_common.inner.as_mut());
-            let ptr = ffi::JPCommon_get_label_feature(self.jp_common.inner.as_mut());
-            (size, ptr)
-        };
-
-        if label_feature_ptr.is_null() {
-            return Ok(Vec::new());
-        }
-
-        let labels = unsafe {
-            let mut result = Vec::with_capacity(label_size as usize);
-            for i in 0..(label_size as isize) {
-                let label_ptr = *label_feature_ptr.offset(i);
-                let c_label = CStr::from_ptr(label_ptr);
-                result.push(c_label.to_string_lossy().into_owned());
-            }
-            result
-        };
-
-        unsafe {
-            ffi::JPCommon_refresh(self.jp_common.inner.as_mut());
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-        }
-
-        Ok(labels)
+        Ok(self
+            .extract_fullcontext_labels(features)?
+            .into_iter()
+            .map(|label| label.to_string())
+            .collect())
     }
 
-    /// NjdFeature から直接フラットな音素リストを抽出する。
+    pub(crate) fn extract_fullcontext_labels(
+        &mut self,
+        features: &[NjdFeature],
+    ) -> Result<Vec<Label>, HaqumeiError> {
+        let njd = njd::features_to_njd(features)?;
+        Ok(haqumei_jpreprocess_jpcommon::njdnodes_to_features(
+            &njd.nodes,
+        ))
+    }
+
+    /// NJD の特徴から、発話両端の無音を除いた音素列を返します。
     pub fn extract_phonemes(
         &mut self,
         features: &[NjdFeature],
     ) -> Result<Vec<Phoneme>, HaqumeiError> {
-        if features.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        unsafe {
-            Self::features_to_njd(features, &mut self.njd)?;
-
-            let jp = self.jp_common.inner.as_mut();
-            let njd = self.njd.inner.as_mut();
-
-            ffi::njd2jpcommon(jp, njd);
-
-            // JPCommon_make_label(JPCommon * jpcommon) の部分的な移植
-            if !jp.label.is_null() {
-                ffi::JPCommonLabel_clear(jp.label);
-            } else {
-                let ptr = libc::calloc(1, std::mem::size_of::<ffi::JPCommonLabel>());
-                if ptr.is_null() {
-                    return Err(HaqumeiError::AllocationError("ffi::JPCommonLabel"));
-                }
-                jp.label = ptr as *mut ffi::JPCommonLabel;
-            }
-
-            ffi::JPCommonLabel_initialize(jp.label);
-
-            let mut node = jp.head;
-            while !node.is_null() {
-                jpcommon_push_word::JPCommonLabel_push_word(
-                    jp.label,
-                    ffi::JPCommonNode_get_pron(node),
-                    ffi::JPCommonNode_get_pos(node),
-                    ffi::JPCommonNode_get_ctype(node),
-                    ffi::JPCommonNode_get_cform(node),
-                    ffi::JPCommonNode_get_acc(node),
-                    ffi::JPCommonNode_get_chain_flag(node),
-                )?;
-
-                node = (*node).next;
-            }
-
-            let mut result_vec = Vec::new();
-
-            let mut p = (*jp.label).phoneme_head;
-            while !p.is_null() {
-                let s_ptr = (*p).phoneme;
-                if !s_ptr.is_null() {
-                    #[cfg(debug_assertions)]
-                    {
-                        result_vec.push(Phoneme::try_from_ptr(s_ptr).unwrap());
-                    }
-                    #[cfg(not(debug_assertions))]
-                    {
-                        result_vec.push(Phoneme::from(s_ptr));
-                    };
-                }
-                p = (*p).next;
-            }
-
-            ffi::JPCommon_refresh(jp);
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-
-            Ok(result_vec)
-        }
-    }
-
-    pub(crate) fn features_to_njd(
-        features: &[NjdFeature],
-        njd: &mut Njd,
-    ) -> Result<(), HaqumeiError> {
-        unsafe {
-            ffi::NJD_clear(njd.inner.as_mut());
-        }
-
-        for feature in features {
-            let c_string = CString::new(feature.string.as_str())?;
-            let c_pos = CString::new(feature.pos.as_str())?;
-            let c_pos_group1 = CString::new(feature.pos_group1.as_str())?;
-            let c_pos_group2 = CString::new(feature.pos_group2.as_str())?;
-            let c_pos_group3 = CString::new(feature.pos_group3.as_str())?;
-            let c_ctype = CString::new(feature.ctype.as_str())?;
-            let c_cform = CString::new(feature.cform.as_str())?;
-            let c_orig = CString::new(feature.orig.as_str())?;
-            let c_read = CString::new(feature.read.as_str())?;
-            let c_pron = CString::new(feature.pron.as_str())?;
-            let c_chain_rule = CString::new(feature.chain_rule.as_str())?;
-
-            // SAFETY: このブロックは、`NJDNode` を構築・管理するために C の FFI とやり取りする。
-            // 安全性は、`libc::calloc` を用いてメモリ確保を行い、ヌルポインタをチェックしていること、
-            // C 関数が文字列のディープコピーを行うため `CString` のデータが安全に扱われていること、
-            // そして確保された各ノードが正しく C 側の `NJD` 構造体に移譲されており、
-            // Rust がそれを解放しないことで二重解放エラーを防いでいることによって保証されている。
-            unsafe {
-                let node =
-                    libc::calloc(1, std::mem::size_of::<ffi::NJDNode>()) as *mut ffi::NJDNode;
-                if node.is_null() {
-                    return Err(HaqumeiError::AllocationError("ffi::NJDNode"));
-                }
-
-                ffi::NJDNode_initialize(node);
-
-                ffi::NJDNode_set_string(node, c_string.as_ptr());
-                ffi::NJDNode_set_pos(node, c_pos.as_ptr());
-                ffi::NJDNode_set_pos_group1(node, c_pos_group1.as_ptr());
-                ffi::NJDNode_set_pos_group2(node, c_pos_group2.as_ptr());
-                ffi::NJDNode_set_pos_group3(node, c_pos_group3.as_ptr());
-                ffi::NJDNode_set_ctype(node, c_ctype.as_ptr());
-                ffi::NJDNode_set_cform(node, c_cform.as_ptr());
-                ffi::NJDNode_set_orig(node, c_orig.as_ptr());
-                ffi::NJDNode_set_read(node, c_read.as_ptr());
-                ffi::NJDNode_set_pron(node, c_pron.as_ptr());
-                ffi::NJDNode_set_acc(node, feature.acc);
-                ffi::NJDNode_set_mora_size(node, feature.mora_size);
-                ffi::NJDNode_set_chain_rule(node, c_chain_rule.as_ptr());
-                ffi::NJDNode_set_chain_flag(node, feature.chain_flag);
-
-                ffi::NJD_push_node(njd.inner.as_mut(), node);
-            }
-        }
-
-        Ok(())
+        let njd = njd::features_to_njd(features)?;
+        haqumei_jpreprocess_jpcommon::njdnodes_to_phonemes_with_sources(&njd.nodes)
+            .into_iter()
+            .map(|phone| phone.phoneme)
+            .filter(|phone| phone != "sil")
+            .map(|phone| phone.parse())
+            .collect()
     }
 
     impl_batch_method_openjtalk!(

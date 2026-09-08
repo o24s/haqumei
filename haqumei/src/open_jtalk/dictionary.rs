@@ -1,17 +1,13 @@
 use std::{
-    ffi::{CString, NulError},
+    ffi::NulError,
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use libc::{c_char, c_int};
 use thiserror::Error;
 
-use crate::{
-    errors::HaqumeiError, ffi, open_jtalk::model::MecabModel, setup_cpp_redirect,
-    teardown_cpp_redirect,
-};
+use crate::{errors::HaqumeiError, open_jtalk::model::MecabModel};
 
 #[cfg(feature = "embed-dictionary")]
 static DICT_EXTRACT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -51,10 +47,7 @@ impl Dictionary {
 
     /// システム辞書と、0 個以上のユーザー辞書から [Dictionary] を生成します。
     ///
-    /// パスは絶対パスに解決してから Mecab に渡します。Mecab は辞書内のファイルを
-    /// 開く際に相対パスを解釈できるとは限らず、またプロセスのカレントディレクトリが
-    /// 変わると同じ [Dictionary] が別の辞書を指しかねないためです。
-    /// 保持する `dict_dir` も解決後のパスになります。
+    /// パスは絶対パスに解決して保持します。
     ///
     /// `dict_dir` がディレクトリでないとき、ユーザー辞書がファイルでないとき、
     /// パスが存在しないときは [`HaqumeiError`] を返します。
@@ -78,15 +71,6 @@ impl Dictionary {
                 return Err(HaqumeiError::InvalidDictionaryPath(format!(
                     "{} はファイルではありません。\
                      ユーザー辞書はコンパイル済みの `.dic` を指定してください",
-                    path.display()
-                )));
-            }
-            // Mecab はユーザー辞書をカンマで区切って受け取るので、パス自体に
-            // カンマが入っていると別のパスとして解釈される
-            if path.to_string_lossy().contains(',') {
-                return Err(HaqumeiError::InvalidDictionaryPath(format!(
-                    "{} にはカンマが含まれています。\
-                     Mecab がユーザー辞書の区切りに使う文字なので、パスに含められません",
                     path.display()
                 )));
             }
@@ -242,7 +226,7 @@ pub enum DictCompilerError {
     #[error("Path is not valid UTF-8: {0}")]
     PathNotUtf8(PathBuf),
     #[error("mecab-dict-index failed with exit code {0}")]
-    CompilerFailed(c_int),
+    CompilerFailed(i32),
     #[error("Failed to clean output directory '{0}': {1}")]
     CleanupFailed(PathBuf, #[source] std::io::Error),
     #[error("Failed to create output directory '{0}': {1}")]
@@ -383,8 +367,9 @@ impl MecabDictIndexCompiler {
 
     /// 設定されたオプションを使用して辞書のコンパイルを実行します。
     ///
-    /// このメソッドは、ビルダーの状態に基づいてコマンドライン引数を構築し、
-    /// FFI関数 `mecab_dict_index` を呼び出して結果を返します。
+    /// Rust のコンパイラで MeCab 互換のバイナリ辞書を作ります。
+    /// CSV の文字コードは UTF-8 です。ユーザー辞書のコストを省略する場合は、
+    /// [`Self::model_in`] で指定した学習モデルから推定します。
     ///
     /// # デフォルトの挙動
     ///
@@ -392,151 +377,40 @@ impl MecabDictIndexCompiler {
     /// 有効化されていない場合、このメソッドは自動的にすべての `build_*` フラグを有効にして
     /// 完全なシステム辞書をコンパイルします。
     pub fn run(&self) -> Result<(), DictCompilerError> {
-        let mut c_string_args: Vec<CString> = Vec::new();
-        unsafe {
-            setup_cpp_redirect();
-        };
-
-        let dict_dir = &self.dict_dir.canonicalize()?;
-        let out_dir = &self.out_dir;
-
-        fs::create_dir_all(&self.out_dir)
-            .map_err(|e| DictCompilerError::DirectoryCreationFailed(out_dir.to_path_buf(), e))?;
-        let out_dir = &self.out_dir.canonicalize()?;
-
-        for entry in fs::read_dir(out_dir)
-            .map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))?
+        use haqumei_jpreprocess_dictionary::mecab_compile::{self, BuildOptions};
+        for charset in [&self.charset, &self.dictionary_charset]
+            .into_iter()
+            .flatten()
         {
-            let entry =
-                entry.map_err(|e| DictCompilerError::CleanupFailed(out_dir.to_path_buf(), e))?;
-            let path = entry.path();
-
-            if path.is_file()
-                && let Some(ext) = path.extension().and_then(|s| s.to_str())
-                && (ext == "dic" || ext == "bin")
-            {
-                fs::remove_file(&path)
-                    .map_err(|e| DictCompilerError::CleanupFailed(path.clone(), e))?;
+            if !matches!(charset.to_ascii_lowercase().as_str(), "utf8" | "utf-8") {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Rust 辞書コンパイラは UTF-8 の辞書を構築します",
+                )
+                .into());
             }
         }
-
-        c_string_args.push(CString::new("mecab-dict-index").unwrap());
-
-        fn add_path_arg(
-            c_string_args: &mut Vec<CString>,
-            opt: &str,
-            path: &Path,
-        ) -> Result<(), DictCompilerError> {
-            c_string_args.push(CString::new(opt)?);
-            let path_str = path
-                .to_str()
-                .ok_or_else(|| DictCompilerError::PathNotUtf8(path.to_path_buf()))?;
-            c_string_args.push(CString::new(path_str)?);
-            Ok(())
-        }
-
-        fn add_optional_path_arg(
-            c_string_args: &mut Vec<CString>,
-            opt: &str,
-            path: &Option<PathBuf>,
-        ) -> Result<(), DictCompilerError> {
-            if let Some(p) = path {
-                add_path_arg(c_string_args, opt, p)?;
-            }
-            Ok(())
-        }
-
-        fn add_str_arg(
-            c_string_args: &mut Vec<CString>,
-            opt: &str,
-            val: &Option<String>,
-        ) -> Result<(), DictCompilerError> {
-            if let Some(s) = val {
-                c_string_args.push(CString::new(opt)?);
-                c_string_args.push(CString::new(s.as_str())?);
-            }
-            Ok(())
-        }
-
-        fn add_flag_arg(
-            c_string_args: &mut Vec<CString>,
-            opt: &str,
-            flag: bool,
-        ) -> Result<(), DictCompilerError> {
-            if flag {
-                c_string_args.push(CString::new(opt)?);
-            }
-            Ok(())
-        }
-
-        let should_build_all = self.userdict_out.is_none()
-            && [
-                self.build_charcategory,
-                self.build_matrix,
-                self.build_model,
-                self.build_sysdic,
-                self.build_unknown,
-            ]
-            .iter()
-            .all(|&f| !f);
-
-        add_path_arg(&mut c_string_args, "-d", dict_dir)?;
-        add_path_arg(&mut c_string_args, "-o", out_dir)?;
-        add_optional_path_arg(&mut c_string_args, "-m", &self.model_in)?;
-        add_optional_path_arg(&mut c_string_args, "-u", &self.userdict_out)?;
-        add_flag_arg(
-            &mut c_string_args,
-            "--build-unknown",
-            self.build_unknown || should_build_all,
-        )?;
-        add_flag_arg(
-            &mut c_string_args,
-            "--build-model",
-            self.build_model || should_build_all,
-        )?;
-        add_flag_arg(
-            &mut c_string_args,
-            "--build-charcategory",
-            self.build_charcategory || should_build_all,
-        )?;
-        add_flag_arg(
-            &mut c_string_args,
-            "--build-sysdic",
-            self.build_sysdic || should_build_all,
-        )?;
-        add_flag_arg(
-            &mut c_string_args,
-            "--build-matrix",
-            self.build_matrix || should_build_all,
-        )?;
-        add_str_arg(&mut c_string_args, "-c", &self.charset)?;
-        add_str_arg(&mut c_string_args, "-f", &self.dictionary_charset)?;
-        add_flag_arg(&mut c_string_args, "-q", self.quiet)?;
-
-        for file in &self.input_files {
-            let file_str = file
-                .to_str()
-                .ok_or_else(|| DictCompilerError::PathNotUtf8(file.clone()))?;
-            c_string_args.push(CString::new(file_str)?);
-        }
-
-        let mut argv: Vec<*mut c_char> = c_string_args
-            .iter()
-            .map(|s| s.as_ptr() as *mut c_char)
-            .collect();
-        let argc = argv.len() as c_int;
-
-        let result = unsafe { ffi::mecab_dict_index(argc, argv.as_mut_ptr()) };
-
-        unsafe {
-            teardown_cpp_redirect();
-        }
-
-        if result == 0 {
-            Ok(())
+        if let Some(output) = &self.userdict_out {
+            mecab_compile::build_user_with_model(
+                &self.dict_dir,
+                &self.input_files,
+                output,
+                self.model_in.as_deref(),
+            )?;
         } else {
-            Err(DictCompilerError::CompilerFailed(result))
+            mecab_compile::build_system(
+                &self.dict_dir,
+                &self.out_dir,
+                &BuildOptions {
+                    unknown: self.build_unknown,
+                    charcategory: self.build_charcategory,
+                    sysdic: self.build_sysdic,
+                    matrix: self.build_matrix,
+                    model: self.build_model,
+                },
+            )?;
         }
+        Ok(())
     }
 }
 

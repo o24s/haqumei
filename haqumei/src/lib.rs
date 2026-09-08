@@ -1,13 +1,3 @@
-mod ffi {
-    #![allow(non_upper_case_globals)]
-    #![allow(non_camel_case_types)]
-    #![allow(non_snake_case)]
-    #![allow(dead_code)]
-    #![allow(unnecessary_transmutes)]
-    #![allow(clippy::upper_case_acronyms)]
-    include!("generated/bindings.rs");
-}
-
 pub mod candidates;
 mod cursor;
 mod data;
@@ -21,7 +11,6 @@ pub mod options;
 pub mod phoneme;
 mod postprocess;
 pub mod prosody;
-mod redirect_log;
 pub mod utils;
 pub mod word_phoneme;
 
@@ -48,7 +37,6 @@ pub use open_jtalk::{
 pub use options::*;
 pub use phoneme::Phoneme;
 pub use prosody::{PitchAccent, ProsodicPhoneme, ProsodyFormat};
-pub(crate) use redirect_log::{setup_cpp_redirect, teardown_cpp_redirect};
 pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody};
 
 use crate::{
@@ -72,7 +60,17 @@ static KANALIZER_CACHE: LazyLock<Cache<String, String>> = LazyLock::new(|| Cache
 static KANALIZER: LazyLock<Mutex<Kanalizer>> =
     LazyLock::new(|| Mutex::new(Kanalizer::new().expect("Failed to initialize Kanalizer models")));
 
-/// Open JTalk をバインディングした G2P エンジン。
+/// MeCab の出力を NJD に渡す前に書き換える手続き。
+///
+/// 受け取るのは `text2mecab` を通した文、その文のラティスに立った全ノード、そして
+/// 最良経路の形態素列である。ノードの `char_span` は渡された文の文字位置を指す。
+///
+/// 形態素の `feature` を書き換えると、NJD はそれを入力として読み直す。**NJD の後で
+/// `pron` を触ると `njd_set_accent_type` が打った核をモーラ数の差だけ自分でずらす
+/// 必要が出るが、ここで書き換えれば NJD が最初から数え直す。**
+pub type MorphFilter = dyn Fn(&str, &[LatticeNode], &mut [MecabMorph]) + Send + Sync;
+
+/// 日本語の読み・音素・韻律を生成する G2P エンジン。
 ///
 /// [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書をベースに、様々な変更を加えています。
 /// 詳細は README を参照してください。
@@ -81,6 +79,11 @@ static KANALIZER: LazyLock<Mutex<Kanalizer>> =
 pub struct Haqumei {
     pub(crate) open_jtalk: OpenJTalk,
     pub options: HaqumeiOptions,
+    /// MeCab の出力を NJD に渡す前に書き換える手続き。`None` なら何もしない。
+    ///
+    /// [`HaqumeiOptions`] ではなくここに持つのは、設定ではなく呼び出し側が持ち込む
+    /// 資源だからである。`HaqumeiOptions` は `Copy` なので所有する値を置けない。
+    pub(crate) morph_filter: Option<std::sync::Arc<MorphFilter>>,
 }
 
 impl Haqumei {
@@ -103,6 +106,7 @@ impl Haqumei {
         Ok(Haqumei {
             open_jtalk,
             options,
+            morph_filter: None,
         })
     }
 
@@ -682,11 +686,34 @@ impl Haqumei {
         Ok(mapping)
     }
 
+    /// MeCab の出力を NJD に渡す前に書き換える手続きを設定します。
+    ///
+    /// 辞書だけでは選べない読みを外から決めるための口である。ラティスに立っている
+    /// 候補は全部渡されるので、`feature` を候補のもので置き換えれば読みが変わる。
+    pub fn set_morph_filter(
+        &mut self,
+        filter: impl Fn(&str, &[LatticeNode], &mut [MecabMorph]) + Send + Sync + 'static,
+    ) {
+        self.morph_filter = Some(std::sync::Arc::new(filter));
+    }
+
+    /// 書き換えの手続きを外します。
+    pub fn clear_morph_filter(&mut self) {
+        self.morph_filter = None;
+    }
+
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
         if text.is_empty() {
             self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
+        }
+
+        // 書き換えは MeCab の解析結果を要するので、形態素を返さない経路でも
+        // detailed 側を通す。ここを分けたままにすると `g2k` や `extract_fullcontext`
+        // でだけ手続きが無視され、同じ入力で API ごとに読みが変わる
+        if self.morph_filter.is_some() {
+            return Ok(self.run_frontend_detailed(text)?.0);
         }
 
         let text = self.normalize_unicode_if_needed(text);
@@ -717,7 +744,24 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        let (njd_features, mecab_morphs) = self.open_jtalk.run_frontend_detailed(text)?;
+        let (njd_features, mecab_morphs) = if let Some(filter) = self.morph_filter.clone() {
+            // 書き換えてから NJD に渡す
+            let mut morphs = self.open_jtalk.run_mecab_detailed(text)?;
+            // 位置は `text2mecab` を通した文字列が基準なので、手続きが数え直さずに
+            // 済むよう正規化済みの文を渡す
+            let normalized = self.open_jtalk.text2mecab_string(text)?;
+            let nodes = self.open_jtalk.analyze_lattice(text)?;
+            filter(&normalized, &nodes, &mut morphs);
+            let features = self.open_jtalk.run_njd_from_mecab(
+                morphs
+                    .iter()
+                    .filter(|m| !m.is_ignored)
+                    .map(|m| m.feature.as_str()),
+            )?;
+            (features, morphs)
+        } else {
+            self.open_jtalk.run_frontend_detailed(text)?
+        };
 
         let protected = if self.options.protect_user_dict_readings {
             protected_indices(&njd_features, &mecab_morphs)

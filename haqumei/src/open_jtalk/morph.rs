@@ -55,7 +55,7 @@ pub struct MecabMorph {
 /// 辞書を引かずに作られたノードの [`MecabMorph::dictionary_index`]。
 ///
 /// 未知語と BOS/EOS が該当する (MeCab の `MECAB_NO_DICTIONARY_INDEX`)。
-pub const NO_DICTIONARY_INDEX: u8 = crate::ffi::MECAB_NO_DICTIONARY_INDEX as u8;
+pub const NO_DICTIONARY_INDEX: u8 = u8::MAX;
 
 impl MecabMorph {
     /// ユーザー辞書から引かれた形態素かどうか。

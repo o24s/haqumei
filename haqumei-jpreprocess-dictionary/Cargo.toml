@@ -1,0 +1,54 @@
+[package]
+name = "haqumei-jpreprocess-dictionary"
+edition = "2021"
+
+version = "0.1.0"
+description = "Japanese text preprocessor for Text-to-Speech application (OpenJTalk rewrite in rust language)."
+license = "BSD-3-Clause"
+repository = "https://github.com/o24s/haqumei"
+keywords = ["tts", "openjtalk", "library"]
+categories = ["text-processing"]
+rust-version = "1.88.0"
+
+documentation = "https://docs.rs/haqumei-jpreprocess-dictionary"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+binary = ["dep:clap"]
+
+[[bin]]
+name = "dict_tools"
+required-features = ["binary"]
+
+[dependencies]
+thiserror.workspace = true
+bincode.workspace = true
+byteorder.workspace = true
+anyhow.workspace = true
+once_cell.workspace = true
+csv.workspace = true
+derive_builder.workspace = true
+glob.workspace = true
+log.workspace = true
+encoding_rs.workspace = true
+encoding_rs_io.workspace = true
+
+lindera.workspace = true
+lindera-dictionary.workspace = true
+daachorse = "2.1.1"
+
+serde.workspace = true
+
+haqumei-jpreprocess-core = { workspace = true, features = ["lindera"] }
+
+clap = { workspace = true, features = ["derive"], optional = true }
+
+[package.metadata.upstream]
+repository = "https://github.com/jpreprocess/jpreprocess"
+revision = "54cf9bc2d40a5d6f25144333e9cd03fd3258a126"
+
+[dev-dependencies]
+tempfile.workspace = true

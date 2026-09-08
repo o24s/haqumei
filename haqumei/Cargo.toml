@@ -16,26 +16,6 @@ include = [
     "LICENSE-pyopenjtalk",
     "dictionary/COPYING",
     "build.rs",
-    "compat.c",
-    "redirect.c",
-    "redirect_cpp.cpp",
-    "redirect.h",
-    "wrapper.h",
-    "yomi_model/**",
-    "vendor/open_jtalk/src/bin/**",
-    "vendor/open_jtalk/src/jpcommon/**",
-    "vendor/open_jtalk/src/mecab/**",
-    "vendor/open_jtalk/src/COPYING",
-    "vendor/open_jtalk/src/mecab2njd/**",
-    "vendor/open_jtalk/src/njd/**",
-    "vendor/open_jtalk/src/njd2jpcommon/**",
-    "vendor/open_jtalk/src/njd_set_accent_phrase/**",
-    "vendor/open_jtalk/src/njd_set_accent_type/**",
-    "vendor/open_jtalk/src/njd_set_digit/**",
-    "vendor/open_jtalk/src/njd_set_long_vowel/**",
-    "vendor/open_jtalk/src/njd_set_pronunciation/**",
-    "vendor/open_jtalk/src/njd_set_unvoiced_vowel/**",
-    "vendor/open_jtalk/src/text2mecab/**",
 ]
 
 [features]
@@ -44,8 +24,8 @@ embed-dictionary = []
 build-dictionary = []
 download-dictionary = ["embed-dictionary", "dep:reqwest", "dep:tempfile"]
 serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
-# vendor/open_jtalk を変更したときに src/generated/bindings.rs を作り直す。
-generate-bindings = ["dep:bindgen"]
+# 既存のビルド設定との互換性のため、空の feature として残す。
+generate-bindings = []
 
 
 [dependencies]
@@ -54,10 +34,14 @@ daachorse.workspace = true
 dirs.workspace = true
 fs4.workspace = true
 haqumei-jlabel.workspace = true
+haqumei-jpreprocess.workspace = true
+haqumei-jpreprocess-core.workspace = true
+haqumei-jpreprocess-njd.workspace = true
+haqumei-jpreprocess-jpcommon.workspace = true
+haqumei-jpreprocess-dictionary.workspace = true
 haqumei-kanalizer.workspace = true
 haqumei-macros.workspace = true
 hex.workspace = true
-libc.workspace = true
 log.workspace = true
 moka.workspace = true
 ndarray.workspace = true
@@ -76,11 +60,9 @@ zstd.workspace = true
 serde = { workspace = true, optional = true }
 
 [build-dependencies]
-bindgen = { workspace = true, optional = true }
-cc.workspace = true
+haqumei-jpreprocess-dictionary.workspace = true
 digest-io.workspace = true
 dirs.workspace = true
-glob.workspace = true
 hex.workspace = true
 sha2.workspace = true
 tar.workspace = true

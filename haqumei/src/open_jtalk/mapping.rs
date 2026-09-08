@@ -1,8 +1,6 @@
-use rustc_hash::FxHashMap;
 use std::ops::Range;
 
 use crate::errors::HaqumeiError;
-use crate::ffi;
 use crate::phoneme::Phoneme;
 use crate::prosody::{PitchAccent, ProsodicPhoneme};
 use crate::utils::has_odori_chars;
@@ -852,95 +850,69 @@ impl OpenJTalk {
         mapping: &mut Vec<T>,
         is_non_pause_symbol: fn(&str) -> bool,
     ) -> Result<(), HaqumeiError> {
-        unsafe {
-            let ptr_to_idx = self.prepare_jpcommon_label_internal(njd_features)?;
-            let jp = self.jp_common.inner.as_mut();
+        let njd = super::njd::features_to_njd(njd_features)?;
+        let phonemes = haqumei_jpreprocess_jpcommon::njdnodes_to_phonemes_with_sources(&njd.nodes);
 
-            for (f_idx, f) in njd_features.iter().enumerate() {
-                let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
-
-                if is_pause_pron && !is_non_pause_symbol(&f.string) {
-                    mapping[f_idx].phonemes_mut().push(Phoneme::Pau);
-                }
+        for (f_idx, f) in njd_features.iter().enumerate() {
+            let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
+            if is_pause_pron && !is_non_pause_symbol(&f.string) {
+                mapping[f_idx].phonemes_mut().push(Phoneme::Pau);
             }
-
-            let mut p = (*jp.label).phoneme_head;
-            while !p.is_null() {
-                let s_ptr = (*p).phoneme;
-                if !s_ptr.is_null() {
-                    let s = if cfg!(debug_assertions) {
-                        Phoneme::try_from_ptr(s_ptr).unwrap()
-                    } else {
-                        Phoneme::from(s_ptr)
-                    };
-
-                    if s != Phoneme::Pau {
-                        let mora = (*p).up;
-                        if !mora.is_null() {
-                            let word = (*mora).up;
-                            if !word.is_null()
-                                && let Some(&idx) = ptr_to_idx.get(&(word as usize))
-                                && let Some(target) = mapping.get_mut(idx)
-                            {
-                                target.phonemes_mut().push(s);
-                            }
-                        }
-                    }
-                }
-                p = (*p).next;
-            }
-
-            ffi::JPCommon_refresh(jp);
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-
-            // 長音によって、先行する Word のモーラとして吸収されるケースがあるため、
-            // 前方の Word に結合する。
-            //
-            // 例:
-            // "つまみ出されようとした"
-            // - つまみ出さ: [ts u m a m i d a s a]
-            // - れよ: [r e y o o]
-            // - う: []
-            // - と: [t o]
-            // - し: [sh I]
-            // - た: [t a]
-            //
-            // 音素が空になった "う" を先行する "れよ" に結合する。
-            // このとき、`njd_features` の "う" の pron は長音に置き換えられている。
-            let mut write_idx = 0;
-            for read_idx in 0..mapping.len() {
-                let mut should_merge = false;
-
-                if read_idx > 0 && mapping[read_idx].phonemes().is_empty() {
-                    let pron = &njd_features[read_idx].pron;
-                    let is_absorbed_long_vowel =
-                        !pron.is_empty() && pron.chars().all(|c| c == 'ー');
-
-                    if is_absorbed_long_vowel {
-                        let prev_phonemes = mapping[write_idx - 1].phonemes();
-                        let prev_is_pause = prev_phonemes.len() == 1 && prev_phonemes[0] == "pau";
-
-                        if !prev_is_pause && !prev_phonemes.is_empty() {
-                            should_merge = true;
-                        }
-                    }
-                }
-
-                if should_merge {
-                    let (left, right) = mapping.split_at_mut(read_idx);
-                    left[write_idx - 1].merge_from(&mut right[0]);
-                    continue;
-                }
-
-                if write_idx != read_idx {
-                    mapping.swap(write_idx, read_idx);
-                }
-                write_idx += 1;
-            }
-            mapping.truncate(write_idx);
-
-            Ok(())
         }
+        for feature in phonemes {
+            if let Some(index) = feature.source_index
+                && let Some(target) = mapping.get_mut(index)
+            {
+                target.phonemes_mut().push(feature.phoneme.parse()?);
+            }
+        }
+
+        // 長音によって、先行する Word のモーラとして吸収されるケースがあるため、
+        // 前方の Word に結合する。
+        //
+        // 例:
+        // "つまみ出されようとした"
+        // - つまみ出さ: [ts u m a m i d a s a]
+        // - れよ: [r e y o o]
+        // - う: []
+        // - と: [t o]
+        // - し: [sh I]
+        // - た: [t a]
+        //
+        // 音素が空になった "う" を先行する "れよ" に結合する。
+        // このとき、`njd_features` の "う" の pron は長音に置き換えられている。
+        let mut write_idx = 0;
+        for read_idx in 0..mapping.len() {
+            let mut should_merge = false;
+
+            if read_idx > 0 && mapping[read_idx].phonemes().is_empty() {
+                let pron = &njd_features[read_idx].pron;
+                let is_absorbed_long_vowel = !pron.is_empty() && pron.chars().all(|c| c == 'ー');
+
+                if is_absorbed_long_vowel {
+                    let prev_phonemes = mapping[write_idx - 1].phonemes();
+                    let prev_is_pause = prev_phonemes.len() == 1 && prev_phonemes[0] == "pau";
+
+                    if !prev_is_pause && !prev_phonemes.is_empty() {
+                        should_merge = true;
+                    }
+                }
+            }
+
+            if should_merge {
+                let (left, right) = mapping.split_at_mut(read_idx);
+                left[write_idx - 1].merge_from(&mut right[0]);
+                continue;
+            }
+
+            if write_idx != read_idx {
+                mapping.swap(write_idx, read_idx);
+            }
+            write_idx += 1;
+        }
+        mapping.truncate(write_idx);
+
+        Ok(())
     }
 
     pub(crate) fn assign_and_merge_prosodic_phonemes(
@@ -949,241 +921,213 @@ impl OpenJTalk {
         mapping: &mut Vec<WordPhonemeProsody>,
         is_non_pause_symbol: fn(&str) -> bool,
     ) -> Result<(), HaqumeiError> {
-        let labels = self.extract_fullcontext_labels(njd_features)?;
+        let njd = super::njd::features_to_njd(njd_features)?;
+        let (labels, source_indices): (Vec<_>, Vec<_>) =
+            haqumei_jpreprocess_jpcommon::njdnodes_to_features_with_sources(&njd.nodes)
+                .into_iter()
+                .map(|feature| (feature.label, feature.source_index))
+                .unzip();
 
-        unsafe {
-            let ptr_to_idx = self.prepare_jpcommon_label_internal(njd_features)?;
-            let jp = self.jp_common.inner.as_mut();
+        for (f_idx, f) in njd_features.iter().enumerate() {
+            let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
 
-            for (f_idx, f) in njd_features.iter().enumerate() {
-                let is_pause_pron = f.pron == "、" || f.pron == "？" || f.pron == "！";
-
-                if is_pause_pron && !is_non_pause_symbol(&f.string) {
-                    for c in f.string.chars() {
-                        let marker = match c {
-                            '？' | '?' => ProsodicPhoneme::Interrogative,
-                            '！' | '!' => ProsodicPhoneme::Exclamatory,
-                            _ => ProsodicPhoneme::Pause,
-                        };
-                        mapping[f_idx].phonemes.push(marker);
-                    }
+            if is_pause_pron && !is_non_pause_symbol(&f.string) {
+                for c in f.string.chars() {
+                    let marker = match c {
+                        '？' | '?' => ProsodicPhoneme::Interrogative,
+                        '！' | '!' => ProsodicPhoneme::Exclamatory,
+                        _ => ProsodicPhoneme::Pause,
+                    };
+                    mapping[f_idx].phonemes.push(marker);
                 }
             }
+        }
 
-            let check_already_has = |mapping: &[WordPhonemeProsody], target_idx: usize| -> bool {
-                let end_idx = (target_idx + 3).min(mapping.len());
-                mapping[target_idx..end_idx].iter().any(|m| {
-                    m.phonemes.iter().any(|p| {
-                        matches!(
-                            p,
-                            ProsodicPhoneme::Interrogative | ProsodicPhoneme::Exclamatory
-                        )
-                    })
+        let check_already_has = |mapping: &[WordPhonemeProsody], target_idx: usize| -> bool {
+            let end_idx = (target_idx + 3).min(mapping.len());
+            mapping[target_idx..end_idx].iter().any(|m| {
+                m.phonemes.iter().any(|p| {
+                    matches!(
+                        p,
+                        ProsodicPhoneme::Interrogative | ProsodicPhoneme::Exclamatory
+                    )
                 })
-            };
+            })
+        };
 
-            let mut last_target_idx: Option<usize> = None;
-            let num_labels = labels.len();
+        let mut last_target_idx: Option<usize> = None;
+        let num_labels = labels.len();
 
-            let mut p = (*jp.label).phoneme_head;
-            let mut label_idx = 0;
+        let mut label_idx = 0;
 
-            while label_idx < num_labels {
-                let label = &labels[label_idx];
-                let p3 = label.phoneme.c.as_deref().unwrap_or("");
+        while label_idx < num_labels {
+            let label = &labels[label_idx];
+            let p3 = label.phoneme.c.as_deref().unwrap_or("");
 
-                if p3 == "sil" {
-                    if label_idx == num_labels - 1 {
-                        let (is_inter, is_excl) = label
-                            .accent_phrase_prev
-                            .as_ref()
-                            .map(|a| (a.is_interrogative, a.is_exclamatory))
-                            .unwrap_or((false, false));
-
-                        if (is_inter || is_excl)
-                            && let Some(target_idx) = last_target_idx
-                            && !check_already_has(mapping, target_idx)
-                        {
-                            if is_excl {
-                                mapping[target_idx]
-                                    .phonemes
-                                    .push(ProsodicPhoneme::Exclamatory);
-                            }
-                            if is_inter {
-                                mapping[target_idx]
-                                    .phonemes
-                                    .push(ProsodicPhoneme::Interrogative);
-                            }
-                        }
-                    }
-                    label_idx += 1;
-                    continue;
-                }
-
-                if p.is_null() {
-                    label_idx += 1;
-                    continue;
-                }
-
-                // Word インデックスを特定
-                let mut current_target_idx = None;
-                let mora = (*p).up;
-                if !mora.is_null() {
-                    let word = (*mora).up;
-                    if !word.is_null()
-                        && let Some(&idx) = ptr_to_idx.get(&(word as usize))
-                    {
-                        current_target_idx = Some(idx);
-                    }
-                }
-
-                if current_target_idx.is_some() {
-                    last_target_idx = current_target_idx;
-                }
-
-                let target_idx = match current_target_idx.or(last_target_idx) {
-                    Some(idx) => idx,
-                    None => {
-                        p = (*p).next;
-                        label_idx += 1;
-                        continue;
-                    }
-                };
-                let check_already_has = check_already_has(mapping, target_idx);
-                let target = mapping.get_mut(target_idx).unwrap();
-
-                let s_ptr = (*p).phoneme;
-                let s = if cfg!(debug_assertions) {
-                    Phoneme::try_from_ptr(s_ptr).unwrap()
-                } else {
-                    Phoneme::from(s_ptr)
-                };
-
-                if s == Phoneme::Pau {
+            if p3 == "sil" {
+                if label_idx == num_labels - 1 {
                     let (is_inter, is_excl) = label
                         .accent_phrase_prev
                         .as_ref()
                         .map(|a| (a.is_interrogative, a.is_exclamatory))
                         .unwrap_or((false, false));
 
-                    if (is_inter || is_excl) && !check_already_has {
+                    if (is_inter || is_excl)
+                        && let Some(target_idx) = last_target_idx
+                        && !check_already_has(mapping, target_idx)
+                    {
                         if is_excl {
-                            target.phonemes.push(ProsodicPhoneme::Exclamatory);
+                            mapping[target_idx]
+                                .phonemes
+                                .push(ProsodicPhoneme::Exclamatory);
                         }
                         if is_inter {
-                            target.phonemes.push(ProsodicPhoneme::Interrogative);
+                            mapping[target_idx]
+                                .phonemes
+                                .push(ProsodicPhoneme::Interrogative);
                         }
                     }
+                }
+                label_idx += 1;
+                continue;
+            }
 
-                    p = (*p).next;
+            let current_target_idx = source_indices[label_idx];
+
+            if current_target_idx.is_some() {
+                last_target_idx = current_target_idx;
+            }
+
+            let target_idx = match current_target_idx.or(last_target_idx) {
+                Some(idx) => idx,
+                None => {
                     label_idx += 1;
                     continue;
                 }
+            };
+            let check_already_has = check_already_has(mapping, target_idx);
+            let target = mapping.get_mut(target_idx).unwrap();
 
-                // アクセント核の位置
-                let f2 = label
-                    .accent_phrase_curr
+            let s: Phoneme = p3.parse()?;
+
+            if s == Phoneme::Pau {
+                let (is_inter, is_excl) = label
+                    .accent_phrase_prev
                     .as_ref()
-                    .map(|a| a.accent_position as i32)
-                    .unwrap_or(0);
+                    .map(|a| (a.is_interrogative, a.is_exclamatory))
+                    .unwrap_or((false, false));
 
-                // 現在のモーラ位置
-                let a2 = label
-                    .mora
-                    .as_ref()
-                    .map(|m| m.position_forward as i32)
-                    .unwrap_or(0);
-
-                let is_high = if f2 == 0 {
-                    a2 >= 2 // 平板型
-                } else if f2 == 1 {
-                    a2 == 1 // 頭高型
-                } else {
-                    a2 >= 2 && a2 <= f2 // 中高・尾高型
-                };
-
-                let pitch = if is_high {
-                    PitchAccent::High
-                } else {
-                    PitchAccent::Low
-                };
-
-                target.phonemes.push(ProsodicPhoneme::Phoneme {
-                    phoneme: s,
-                    pitch: Some(pitch),
-                });
-
-                // アクセント句境界の計算
-                let a3 = label
-                    .mora
-                    .as_ref()
-                    .map(|m| m.position_backward as i32)
-                    .unwrap_or(-50);
-                let a2_next = if label_idx + 1 < num_labels {
-                    labels[label_idx + 1]
-                        .mora
-                        .as_ref()
-                        .map(|m| m.position_forward as i32)
-                        .unwrap_or(-50)
-                } else {
-                    -50
-                };
-
-                if a3 == 1
-                    && a2_next == 1
-                    && matches!(
-                        p3,
-                        "a" | "e" | "i" | "o" | "u" | "A" | "E" | "I" | "O" | "U" | "N" | "cl"
-                    )
-                {
-                    target.phonemes.push(ProsodicPhoneme::AccentPhraseBoundary);
-                }
-
-                p = (*p).next;
-                label_idx += 1;
-            }
-
-            ffi::JPCommon_refresh(jp);
-            ffi::NJD_refresh(self.njd.inner.as_mut());
-
-            // 長音によって、先行する Word のモーラとして吸収されるケースがあるため、
-            // 前方の Word に結合する。
-            let mut write_idx = 0;
-            for read_idx in 0..mapping.len() {
-                let mut should_merge = false;
-
-                if read_idx > 0 && mapping[read_idx].phonemes.is_empty() {
-                    let pron = &njd_features[read_idx].pron;
-                    let is_absorbed_long_vowel =
-                        !pron.is_empty() && pron.chars().all(|c| c == 'ー');
-
-                    if is_absorbed_long_vowel {
-                        let prev_phonemes = &mapping[write_idx - 1].phonemes;
-                        let prev_is_pause =
-                            prev_phonemes.len() == 1 && prev_phonemes[0] == ProsodicPhoneme::pau();
-
-                        if !prev_is_pause && !prev_phonemes.is_empty() {
-                            should_merge = true;
-                        }
+                if (is_inter || is_excl) && !check_already_has {
+                    if is_excl {
+                        target.phonemes.push(ProsodicPhoneme::Exclamatory);
+                    }
+                    if is_inter {
+                        target.phonemes.push(ProsodicPhoneme::Interrogative);
                     }
                 }
 
-                if should_merge {
-                    let (left, right) = mapping.split_at_mut(read_idx);
-                    left[write_idx - 1].merge_from(&mut right[0]);
-
-                    continue;
-                }
-
-                if write_idx != read_idx {
-                    mapping.swap(write_idx, read_idx);
-                }
-                write_idx += 1;
+                label_idx += 1;
+                continue;
             }
-            mapping.truncate(write_idx);
 
-            Ok(())
+            // アクセント核の位置
+            let f2 = label
+                .accent_phrase_curr
+                .as_ref()
+                .map(|a| a.accent_position as i32)
+                .unwrap_or(0);
+
+            // 現在のモーラ位置
+            let a2 = label
+                .mora
+                .as_ref()
+                .map(|m| m.position_forward as i32)
+                .unwrap_or(0);
+
+            let is_high = if f2 == 0 {
+                a2 >= 2 // 平板型
+            } else if f2 == 1 {
+                a2 == 1 // 頭高型
+            } else {
+                a2 >= 2 && a2 <= f2 // 中高・尾高型
+            };
+
+            let pitch = if is_high {
+                PitchAccent::High
+            } else {
+                PitchAccent::Low
+            };
+
+            target.phonemes.push(ProsodicPhoneme::Phoneme {
+                phoneme: s,
+                pitch: Some(pitch),
+            });
+
+            // アクセント句境界の計算
+            let a3 = label
+                .mora
+                .as_ref()
+                .map(|m| m.position_backward as i32)
+                .unwrap_or(-50);
+            let a2_next = if label_idx + 1 < num_labels {
+                labels[label_idx + 1]
+                    .mora
+                    .as_ref()
+                    .map(|m| m.position_forward as i32)
+                    .unwrap_or(-50)
+            } else {
+                -50
+            };
+
+            if a3 == 1
+                && a2_next == 1
+                && matches!(
+                    p3,
+                    "a" | "e" | "i" | "o" | "u" | "A" | "E" | "I" | "O" | "U" | "N" | "cl"
+                )
+            {
+                target.phonemes.push(ProsodicPhoneme::AccentPhraseBoundary);
+            }
+
+            label_idx += 1;
         }
+
+        // 長音によって、先行する Word のモーラとして吸収されるケースがあるため、
+        // 前方の Word に結合する。
+        let mut write_idx = 0;
+        for read_idx in 0..mapping.len() {
+            let mut should_merge = false;
+
+            if read_idx > 0 && mapping[read_idx].phonemes.is_empty() {
+                let pron = &njd_features[read_idx].pron;
+                let is_absorbed_long_vowel = !pron.is_empty() && pron.chars().all(|c| c == 'ー');
+
+                if is_absorbed_long_vowel {
+                    let prev_phonemes = &mapping[write_idx - 1].phonemes;
+                    let prev_is_pause =
+                        prev_phonemes.len() == 1 && prev_phonemes[0] == ProsodicPhoneme::pau();
+
+                    if !prev_is_pause && !prev_phonemes.is_empty() {
+                        should_merge = true;
+                    }
+                }
+            }
+
+            if should_merge {
+                let (left, right) = mapping.split_at_mut(read_idx);
+                left[write_idx - 1].merge_from(&mut right[0]);
+
+                continue;
+            }
+
+            if write_idx != read_idx {
+                mapping.swap(write_idx, read_idx);
+            }
+            write_idx += 1;
+        }
+        mapping.truncate(write_idx);
+
+        Ok(())
     }
 
     #[inline(always)]
@@ -1300,68 +1244,5 @@ impl OpenJTalk {
         }
 
         Ok(result)
-    }
-
-    /// 呼び出し後は必ず JPCommon_refresh / NJD_refresh を行わなければならない。
-    /// NJDFeature を元に JPCommon の内部構造体 (Word/Mora/Phoneme階層) を構築する。
-    /// 戻り値として、JPCommonLabelWord のポインタから、対応する NJDFeature のインデックスへのマッピングを返す。
-    unsafe fn prepare_jpcommon_label_internal(
-        &mut self,
-        features: &[NjdFeature],
-    ) -> Result<FxHashMap<usize, usize>, HaqumeiError> {
-        Self::features_to_njd(features, &mut self.njd)?;
-        let mut ptr_to_idx =
-            FxHashMap::with_capacity_and_hasher(features.len(), rustc_hash::FxBuildHasher);
-
-        unsafe {
-            let jp = self.jp_common.inner.as_mut();
-            let njd = self.njd.inner.as_mut();
-
-            ffi::njd2jpcommon(jp, njd);
-
-            // JPCommon_make_label(JPCommon * jpcommon) の部分的な移植
-            if !jp.label.is_null() {
-                ffi::JPCommonLabel_clear(jp.label);
-            } else {
-                let ptr = libc::calloc(1, std::mem::size_of::<ffi::JPCommonLabel>());
-                if ptr.is_null() {
-                    return Err(HaqumeiError::AllocationError("ffi::JPCommonLabel"));
-                }
-                jp.label = ptr as *mut ffi::JPCommonLabel;
-            }
-
-            ffi::JPCommonLabel_initialize(jp.label);
-
-            let mut node = jp.head;
-            let mut f_idx = 0;
-
-            while !node.is_null() {
-                let prev_word_tail = (*jp.label).word_tail;
-
-                super::jpcommon_push_word::JPCommonLabel_push_word(
-                    jp.label,
-                    ffi::JPCommonNode_get_pron(node),
-                    ffi::JPCommonNode_get_pos(node),
-                    ffi::JPCommonNode_get_ctype(node),
-                    ffi::JPCommonNode_get_cform(node),
-                    ffi::JPCommonNode_get_acc(node),
-                    ffi::JPCommonNode_get_chain_flag(node),
-                )?;
-
-                // 追加後の末尾のWordポインタ
-                let curr_word_tail = (*jp.label).word_tail;
-
-                // JPCommonLabel_push_word によって新しい Word が生成された場合のみマッピングを記録する。
-                // (「ー」などで直前のWordに吸収された場合や、pau で Word が生成されなかった場合はスキップされる)
-                if prev_word_tail != curr_word_tail && !curr_word_tail.is_null() {
-                    ptr_to_idx.insert(curr_word_tail as usize, f_idx);
-                }
-
-                node = (*node).next;
-                f_idx += 1;
-            }
-        }
-
-        Ok(ptr_to_idx)
     }
 }

@@ -1,16 +1,16 @@
-use std::error::Error;
-use std::ffi::OsString;
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::LazyLock;
-use std::{env, fs};
-
 #[cfg(feature = "download-dictionary")]
-use std::io::{self, Seek, SeekFrom};
-
 use digest_io::IoWrapper;
 use sha2::{Digest, Sha256};
+#[cfg(feature = "download-dictionary")]
+use std::io::{self, Seek, SeekFrom};
+#[cfg(feature = "download-dictionary")]
+use std::sync::LazyLock;
+use std::{
+    env,
+    error::Error,
+    fs::{self, File},
+    path::{Path, PathBuf},
+};
 
 #[cfg(feature = "download-dictionary")]
 const DICTIONARY_URL: &str = "https://github.com/o24s/haqumei/releases/download/dictionary-20260829/dictionary-20260829.tar.zst";
@@ -21,6 +21,7 @@ const COMPRESSED_DICTIONARY_HASH: &str =
 const DICTIONARY_HASH: &str = "e02c49364287546b26a3650148323fcea8a80aaa6ca4bb35c41caa60f460ca07";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 
+#[cfg(feature = "download-dictionary")]
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let cache_dir = dirs::cache_dir().unwrap().join("haqumei");
     fs::create_dir_all(&cache_dir).unwrap();
@@ -28,79 +29,28 @@ static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let is_docs_rs = env::var_os("DOCS_RS").is_some();
-    #[allow(unused)]
-    let is_ci = env::var_os("CI").is_some();
-
-    let out_dir = env::var("OUT_DIR")?;
-    let out_dir = Path::new(&out_dir);
-
+    println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_SRC");
+    println!("cargo:rerun-if-env-changed=DOCS_RS");
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("OUT_DIR is missing")?);
+    if env::var_os("DOCS_RS").is_some() {
+        println!(
+            "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
+            Path::new(&env::var("CARGO_MANIFEST_DIR")?)
+                .join("build.rs")
+                .display()
+        );
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH=docs");
+        return Ok(());
+    }
     let has_download = env::var_os("CARGO_FEATURE_DOWNLOAD_DICTIONARY").is_some();
     let has_build = env::var_os("CARGO_FEATURE_BUILD_DICTIONARY").is_some();
-
-    if (has_download && has_build) && !is_docs_rs {
-        panic!(
-            "The features \"download-dictionary\" and \"build-dictionary\" cannot be enabled simultaneously."
-        );
+    if has_download == has_build {
+        return Err("Enable exactly one of download-dictionary and build-dictionary".into());
     }
-
-    if !(has_download || has_build || is_docs_rs) {
-        panic!(
-            "You must enable either \"download-dictionary\" or \"build-dictionary\" to prepare the dictionary."
-        );
-    }
-
-    let src_dir_str = "vendor/open_jtalk/src";
-    let src_dir = Path::new(src_dir_str);
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
-    let manifest_dir = Path::new(&manifest_dir);
-    #[cfg(feature = "generate-bindings")]
-    let target = std::env::var("TARGET").unwrap();
-
-    let watch_files = [
-        "redirect.c",
-        "redirect.h",
-        "redirect_cpp.cpp",
-        "wrapper.h",
-        src_dir_str,
-    ];
-
-    for path in &watch_files {
-        println!("cargo:rerun-if-changed={}", path);
-    }
-
-    // libclang が要るのは bindgen を回すときだけである
-    #[cfg(feature = "generate-bindings")]
-    if target.contains("msvc") && std::env::var("LIBCLANG_PATH").is_err() {
-        let error_msg = r#"
-==============================================================================
-ERROR: libclang.dll not found / libclang.dll が見つかりません。
-
-[EN] LLVM is required to build haqumei on Windows.
-- Install LLVM
-   > winget install LLVM.LLVM
-- Set `LIBCLANG_PATH` as an environment variable (e.g., C:\Program Files\LLVM\bin\libclang.dll)
-- Restart your terminal
-
-[JA] Windows で haqumei をビルドするには LLVM が必要です。
-
-- LLVMをインストールしてください:
-   > winget install LLVM.LLVM
-- `LIBCLANG_PATH` を環境変数に設定してください。 (e.g., C:\Program Files\LLVM\bin\libclang.dll)
-- インストール後、ターミナルを再起動してください。
-
-Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
-=============================================================================="#
-            .trim();
-
-        for line in error_msg.lines() {
-            println!("cargo:warning={}", line);
-        }
-        panic!("LIBCLANG_PATH is not set.");
-    }
-
     #[cfg(feature = "download-dictionary")]
-    if has_download && !is_docs_rs {
+    let is_ci = env::var_os("CI").is_some();
+    #[cfg(feature = "download-dictionary")]
+    if has_download {
         let cached_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
         let compressed_dict_path = out_dir.join(DICTIONARY_NAME);
         let mut need_download = true;
@@ -155,543 +105,54 @@ Ref: https://rust-lang.github.io/rust-bindgen/requirements.html
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
     }
 
-    let mut defines = vec![
-        // CMake: add_definitions(...), set(...)
-        ("DIC_VERSION", Some("102")),
-        ("MECAB_DEFAULT_RC", Some("\"dummy\"")),
-        ("MECAB_WITHOUT_SHARE_DIC", None),
-        ("PACKAGE", Some("\"open_jtalk\"")),
-        ("PACKAGE_VERSION", Some("\"1.11\"")),
-        ("VERSION", Some("\"1.11\"")),
-        ("PACKAGE_STRING", Some("\"open_jtalk 1.11\"")),
-        (
-            "PACKAGE_BUGREPORT",
-            Some("\"https://github.com/o24s/haqumei\""),
-        ),
-        ("PACKAGE_NAME", Some("\"open_jtalk\"")),
-        ("CHARSET_UTF_8", None),
-        ("MECAB_CHARSET", Some("\"utf-8\"")),
-        ("MECAB_UTF8_USE_ONLY", None),
-        ("HAVE_CTYPE_H", Some("1")),
-        ("HAVE_FCNTL_H", Some("1")),
-        ("HAVE_INTTYPES_H", Some("1")),
-        ("HAVE_MEMORY_H", Some("1")),
-        ("HAVE_SETJMP_H", Some("1")),
-        ("HAVE_STDINT_H", Some("1")),
-        ("HAVE_STDLIB_H", Some("1")),
-        ("HAVE_STRING_H", Some("1")),
-        ("HAVE_SYS_STAT_H", Some("1")),
-        ("HAVE_SYS_TYPES_H", Some("1")),
-        ("HAVE_GETENV", Some("1")),
-        ("HAVE_STRSTR", Some("1")),
-        ("SIZEOF_CHAR", Some("1")),
-        ("SIZEOF_SHORT", Some("2")),
-        ("SIZEOF_INT", Some("4")),
-        ("SIZEOF_LONG_LONG", Some("8")),
-    ];
-
-    if cfg!(unix) {
-        defines.extend([
-            ("HAVE_DIRENT_H", Some("1")),
-            ("HAVE_STRINGS_H", Some("1")),
-            ("HAVE_SYS_MMAN_H", Some("1")),
-            ("HAVE_SYS_TIMES_H", Some("1")),
-            ("HAVE_UNISTD_H", Some("1")),
-            ("HAVE_GETPAGESIZE", Some("1")),
-            ("HAVE_MMAP", Some("1")),
-            ("HAVE_OPENDIR", Some("1")),
-            ("HAVE_SETJMP", Some("1")),
-            ("HAVE_LIBM", Some("1")),
-        ]);
-    }
-    if cfg!(windows) {
-        defines.extend(vec![
-            ("HAVE_WINDOWS_H", Some("1")),
-            ("HAVE_IO_H", Some("1")),
-        ]);
-    }
-
-    if cfg!(target_os = "windows") {
-        defines.push(("SIZEOF_LONG", Some("4")));
-    } else {
-        defines.push(("SIZEOF_LONG", Some("8")));
-    }
-
-    match env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap().as_str() {
-        "64" => defines.push(("SIZEOF_SIZE_T", Some("8"))),
-        "32" => defines.push(("SIZEOF_SIZE_T", Some("4"))),
-        w => panic!("Unsupported target pointer width: {}", w),
-    };
-
-    if cfg!(target_endian = "big") {
-        defines.push(("WORDS_BIGENDIAN", Some("1")));
-    }
-
-    let redirect_header_path = manifest_dir.join("redirect.h");
-    let redirect_flag = redirect_header_path.as_os_str();
-
-    cc::Build::new().file("redirect.c").compile("redirect_impl");
-    cc::Build::new()
-        .cpp(true)
-        .file("redirect_cpp.cpp")
-        .compile("redirect_cpp_impl");
-
-    let mut build = cc::Build::new();
-    build.cpp(true);
-
-    let include_dirs = [
-        "jpcommon",
-        "mecab/src",
-        "mecab2njd",
-        "njd",
-        "njd2jpcommon",
-        "njd_set_accent_phrase",
-        "njd_set_accent_type",
-        "njd_set_digit",
-        "njd_set_long_vowel",
-        "njd_set_pronunciation",
-        "njd_set_unvoiced_vowel",
-        "text2mecab",
-    ];
-    for dir in &include_dirs {
-        build.include(src_dir.join(dir));
-    }
-
-    for dir in &include_dirs {
-        for ext in ["c", "cpp"] {
-            let pattern = src_dir.join(dir).join(format!("*.{}", ext));
-            for entry in glob::glob(pattern.to_str().unwrap()).expect("Failed to read glob pattern")
-            {
-                build.file(entry.unwrap());
-            }
+    if has_build && env::var_os("CARGO_FEATURE_EMBED_DICTIONARY").is_some() {
+        let source = env::var_os("HAQUMEI_DICT_SRC")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("dictionary"));
+        println!("cargo:rerun-if-changed={}", source.display());
+        let compiled = out_dir.join("dictionary_out");
+        let archive_path = out_dir.join(DICTIONARY_NAME);
+        if compiled.exists() {
+            fs::remove_dir_all(&compiled)?;
         }
-    }
-
-    for (key, value) in &defines {
-        build.define(key, value.map(|v| v));
-    }
-
-    // compiler flags
-    if build.get_compiler().is_like_msvc() {
-        build.flag("/FI");
-        build.flag(redirect_flag);
-
-        build.define("_CRT_SECURE_NO_WARNINGS", None);
-        build.define("_CRT_NONSTDC_NO_WARNINGS", None);
-        build.flag("/source-charset:utf-8");
-        build.flag("/execution-charset:utf-8");
-
-        build.flag("/wd4100");
-        build.flag("/wd4065");
-    } else {
-        build.flag("-include");
-        build.flag(redirect_flag);
-        // build.flag("-fsanitize=address");
-
-        build.flag("-fPIC");
-        build.flag("-finput-charset=UTF-8");
-        build.flag("-fexec-charset=UTF-8");
-        build.flag("-Wno-narrowing");
-
-        build.flag("-Wno-unused-parameter");
-        build.flag("-Wno-write-strings");
-        build.flag("-Wno-type-limits");
-        build.flag("-Wno-class-memaccess");
-        build.flag("-Wno-missing-field-initializers");
-        build.flag("-Wno-implicit-fallthrough");
-        build.flag("-Wno-restrict");
-        build.flag("-Wno-sign-compare");
-        build.flag("-Wno-unused-function");
-        build.flag("-Wno-unused-variable");
-        build.flag("-Wno-ignored-qualifiers");
-        build.flag("-Wno-stringop-truncation");
-    }
-
-    if cfg!(unix) {
-        println!("cargo:rustc-link-lib=m");
-    }
-
-    build.compile("openjtalk");
-
-    let dict_indexer_path = build_dict_indexer(src_dir, out_dir, &defines, &include_dirs)?;
-
-    generate_bindings(src_dir, src_dir_str, &include_dirs, &defines)?;
-
-    if is_docs_rs {
+        fs::create_dir_all(&compiled)?;
+        haqumei_jpreprocess_dictionary::mecab_compile::build_system(
+            &source,
+            &compiled,
+            &Default::default(),
+        )?;
+        let encoder = zstd::Encoder::new(File::create(&archive_path)?, 19)?;
+        let mut tar = tar::Builder::new(encoder);
+        tar.append_dir_all(".", &compiled)?;
+        tar.into_inner()?.finish()?;
+        let hash = hash_files(&compiled, &["dic", "bin"])?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-            manifest_dir.join("build.rs").display()
+            archive_path.display()
         );
-        println!("cargo:rustc-env=HAQUMEI_DICT_HASH=ci_dummy");
-        return Ok(());
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={hash}");
     }
-
-    if env::var("CARGO_FEATURE_EMBED_DICTIONARY").is_err() {
-        println!("'embed-dictionary' feature is not enabled. Skipping dictionary compilation.");
-        return Ok(());
-    }
-
-    if !has_build {
-        return Ok(());
-    }
-
-    let dict_src_raw = env::var_os("HAQUMEI_DICT_SRC")
-        .map(PathBuf::from)
-        .unwrap_or(PathBuf::from("dictionary"));
-
-    let dict_src_dir = if dict_src_raw.is_relative() {
-        manifest_dir.join(dict_src_raw)
-    } else {
-        dict_src_raw
-    };
-
-    let cached_dict_path = CACHE_DIR.join(DICTIONARY_NAME);
-    let compressed_dict_path = out_dir.join(DICTIONARY_NAME);
-    let dict_out_dir = out_dir.join("dictionary_out");
-    let compressed_dict_hash_path = CACHE_DIR.join("dictionary.tar.zst.sha256");
-    let dict_hash_path = CACHE_DIR.join("dictionary.sha256");
-    let compiled_dict_hash_path = CACHE_DIR.join("compiled_dictionary.sha256");
-
-    if !dict_src_dir.exists() {
-        println!(
-            "cargo:warning=dictionary({dict_src_dir:?}) not found, skipping dictionary compilation."
-        );
-        return Ok(());
-    }
-
-    println!("cargo:rerun-if-changed={}", dict_src_dir.display());
-
-    if dict_hash_path.exists()
-        && compiled_dict_hash_path.exists()
-        && dict_src_dir.exists()
-        && cached_dict_path.exists()
-        && compressed_dict_hash_path.exists()
-        && let Ok(compressed_dict_hash) = calculate_compressed_dict_hash(&cached_dict_path)
-        && let Ok(dict_hash) = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])
-        && let Ok(saved_dict_hash) = fs::read_to_string(&dict_hash_path)
-        && let Ok(saved_compiled_dict_hash) = fs::read_to_string(&compiled_dict_hash_path)
-        && let Ok(saved_compressed_dict_hash) = fs::read_to_string(&compressed_dict_hash_path)
-        && saved_dict_hash == dict_hash
-        && saved_compressed_dict_hash == compressed_dict_hash
-    {
-        fs::copy(&cached_dict_path, &compressed_dict_path)?;
-        println!(
-            "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-            compressed_dict_path.display()
-        );
-        // 実行時の検証 (Dictionary::from_embedded) は展開後の .dic / .bin を照合する。
-        println!(
-            "cargo:rustc-env=HAQUMEI_DICT_HASH={}",
-            saved_compiled_dict_hash
-        );
-        return Ok(());
-    }
-
-    fs::create_dir_all(&dict_out_dir)?;
-
-    run_dict_indexer(&dict_indexer_path, &dict_src_dir, &dict_out_dir)?;
-
-    let tar_file = File::create(&cached_dict_path)?;
-
-    {
-        let zstd_writer = zstd::Encoder::new(tar_file, 22)?.auto_finish();
-        let mut tar_builder = tar::Builder::new(zstd_writer);
-
-        tar_builder.append_dir_all(".", &dict_out_dir)?;
-        tar_builder.finish()?;
-    }
-
-    fs::copy(&cached_dict_path, &compressed_dict_path)?;
-
-    let dict_hash = calculate_hash_for_extensions(&dict_src_dir, &["def", "csv"])?;
-    let compressed_dict_hash = calculate_compressed_dict_hash(&compressed_dict_path)?;
-    let compiled_dict_hash = calculate_hash_for_extensions(&dict_out_dir, &["dic", "bin"])?;
-    fs::write(&dict_hash_path, dict_hash)?;
-    fs::write(&compiled_dict_hash_path, &compiled_dict_hash)?;
-    fs::write(&compressed_dict_hash_path, &compressed_dict_hash)?;
-    if dict_out_dir.exists() {
-        fs::remove_dir_all(dict_out_dir)?;
-    }
-
-    println!(
-        "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
-        compressed_dict_path.display()
-    );
-    println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", compiled_dict_hash);
-
-    // println!("cargo:warning=Dictionary compressed to {}", compressed_dict_path.display());
     Ok(())
 }
 
-fn build_dict_indexer(
-    src_dir: &Path,
-    out_dir: &Path,
-    defines: &[(&str, Option<&str>)],
-    include_dirs: &[&str],
-) -> Result<PathBuf, Box<dyn Error>> {
-    let main_wrapper_src = r#"
-#include "mecab.h"
-#include <stdio.h>
-
-// Since mecab-dict-index is a self-contained executable not linked with Rust,
-// we provide this dummy implementation of the rust_print() function that redirect.c attempts to call.
-extern "C" void haqumei_rust_print(const char* msg, int is_stderr) {
-    if (is_stderr) {
-        fprintf(stderr, "%s", msg);
-    } else {
-        fprintf(stdout, "%s", msg);
-    }
-}
-
-int main(int argc, char **argv) {
-  return mecab_dict_index(argc, argv);
-}
-"#;
-    let main_wrapper_path = out_dir.join("main_wrapper.cpp");
-    fs::write(&main_wrapper_path, main_wrapper_src)?;
-
-    let mut build = cc::Build::new();
-    build.cpp(true);
-    // build.flag("-fsanitize=address");
-    let compiler = build.get_compiler();
-    let mut command = compiler.to_command();
-
-    let exe_name = if cfg!(target_os = "windows") {
-        "mecab-dict-index.exe"
-    } else {
-        "mecab-dict-index"
-    };
-    let exe_path = out_dir.join(exe_name);
-
-    command.arg(&main_wrapper_path);
-
-    if compiler.is_like_msvc() {
-        let mut arg = OsString::from("/Fe");
-        arg.push(exe_path.as_os_str());
-        command.arg(arg);
-    } else {
-        command.arg("-o").arg(&exe_path);
-    }
-
-    for dir in include_dirs {
-        command.arg(format!("-I{}", src_dir.join(dir).display()));
-    }
-
-    for (key, value) in defines {
-        let arg = if let Some(val) = value {
-            format!("-D{}={}", key, val)
-        } else {
-            format!("-D{}", key)
-        };
-        command.arg(arg);
-    }
-
-    if compiler.is_like_msvc() {
-        command.arg("/link");
-
-        let mut arg = OsString::from("/LIBPATH:");
-        arg.push(out_dir);
-        command.arg(arg);
-
-        command.arg("openjtalk.lib");
-        command.arg("redirect_impl.lib");
-        command.arg("redirect_cpp_impl.lib");
-    } else {
-        let mut arg = OsString::from("-L");
-        arg.push(out_dir);
-        command.arg(arg);
-
-        command.arg("-lopenjtalk");
-        command.arg("-lredirect_impl");
-        command.arg("-lredirect_cpp_impl");
-        if cfg!(unix) {
-            command.arg("-lm");
-        }
-    }
-
-    let output = command.output()?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Failed to build mecab-dict-index executable.\nStatus: {}\nStdout: {}\nStderr: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-
-    Ok(exe_path)
-}
-
-fn run_dict_indexer(
-    indexer_path: &Path,
-    dict_dir: &Path,
-    out_dir: &Path,
-) -> Result<(), Box<dyn Error>> {
-    let dict_dir_str = dict_dir
-        .to_str()
-        .ok_or("Dictionary path contains invalid UTF-8")?;
-    let out_dir_str = out_dir
-        .to_str()
-        .ok_or("Dictionary path contains invalid UTF-8")?;
-
-    let output = Command::new(indexer_path)
-        .arg("-d")
-        .arg(dict_dir_str)
-        .arg("-o")
-        .arg(out_dir_str)
-        .arg("-f")
-        .arg("utf-8")
-        .arg("-t")
-        .arg("utf-8")
-        .output()?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "mecab-dict-index execution failed.\nstatus: {}\nstdout: {}\nstderr: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-
-    Ok(())
-}
-
-fn calculate_compressed_dict_hash(path: &Path) -> Result<String, Box<dyn Error>> {
-    let mut hasher = IoWrapper(Sha256::new());
-
-    let mut file = File::open(path)?;
-    std::io::copy(&mut file, &mut hasher)?;
-
-    Ok(hex::encode(hasher.0.finalize()))
-}
-
-fn calculate_hash_for_extensions(
-    dir: &Path,
-    extensions: &[&str],
-) -> Result<String, Box<dyn Error>> {
-    let mut hasher = IoWrapper(Sha256::new());
+fn hash_files(dir: &Path, extensions: &[&str]) -> Result<String, Box<dyn Error>> {
     let mut paths = Vec::new();
-
     for entry in walkdir::WalkDir::new(dir) {
         let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file()
-            && let Some(ext_str) = path.extension().and_then(|s| s.to_str())
-            && extensions.contains(&ext_str)
+        if entry.file_type().is_file()
+            && entry
+                .path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|ext| extensions.contains(&ext))
         {
-            paths.push(path.to_path_buf());
+            paths.push(entry.into_path());
         }
     }
-
     paths.sort();
-
+    let mut hash = Sha256::new();
     for path in paths {
-        let mut file = File::open(&path)?;
-        std::io::copy(&mut file, &mut hasher)?;
+        hash.update(fs::read(path)?);
     }
-
-    Ok(hex::encode(hasher.0.finalize()))
-}
-
-/// `src/generated/bindings.rs` を作り直す。
-///
-/// `vendor/open_jtalk` のヘッダを変えたときに再生成する。
-///
-/// ```text
-/// cargo build -p haqumei --features generate-bindings
-/// ```
-#[cfg(not(feature = "generate-bindings"))]
-fn generate_bindings(
-    _src_dir: &Path,
-    _src_dir_str: &str,
-    _include_dirs: &[&str],
-    _defines: &[(&str, Option<&str>)],
-) -> Result<(), Box<dyn Error>> {
-    Ok(())
-}
-
-#[cfg(feature = "generate-bindings")]
-fn generate_bindings(
-    src_dir: &Path,
-    src_dir_str: &str,
-    include_dirs: &[&str],
-    defines: &[(&str, Option<&str>)],
-) -> Result<(), Box<dyn Error>> {
-    let mut bindgen_builder = bindgen::Builder::default()
-        .header("wrapper.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .blocklist_item("FP_NAN")
-        .blocklist_item("FP_INFINITE")
-        .blocklist_item("FP_ZERO")
-        .blocklist_item("FP_SUBNORMAL")
-        .blocklist_item("FP_NORMAL")
-        .allowlist_function("mecab_.*")
-        .allowlist_function("Mecab_.*")
-        .allowlist_function("JPCommon.*")
-        .allowlist_function("NJD.*")
-        .allowlist_function("njd2jpcommon")
-        .allowlist_function("njd_set_.*")
-        .allowlist_function("mecab2njd")
-        .allowlist_function("text2mecab")
-        .allowlist_type("mecab_.*")
-        .allowlist_type("Mecab.*")
-        .allowlist_type("JPCommon.*")
-        .allowlist_type("NJD.*")
-        .allowlist_var("text2mecab_.*")
-        .allowlist_var("MECAB_.*")
-        // 生成物を 1 ファイルで全ターゲットに使えるようにするための設定。
-        //
-        // `FILE*` を受け取る関数 (`*_fprint`) があるため、放っておくと libc の
-        // 内部構造体まで生成される。`opaque_type` ではサイズが書き込まれ、その
-        // サイズは libc ごとに違う。ポインタとしてしか使わないので型ごと外し、
-        // 中身を持たない型を自前で置く。
-        .blocklist_type("FILE")
-        .blocklist_type("_IO_.*")
-        // libc の内部 typedef (`__off_t` `__uint64_t` など)。`FILE` を外すと
-        // 参照元が消えて孤児になるが、定義だけは残る。どれが残るかは環境の
-        // libc に依存するので、生成物が環境ごとに変わってしまう。
-        .blocklist_type("__.*")
-        .raw_line("/// `*_fprint` 系が受け取る `FILE*` のための不透明型。")
-        .raw_line("/// 実体を作らずポインタとしてのみ扱うため、中身は持たない。")
-        .raw_line("#[repr(C)]")
-        .raw_line("#[derive(Debug, Copy, Clone)]")
-        .raw_line("pub struct FILE {")
-        .raw_line("    _data: [u8; 0],")
-        .raw_line("    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,")
-        .raw_line("}")
-        // `size_t` は `usize` にする。固定幅で出るとターゲットに追従しない
-        .size_t_is_usize(true)
-        // レイアウト検査テストはターゲット固有のサイズを書き込むので出さない
-        .layout_tests(false)
-        .clang_arg(format!("-I{src_dir_str}"));
-
-    for dir in include_dirs {
-        bindgen_builder = bindgen_builder.clang_arg(format!("-I{}", src_dir.join(dir).display()));
-    }
-
-    for (key, value) in defines {
-        let arg = match value {
-            Some(val) => format!("-D{key}={val}"),
-            None => format!("-D{key}"),
-        };
-        bindgen_builder = bindgen_builder.clang_arg(arg);
-    }
-
-    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("generated")
-        .join("bindings.rs");
-
-    bindgen_builder
-        .generate()
-        .expect("Unable to generate bindings")
-        .write_to_file(&out)
-        .expect("Couldn't write bindings to file");
-
-    Ok(())
+    Ok(hex::encode(hash.finalize()))
 }

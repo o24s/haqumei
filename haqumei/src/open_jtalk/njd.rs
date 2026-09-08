@@ -1,95 +1,11 @@
-use std::{
-    ffi::{CStr, c_char},
-    mem::MaybeUninit,
-    ptr::NonNull,
-};
-
 use rustc_hash::FxHashMap;
 
 use crate::utils::{is_katakana_word, split_kana_mora};
-
 use crate::{
     errors::HaqumeiError,
     features::NjdFeature,
-    ffi,
     utils::{Dan, dan},
 };
-
-#[derive(Debug)]
-pub(crate) struct Njd {
-    pub(crate) inner: NonNull<ffi::NJD>,
-}
-
-impl Njd {
-    pub(crate) fn new() -> Result<Self, HaqumeiError> {
-        unsafe {
-            let mut njd_uninit = Box::new(MaybeUninit::<ffi::NJD>::uninit());
-
-            ffi::NJD_initialize(njd_uninit.as_mut_ptr());
-
-            let njd_init = njd_uninit.assume_init();
-
-            let raw_ptr = Box::into_raw(njd_init);
-
-            match NonNull::new(raw_ptr) {
-                Some(inner) => Ok(Self { inner }),
-                None => {
-                    let _ = Box::from_raw(raw_ptr);
-                    Err(HaqumeiError::AllocationError("Njd"))
-                }
-            }
-        }
-    }
-}
-
-impl Drop for Njd {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::NJD_clear(self.inner.as_ptr());
-
-            let _ = Box::from_raw(self.inner.as_ptr());
-        }
-    }
-}
-
-fn cstr_to_string(ptr: *const c_char) -> String {
-    if ptr.is_null() {
-        String::new()
-    } else {
-        unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned()
-    }
-}
-
-pub(crate) fn njd_to_features(njd: &Njd) -> Vec<NjdFeature> {
-    let mut features = Vec::new();
-    let mut current_node = unsafe { (*njd.inner.as_ptr()).head };
-
-    while !current_node.is_null() {
-        let node_ref = unsafe { &*current_node };
-        unsafe {
-            features.push(NjdFeature {
-                string: cstr_to_string(ffi::NJDNode_get_string(current_node)),
-                pos: cstr_to_string(ffi::NJDNode_get_pos(current_node)),
-                pos_group1: cstr_to_string(ffi::NJDNode_get_pos_group1(current_node)),
-                pos_group2: cstr_to_string(ffi::NJDNode_get_pos_group2(current_node)),
-                pos_group3: cstr_to_string(ffi::NJDNode_get_pos_group3(current_node)),
-                ctype: cstr_to_string(ffi::NJDNode_get_ctype(current_node)),
-                cform: cstr_to_string(ffi::NJDNode_get_cform(current_node)),
-                orig: cstr_to_string(ffi::NJDNode_get_orig(current_node)),
-                read: cstr_to_string(ffi::NJDNode_get_read(current_node)),
-                pron: cstr_to_string(ffi::NJDNode_get_pron(current_node)),
-                acc: ffi::NJDNode_get_acc(current_node),
-                mora_size: ffi::NJDNode_get_mora_size(current_node),
-                chain_rule: cstr_to_string(ffi::NJDNode_get_chain_rule(current_node)),
-                chain_flag: ffi::NJDNode_get_chain_flag(current_node),
-            });
-        }
-        current_node = node_ref.next;
-    }
-    features
-}
 
 /// pyopenjtalk-plus の独自結合ルールなどを適用する
 pub(crate) fn apply_plus_rules(features: &mut [NjdFeature]) {
@@ -262,4 +178,158 @@ fn loanword_accent(pron: &str) -> i32 {
 /// 二重母音の副音 (`アイ` の `イ`) を特殊拍に数える立場もあるが、裏付けを取れていない。
 fn is_special_mora(mora: &str) -> bool {
     matches!(mora, "ー" | "ン" | "ッ")
+}
+
+/// MeCab の特徴量から、発音・数詞・アクセントを順に求める。
+pub(crate) fn run_frontend(raw: &[String]) -> Result<Vec<NjdFeature>, HaqumeiError> {
+    use haqumei_jpreprocess_core::word_entry::WordEntry;
+    use haqumei_jpreprocess_njd::{
+        NJD, NJDNode, accent_phrase, accent_type, digit, digit_sequence, pronunciation,
+        unvoiced_vowel,
+    };
+
+    let mut nodes = Vec::new();
+    for feature in raw {
+        std::ffi::CString::new(feature.as_str())?;
+        let mut fields: Vec<&str> = feature.split(',').collect();
+        fields.resize(13, "*");
+        let entry = WordEntry::load(&fields[1..13])
+            .map_err(|error| HaqumeiError::MecabError(format!("NJD: {feature}: {error}")))?;
+        nodes.extend(NJDNode::load(fields[0], &entry));
+    }
+    let mut njd = NJD { nodes };
+    pronunciation::njd_set_pronunciation(&mut njd);
+    let mut features = rust_njd_to_features(&njd);
+    let raw_refs: Vec<&str> = raw.iter().map(String::as_str).collect();
+    restore_unknown_word_pos(&mut features, &raw_refs);
+    apply_plus_rules(&mut features);
+    njd = features_to_njd(&features)?;
+    digit_sequence::njd_digit_sequence(&mut njd);
+    digit::njd_set_digit(&mut njd);
+    accent_phrase::njd_set_accent_phrase(&mut njd);
+    accent_type::njd_set_accent_type(&mut njd);
+    unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
+    Ok(rust_njd_to_features(&njd))
+}
+
+/// 公開特徴量から、補正後の値を持つ Rust の NJD を作る。
+pub(crate) fn features_to_njd(
+    features: &[NjdFeature],
+) -> Result<haqumei_jpreprocess_njd::NJD, HaqumeiError> {
+    use haqumei_jpreprocess_core::{
+        accent_rule::ChainRules,
+        cform::CForm,
+        ctype::CType,
+        pos::POS,
+        pronunciation::{MoraEnum, Pronunciation},
+        word_details::WordDetails,
+    };
+    use haqumei_jpreprocess_njd::{NJD, NJDNode};
+    use std::str::FromStr;
+
+    let mut nodes = Vec::with_capacity(features.len());
+    for feature in features {
+        for value in [
+            &feature.string,
+            &feature.pos,
+            &feature.pos_group1,
+            &feature.pos_group2,
+            &feature.pos_group3,
+            &feature.ctype,
+            &feature.cform,
+            &feature.orig,
+            &feature.read,
+            &feature.pron,
+            &feature.chain_rule,
+        ] {
+            std::ffi::CString::new(value.as_str())?;
+        }
+        let convert_error = |error: Box<dyn std::fmt::Display>| {
+            HaqumeiError::MecabError(format!("NJD: {}: {error}", feature.string))
+        };
+        // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
+        let mut pron = Pronunciation::parse(&feature.pron, feature.acc.max(0) as usize)
+            .unwrap_or_else(|_| {
+                let moras = Pronunciation::parse_mora_str(&feature.pron)
+                    .into_iter()
+                    .next()
+                    .filter(|(range, _)| range.start == 0)
+                    .map(|(_, moras)| {
+                        moras
+                            .into_iter()
+                            .take_while(|mora| mora.mora_enum != MoraEnum::Touten)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                Pronunciation::new(moras, feature.acc.max(0) as usize)
+            });
+        if pron.is_touten() && feature.pron != "、" {
+            pron = Pronunciation::new(Vec::new(), feature.acc.max(0) as usize);
+        }
+        pron.set_mora_size(feature.mora_size.max(0) as usize);
+        fn nonempty(value: &str) -> &str {
+            if value.is_empty() { "*" } else { value }
+        }
+        let pos = POS::from_strs(
+            nonempty(&feature.pos),
+            nonempty(&feature.pos_group1),
+            nonempty(&feature.pos_group2),
+            nonempty(&feature.pos_group3),
+        )
+        .map_err(|error| convert_error(Box::new(error)))?;
+        let original_pos = format!(
+            "{},{},{},{}",
+            feature.pos, feature.pos_group1, feature.pos_group2, feature.pos_group3
+        );
+        let details = WordDetails {
+            pos,
+            pos_original: (original_pos != pos.to_string()).then_some((pos, original_pos)),
+            ctype: CType::from_str(nonempty(&feature.ctype))
+                .map_err(|error| convert_error(Box::new(error)))?,
+            cform: CForm::from_str(nonempty(&feature.cform))
+                .map_err(|error| convert_error(Box::new(error)))?,
+            orig: Some(feature.orig.clone()),
+            read: Some(feature.read.clone()),
+            pron,
+            chain_rule: ChainRules::new(&feature.chain_rule),
+            chain_flag: match feature.chain_flag {
+                0 => Some(false),
+                1 => Some(true),
+                _ => None,
+            },
+        };
+        nodes.push(NJDNode::from_details(feature.string.clone(), details));
+    }
+    Ok(NJD { nodes })
+}
+
+fn rust_njd_to_features(njd: &haqumei_jpreprocess_njd::NJD) -> Vec<NjdFeature> {
+    njd.nodes
+        .iter()
+        .map(|node| {
+            let details = node.get_details();
+            let pos = details.pos_string();
+            let mut pos = pos.split(',');
+            NjdFeature {
+                string: node.get_string().to_owned(),
+                pos: pos.next().unwrap_or("*").to_owned(),
+                pos_group1: pos.next().unwrap_or("*").to_owned(),
+                pos_group2: pos.next().unwrap_or("*").to_owned(),
+                pos_group3: pos.next().unwrap_or("*").to_owned(),
+                ctype: details.ctype.to_string(),
+                cform: details.cform.to_string(),
+                orig: node.get_orig().unwrap_or("*").to_owned(),
+                read: node.get_read().unwrap_or("*").to_owned(),
+                pron: node.get_pron().to_string(),
+                acc: node.get_pron().accent().min(i32::MAX as usize) as i32,
+                mora_size: node.get_pron().mora_size().min(i32::MAX as usize) as i32,
+                chain_rule: node.get_chain_rule().to_original_string(),
+                chain_flag: match node.get_chain_flag() {
+                    Some(true) => 1,
+                    Some(false) => 0,
+                    None => -1,
+                },
+            }
+        })
+        .collect()
 }

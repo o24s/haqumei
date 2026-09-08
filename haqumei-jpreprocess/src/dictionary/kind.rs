@@ -1,0 +1,19 @@
+use lindera_dictionary::dictionary::Dictionary;
+
+/// Specifies the kind of self-contained dictionary used for tokenization and preprocessing.
+pub enum JPreprocessDictionaryKind {
+    #[cfg(feature = "naist-jdic")]
+    NaistJdic,
+}
+
+impl JPreprocessDictionaryKind {
+    pub(crate) fn load(&self) -> Dictionary {
+        match &self {
+            #[cfg(feature = "naist-jdic")]
+            Self::NaistJdic => haqumei_jpreprocess_naist_jdic::lindera::load().unwrap(),
+
+            #[allow(unreachable_patterns)]
+            _ => unreachable!(),
+        }
+    }
+}
