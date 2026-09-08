@@ -731,9 +731,10 @@ Haqumei には、以下のプロジェクトから移植した Rust コードと
 - `haqumei-jpreprocess*` クレート
   - 由来: [jpreprocess/jpreprocess](https://github.com/jpreprocess/jpreprocess) のリビジョン `54cf9bc2d40a5d6f25144333e9cd03fd3258a126`。NJD と JPCommon には [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) との互換性を保つ変更を加えています。
   - ライセンス: BSD-3-Clause。各クレートの `LICENSE` と `NOTICE` に、jpreprocess と Open JTalk の著作権・ライセンス表記を同梱しています。
-- Rust の辞書読み込み・構築処理
-  - 由来: `haqumei-jpreprocess-dictionary/src/mecab.rs` と `mecab_compile.rs` は、Open JTalk に同梱されていた MeCab の処理を移植したものです。Darts の辞書形式も引き継いでいます。
-  - ライセンス: BSD-3-Clause。著作権・ライセンス表記は `haqumei-jpreprocess-dictionary/LICENSE-MeCab`、正規化処理の表記は `haqumei-jpreprocess/LICENSE-OpenJTalk` に同梱しています。
+
+- 辞書の読み込み・構築
+  - 由来: Open JTalk に含まれる MeCab・Darts のコードを基に、辞書の読み込み・構築処理を Rust で実装しています。
+  - ライセンス: BSD-3-Clause。著作権表記とライセンス全文は [NOTICE](haqumei-jpreprocess-dictionary/NOTICE) と [LICENSE-MeCab](haqumei-jpreprocess-dictionary/LICENSE-MeCab) に記載しています。
 
 - バンドルされた辞書データ
   - 由来: `haqumei/dictionary` ディレクトリに含まれる辞書データは、

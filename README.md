@@ -714,9 +714,10 @@ Haqumei includes Rust ports and dictionary data derived from the following proje
 - Adapted `haqumei-jpreprocess*` crates
   - Origin: [jpreprocess/jpreprocess](https://github.com/jpreprocess/jpreprocess), revision `54cf9bc2d40a5d6f25144333e9cd03fd3258a126`. The NJD and JPCommon implementations include compatibility changes for [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk).
   - License: BSD-3-Clause. Each crate includes `LICENSE` and `NOTICE`, preserving the jpreprocess and Open JTalk notices.
-- Rust dictionary reader and compiler
-  - Origin: The MeCab-compatible implementation in `haqumei-jpreprocess-dictionary/src/mecab.rs` and `mecab_compile.rs` is ported from the MeCab implementation bundled with Open JTalk, including its Darts trie format.
-  - License: BSD-3-Clause. Copyright and license notices are retained in `haqumei-jpreprocess-dictionary/LICENSE-MeCab`. The normalization port also retains `haqumei-jpreprocess/LICENSE-OpenJTalk`.
+
+- Dictionary Reading and Compilation
+  - Origin: The Rust dictionary reader and compiler are based on the MeCab and Darts code included in Open JTalk.
+  - License: BSD-3-Clause. Copyright notices and license terms are provided in [NOTICE](haqumei-jpreprocess-dictionary/NOTICE) and [LICENSE-MeCab](haqumei-jpreprocess-dictionary/LICENSE-MeCab).
 
 - Bundled Dictionary Data
   - Origin: The dictionary data contained in the `haqumei/dictionary` directory is based on
