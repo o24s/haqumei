@@ -2,6 +2,8 @@ use crate::{word_details::WordDetails, word_line::WordDetailsLine, JPreprocessRe
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+// Single を Box にすると、1 語のエントリを復元するたびにヒープ確保が増える。
+#[allow(clippy::large_enum_variant)]
 pub enum WordEntry {
     Single(WordDetails),
     Multiple(Vec<(String, WordDetails)>),

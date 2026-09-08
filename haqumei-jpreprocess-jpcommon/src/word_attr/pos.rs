@@ -1,4 +1,35 @@
-use haqumei_jpreprocess_core::pos::*;
+use haqumei_jpreprocess_core::{pos::*, word_details::WordDetails};
+
+pub fn pos_details_to_id(details: &WordDetails) -> Option<u8> {
+    let Some((_, original)) = details
+        .pos_original
+        .as_ref()
+        .filter(|(pos, _)| *pos == details.pos)
+    else {
+        return pos_to_id(&details.pos);
+    };
+    let mut fields = original
+        .split(',')
+        .map(|value| if value.is_empty() { "*" } else { value });
+    if fields.clone().eq(details.pos.to_string().split(',')) {
+        return pos_to_id(&details.pos);
+    }
+    // 型が省略する細分類にも登録値がある。登録されていない組合せは「その他」になる。
+    match (
+        fields.next(),
+        fields.next(),
+        fields.next(),
+        fields.next(),
+        fields.next(),
+    ) {
+        (Some("助動詞"), Some("接尾" | "自立" | "非自立"), Some("*"), Some("*"), None)
+        | (Some("助動詞"), Some("非自立"), Some("助動詞語幹"), Some("*"), None) => {
+            Some(10)
+        }
+        (Some("名詞"), Some("特殊"), Some("助動詞語幹"), Some("*"), None) => Some(2),
+        _ => None,
+    }
+}
 
 pub fn pos_to_id(pos: &POS) -> Option<u8> {
     match pos {
@@ -65,7 +96,7 @@ pub fn pos_to_id(pos: &POS) -> Option<u8> {
         POS::Meishi(Meishi::Kazu) => Some(5),
         // 名詞-非自立:22
         POS::Meishi(Meishi::Hijiritsu(_)) => Some(22),
-        POS::Meishi(Meishi::None) => None,
+        POS::Meishi(Meishi::None | Meishi::Special) => None,
         // 名詞-普通名詞:2
         POS::Meishi(_) => Some(2),
 

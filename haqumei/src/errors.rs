@@ -19,7 +19,7 @@ pub enum HaqumeiError {
     MecabLoadError,
 
     #[error(
-        "Input data for FFI contains an interior NUL byte at position {pos}: `{}`",
+        "Input data contains an interior NUL byte at position {pos}: `{}`",
         String::from_utf8_lossy(bytes)
     )]
     InteriorNulError { bytes: Vec<u8>, pos: usize },

@@ -25,7 +25,7 @@ impl Word {
 impl From<&NJDNode> for Word {
     fn from(njdnode: &NJDNode) -> Self {
         Self {
-            pos: pos_to_id(njdnode.get_pos()),
+            pos: pos_details_to_id(njdnode.get_details()),
             ctype: ctype_to_id(njdnode.get_ctype()),
             cform: cform_to_id(njdnode.get_cform()),
             moras: njdnode.get_pron().clone(),

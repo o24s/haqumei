@@ -46,7 +46,7 @@ impl Lexicon {
         let trie_size = header(24)? as usize;
         let token_size = header(28)? as usize;
         let feature_size = header(32)? as usize;
-        if trie_size < 8 || trie_size % 8 != 0 || token_size % 16 != 0 {
+        if trie_size < 8 || !trie_size.is_multiple_of(8) || !token_size.is_multiple_of(16) {
             return Err(invalid("辞書のトライまたはエントリの長さが不正です"));
         }
         let trie_end = 72usize
@@ -290,8 +290,10 @@ impl Model {
             unknown_values.push(value);
         }
         let chars: Vec<_> = bytes[names_end..]
-            .chunks_exact(4)
-            .map(|b| CharInfo(u32::from_le_bytes(b.try_into().unwrap())))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| CharInfo(u32::from_le_bytes(*b)))
             .collect();
         if chars.iter().any(|c| c.category() >= count) {
             return Err(invalid("文字種の番号が不正です"));
@@ -312,8 +314,10 @@ impl Model {
             return Err(invalid("接続行列と辞書の文脈 ID の範囲が一致しません"));
         }
         let matrix = bytes[4..]
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| i16::from_le_bytes(*b))
             .collect();
         Ok(Self(Arc::new(Data {
             dictionaries,

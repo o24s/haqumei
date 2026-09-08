@@ -335,3 +335,85 @@ fn standalone_unvoicing_mark_does_not_insert_a_pause() {
         .collect();
     assert_eq!(phonemes, ["sil", "a", "i", "sil"]);
 }
+
+fn editable_feature() -> NjdFeature {
+    NjdFeature {
+        string: "ア".to_owned(),
+        pos: "動詞".to_owned(),
+        pos_group1: "自立".to_owned(),
+        pos_group2: "*".to_owned(),
+        pos_group3: "*".to_owned(),
+        ctype: "一段".to_owned(),
+        cform: "基本形".to_owned(),
+        orig: "ア".to_owned(),
+        read: "ア".to_owned(),
+        pron: "ア".to_owned(),
+        acc: 1,
+        mora_size: 1,
+        chain_rule: "*".to_owned(),
+        chain_flag: 0,
+    }
+}
+
+#[test]
+fn unregistered_attributes_preserve_labels_and_phonemes() {
+    let mut engine = OpenJTalk::new().unwrap();
+    let pos_labels = include_str!("label_tests/test_unknown_pos.lab");
+    let ctype_labels = include_str!("label_tests/test_unknown_ctype.lab");
+    let cform_labels = include_str!("label_tests/test_unknown_cform.lab");
+    for (field, value, expected) in [
+        ("pos", "独自品詞", pos_labels),
+        ("pos_group1", "独自細分類", pos_labels),
+        ("pos_group2", "独自細分類", pos_labels),
+        ("pos_group3", "独自細分類", pos_labels),
+        ("ctype", "独自活用", ctype_labels),
+        ("ctype", "ラ変・独自", ctype_labels),
+        ("cform", "独自活用形", cform_labels),
+    ] {
+        let mut feature = editable_feature();
+        let target = match field {
+            "pos" => &mut feature.pos,
+            "pos_group1" => &mut feature.pos_group1,
+            "pos_group2" => &mut feature.pos_group2,
+            "pos_group3" => &mut feature.pos_group3,
+            "ctype" => &mut feature.ctype,
+            "cform" => &mut feature.cform,
+            _ => unreachable!(),
+        };
+        *target = value.to_owned();
+        let features = [feature];
+        assert_eq!(
+            engine.make_label(&features).unwrap(),
+            expected.lines().collect::<Vec<_>>(),
+            "{field}={value}"
+        );
+        assert_eq!(
+            engine.extract_phonemes(&features).unwrap(),
+            [crate::Phoneme::A],
+            "{field}={value}"
+        );
+    }
+}
+
+#[test]
+fn original_pos_details_distinguish_registered_and_unknown_categories() {
+    let mut engine = OpenJTalk::new().unwrap();
+    for (fields, expected) in [
+        (["助動詞", "独自細分類", "*", "*"], None),
+        (["助動詞", "非自立", "助動詞語幹", "*"], Some(10)),
+        (["名詞", "特殊", "*", "*"], None),
+        (["名詞", "特殊", "助動詞語幹", "*"], Some(2)),
+        (["助動詞", "", "", ""], Some(10)),
+    ] {
+        let feature = NjdFeature {
+            pos: fields[0].to_owned(),
+            pos_group1: fields[1].to_owned(),
+            pos_group2: fields[2].to_owned(),
+            pos_group3: fields[3].to_owned(),
+            ..editable_feature()
+        };
+        let labels = engine.make_label(&[feature]).unwrap();
+        let label: crate::Label = labels[1].parse().unwrap();
+        assert_eq!(label.word_curr.unwrap().pos, expected, "{fields:?}");
+    }
+}

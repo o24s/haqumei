@@ -244,9 +244,6 @@ pub(crate) fn features_to_njd(
         ] {
             std::ffi::CString::new(value.as_str())?;
         }
-        let convert_error = |error: Box<dyn std::fmt::Display>| {
-            HaqumeiError::MecabError(format!("NJD: {}: {error}", feature.string))
-        };
         // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
         let mut pron = Pronunciation::parse(&feature.pron, feature.acc.max(0) as usize)
             .unwrap_or_else(|_| {
@@ -276,18 +273,23 @@ pub(crate) fn features_to_njd(
             nonempty(&feature.pos_group2),
             nonempty(&feature.pos_group3),
         )
-        .map_err(|error| convert_error(Box::new(error)))?;
+        .unwrap_or(POS::Others);
         let original_pos = format!(
             "{},{},{},{}",
-            feature.pos, feature.pos_group1, feature.pos_group2, feature.pos_group3
+            nonempty(&feature.pos),
+            nonempty(&feature.pos_group1),
+            nonempty(&feature.pos_group2),
+            nonempty(&feature.pos_group3)
         );
+        // C の変換表にない品詞・活用は「その他」または「*」として音素化される。
         let details = WordDetails {
             pos,
             pos_original: (original_pos != pos.to_string()).then_some((pos, original_pos)),
             ctype: CType::from_str(nonempty(&feature.ctype))
-                .map_err(|error| convert_error(Box::new(error)))?,
-            cform: CForm::from_str(nonempty(&feature.cform))
-                .map_err(|error| convert_error(Box::new(error)))?,
+                .ok()
+                .filter(|ctype| ctype.to_string() == nonempty(&feature.ctype))
+                .unwrap_or(CType::None),
+            cform: CForm::from_str(nonempty(&feature.cform)).unwrap_or(CForm::None),
             orig: Some(feature.orig.clone()),
             read: Some(feature.read.clone()),
             pron,
