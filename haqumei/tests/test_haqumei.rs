@@ -27,33 +27,50 @@ mod tests {
         assert!(mapping.is_empty());
     }
 
-    /// NULL文字が含まれる入力でエラーになり、クラッシュしないこと
     #[test]
-    fn test_null_byte_injection() {
+    fn test_nul_is_ignored_like_other_ascii_controls() {
         let mut haqumei = Haqumei::new().unwrap();
-        let text = "こん\0にちは";
-
-        let result = haqumei.g2p(text);
-        assert!(result.is_err());
-
-        match result.unwrap_err() {
-            HaqumeiError::InteriorNulError { bytes, pos } => {
-                assert_eq!(
-                    bytes,
-                    vec![
-                        227, 129, 147, // こ
-                        227, 130, 147, // ん
-                        0,   // \0 (NUL)
-                        227, 129, 171, // に
-                        227, 129, 161, // ち
-                        227, 129, 175, // は
-                    ]
-                );
-
-                assert_eq!(pos, 6)
-            }
-            _ => unreachable!(),
+        let expected = haqumei.g2p("こんにちは").unwrap();
+        for text in [
+            "\0こんにちは",
+            "こん\0にちは",
+            "こんにちは\0",
+            "こん\0\0にちは",
+        ] {
+            assert_eq!(haqumei.g2p(text).unwrap(), expected);
         }
+        assert!(haqumei.g2p("\0\0").unwrap().is_empty());
+        let engine = haqumei::OpenJTalk::new().unwrap();
+        assert_eq!(engine.text2mecab_string("a\0b").unwrap(), "ａｂ");
+    }
+
+    #[test]
+    fn test_frontend_accepts_controls_and_long_input() {
+        let mut engine = haqumei::OpenJTalk::new().unwrap();
+        assert!(engine.run_frontend("\0\x01\x02").unwrap().is_empty());
+        assert!(!engine.run_frontend(&"あ".repeat(10000)).unwrap().is_empty());
+        let text = "😎".repeat(5000);
+        let morphs = engine.run_mecab_detailed(&text).unwrap();
+        assert_eq!(
+            morphs
+                .iter()
+                .map(|m| m.surface.as_str())
+                .collect::<String>(),
+            text
+        );
+        assert!(!engine.run_frontend("こんにちは").unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_nul_in_pronunciation_follows_unknown_mora_handling() {
+        let mut engine = haqumei::OpenJTalk::new().unwrap();
+        let mut features = engine.run_frontend("こんにちは").unwrap();
+        features[0].pron = "ア".to_owned();
+        let expected = engine.make_label(&features).unwrap();
+        features[0].pron = "ア\0イ".to_owned();
+        assert_eq!(engine.make_label(&features).unwrap(), expected);
+        let features = engine.run_frontend("こんにちは").unwrap();
+        assert!(!engine.make_label(&features).unwrap().is_empty());
     }
 
     #[test]
@@ -76,10 +93,10 @@ mod tests {
     }
 
     #[test]
-    fn test_recovery_from_error() {
+    fn test_reuse_after_nul_input() {
         let mut haqumei = Haqumei::new().unwrap();
 
-        let _ = haqumei.g2p("悪い\0Input");
+        haqumei.g2p("悪い\0Input").unwrap();
 
         let text = "復帰";
         let result = haqumei.g2p(text);

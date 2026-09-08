@@ -489,28 +489,10 @@ mod tests {
     }
 
     #[test]
-    fn test_run_frontend_very_long_text() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let long_text = "あ".repeat(10000);
-        let err = ojt.run_frontend(&long_text);
-        assert!(err.is_err());
-
-        let features = ojt.run_frontend("こんにちは").unwrap();
-        assert!(!features.is_empty());
-    }
-
-    #[test]
     fn test_run_frontend_special_characters_only() {
         let mut ojt = OpenJTalk::new().unwrap();
         let features = ojt.run_frontend("!@#$%^&*()").unwrap();
         assert!(!features.is_empty() || features.is_empty()); // 少なくともクラッシュしないこと
-    }
-
-    #[test]
-    fn test_run_frontend_null_bytes_should_not_segfault() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let err = ojt.run_frontend("\x00\x01\x02");
-        assert!(err.is_err());
     }
 
     #[test]
@@ -543,19 +525,6 @@ mod tests {
     }
 
     #[test]
-    fn test_make_label_null_character_should_not_break_next_call() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let mut features = ojt.run_frontend("こんにちは").unwrap();
-        features[0].pron = "ア\x00イ".to_string();
-        let err = ojt.make_label(&features);
-        assert!(err.is_err());
-
-        let features2 = ojt.run_frontend("こんにちは").unwrap();
-        let labels = ojt.make_label(&features2).unwrap();
-        assert!(!labels.is_empty());
-    }
-
-    #[test]
     fn test_g2p_large_digit_sequence_should_keep_place_reading() {
         let mut ojt = OpenJTalk::new().unwrap();
         let pron = ojt.g2p("10000").unwrap().join(" ");
@@ -567,17 +536,6 @@ mod tests {
         let mut ojt = OpenJTalk::new().unwrap();
         let pron = ojt.g2p("100000000").unwrap().join(" ");
         assert_eq!(pron, "i ch i o k u");
-    }
-
-    #[test]
-    fn test_run_mecab_runtime_error_should_not_break_next_call() {
-        let mut ojt = OpenJTalk::new().unwrap();
-        let long_text = "😎".repeat(5000);
-        let err = ojt.run_mecab(&long_text);
-        assert!(err.is_err());
-
-        let morphs = ojt.run_mecab("こんにちは").unwrap();
-        assert!(!morphs.is_empty());
     }
 
     #[test]

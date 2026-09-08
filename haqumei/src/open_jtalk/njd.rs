@@ -223,14 +223,6 @@ fn is_special_mora(mora: &str) -> bool {
     matches!(mora, "ー" | "ン" | "ッ")
 }
 
-fn validate_no_nul(value: &str) -> Result<(), std::ffi::NulError> {
-    // C へ渡さない文字列なので、NUL がある場合だけ従来と同じエラーを構築する。
-    if value.as_bytes().contains(&0) {
-        std::ffi::CString::new(value)?;
-    }
-    Ok(())
-}
-
 /// MeCab の特徴量から、発音・数詞・アクセントを順に求める。
 pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
@@ -241,7 +233,6 @@ pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError
 
     let mut nodes = Vec::with_capacity(raw.len());
     for feature in raw {
-        validate_no_nul(feature)?;
         let mut fields = ["*"; 13];
         for (field, value) in fields.iter_mut().zip(feature.split(',')) {
             *field = value;
@@ -290,21 +281,6 @@ pub(crate) fn features_to_njd(
 
     let mut nodes = Vec::with_capacity(features.len());
     for feature in features {
-        for value in [
-            &feature.string,
-            &feature.pos,
-            &feature.pos_group1,
-            &feature.pos_group2,
-            &feature.pos_group3,
-            &feature.ctype,
-            &feature.cform,
-            &feature.orig,
-            &feature.read,
-            &feature.pron,
-            &feature.chain_rule,
-        ] {
-            validate_no_nul(value)?;
-        }
         // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
         let mut pron = Pronunciation::parse(&feature.pron, feature.acc.max(0) as usize)
             .unwrap_or_else(|_| {
@@ -398,15 +374,15 @@ fn rust_njd_to_features(njd: &haqumei_jpreprocess_njd::NJD) -> Vec<NjdFeature> {
 }
 
 #[cfg(test)]
-mod nul_validation_tests {
+mod nul_tests {
     #[test]
-    fn nul_errors_keep_the_original_position_and_bytes() {
-        for text in ["", "こんにちは", "\0先頭", "途中\0末尾", "末尾\0", "\0\0"] {
-            assert_eq!(
-                super::validate_no_nul(text),
-                std::ffi::CString::new(text).map(|_| ())
-            );
-        }
+    fn nul_in_surface_and_original_form_is_not_a_terminator() {
+        let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
+        let features = super::run_frontend(&raw).unwrap();
+        assert_eq!(features[0].string, "語\0尾");
+        assert_eq!(features[0].orig, "原\0形");
+        let njd = super::features_to_njd(&features).unwrap();
+        assert_eq!(super::rust_njd_to_features(&njd), features);
     }
 }
 

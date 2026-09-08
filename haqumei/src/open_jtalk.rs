@@ -27,7 +27,6 @@ use haqumei_jlabel::Label;
 use mecab::Mecab;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use std::ffi::CString;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -798,7 +797,6 @@ impl OpenJTalk {
     /// 出力をもう一度通しても変わりません。変換表の右辺はどれも左辺に現れないので、
     /// [`OpenJTalk::run_mecab_detailed`] に渡し直しても同じ文字列になります。
     pub fn text2mecab_string(&self, text: &str) -> Result<String, HaqumeiError> {
-        CString::new(text)?;
         let normalized = haqumei_jpreprocess::normalize_text_for_open_jtalk(text);
         Ok(normalized)
     }
