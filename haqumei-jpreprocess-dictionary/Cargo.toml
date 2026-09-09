@@ -25,9 +25,6 @@ required-features = ["binary"]
 
 [dependencies]
 vibrato.workspace = true
-sha2.workspace = true
-hex.workspace = true
-dirs.workspace = true
 tempfile.workspace = true
 csv.workspace = true
 encoding_rs.workspace = true

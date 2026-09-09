@@ -137,7 +137,7 @@ fn test_dictionary_path_errors() {
     ));
     // システム辞書にファイルを渡した
     assert!(matches!(
-        Dictionary::from_paths(&dict_dir.join("sys.dic"), &[] as &[&Path]),
+        Dictionary::from_paths(&dict_dir.join("system.bin"), &[] as &[&Path]),
         Err(HaqumeiError::InvalidDictionaryPath(_))
     ));
     // ユーザー辞書にディレクトリを渡した

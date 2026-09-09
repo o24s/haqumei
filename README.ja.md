@@ -714,6 +714,12 @@ Windows (PowerShell) の場合:
 
 > **Note:** 環境変数が設定されていない場合は、クレートのルートから相対パスで `dictionary` を参照します。
 
+構築済み辞書の `.tar.zst` を `HAQUMEI_DICT_ARCHIVE` に指定すると、辞書のダウンロードと構築を省略して埋め込みます。アーカイブの直下には `system.bin`、`char.bin`、`matrix.bin` が必要です。
+
+`system.bin` は、Haqumei が MeCab 互換の解析結果を返せる形に変換した `vibrato-rkyv` の辞書です。`sys.dic` の名前を変えたものや、通常の Vibrato 辞書では代用できません。`sys.dic`、`unk.dic`、`char.bin`、`matrix.bin` を含む UTF-8 の MeCab 互換辞書は、`cargo run -p haqumei-dict-tool -- --convert-mecab /path/to/compiled` で変換できます。コマンドは同じディレクトリに `system.bin` を書きます。
+
+実行時には、システム語彙を `system.bin` から mmap で読み込みます。MeCab 互換ユーザー辞書の追加・変更では、ユーザー語彙だけをメモリ上で構築します。
+
 ## 辞書
 
 Haqumeiは [pyopenjtalk-plus](https://github.com/tsukumijima/pyopenjtalk-plus) に含まれる辞書を改変して使用しています。

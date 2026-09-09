@@ -1,11 +1,17 @@
-use crate::{NjdFeature, OpenJTalk};
+use super::njd::{extract_fullcontext_labels, extract_phonemes};
+use crate::NjdFeature;
+
+fn make_label(features: &[NjdFeature]) -> Vec<String> {
+    extract_fullcontext_labels(features)
+        .unwrap()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
 
 // 移行前の Open JTalk と一致していたラベルを固定し、音素・アクセント・句境界を比較する。
 fn assert_labels(features: &[NjdFeature], expected: &str) {
-    let labels = OpenJTalk::new()
-        .unwrap()
-        .extract_fullcontext_labels(features)
-        .unwrap();
+    let labels = extract_fullcontext_labels(features).unwrap();
     let actual: Vec<_> = labels.iter().map(ToString::to_string).collect();
     let expected: Vec<_> = expected.lines().collect();
     assert_eq!(actual, expected);
@@ -325,10 +331,7 @@ fn standalone_unvoicing_mark_does_not_insert_a_pause() {
         ("’", "記号", "*", "*", 0, 0),
         ("イ", "感動詞", "*", "*", 0, 0),
     ]);
-    let labels = OpenJTalk::new()
-        .unwrap()
-        .extract_fullcontext_labels(&features)
-        .unwrap();
+    let labels = extract_fullcontext_labels(&features).unwrap();
     let phonemes: Vec<_> = labels
         .iter()
         .map(|label| label.phoneme.c.as_deref().unwrap())
@@ -357,7 +360,6 @@ fn editable_feature() -> NjdFeature {
 
 #[test]
 fn unregistered_attributes_preserve_labels_and_phonemes() {
-    let mut engine = OpenJTalk::new().unwrap();
     let pos_labels = include_str!("label_tests/test_unknown_pos.lab");
     let ctype_labels = include_str!("label_tests/test_unknown_ctype.lab");
     let cform_labels = include_str!("label_tests/test_unknown_cform.lab");
@@ -383,12 +385,12 @@ fn unregistered_attributes_preserve_labels_and_phonemes() {
         *target = value.to_owned();
         let features = [feature];
         assert_eq!(
-            engine.make_label(&features).unwrap(),
+            make_label(&features),
             expected.lines().collect::<Vec<_>>(),
             "{field}={value}"
         );
         assert_eq!(
-            engine.extract_phonemes(&features).unwrap(),
+            extract_phonemes(&features).unwrap(),
             [crate::Phoneme::A],
             "{field}={value}"
         );
@@ -397,7 +399,6 @@ fn unregistered_attributes_preserve_labels_and_phonemes() {
 
 #[test]
 fn original_pos_details_distinguish_registered_and_unknown_categories() {
-    let mut engine = OpenJTalk::new().unwrap();
     for (fields, expected) in [
         (["助動詞", "独自細分類", "*", "*"], None),
         (["助動詞", "非自立", "助動詞語幹", "*"], Some(10)),
@@ -412,7 +413,7 @@ fn original_pos_details_distinguish_registered_and_unknown_categories() {
             pos_group3: fields[3].to_owned(),
             ..editable_feature()
         };
-        let labels = engine.make_label(&[feature]).unwrap();
+        let labels = make_label(&[feature]);
         let label: crate::Label = labels[1].parse().unwrap();
         assert_eq!(label.word_curr.unwrap().pos, expected, "{fields:?}");
     }

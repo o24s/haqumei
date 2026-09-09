@@ -59,7 +59,7 @@ impl Dictionary {
         if !dict_dir.is_dir() {
             return Err(HaqumeiError::InvalidDictionaryPath(format!(
                 "{} はディレクトリではありません。\
-                 システム辞書は `sys.dic` などを含むディレクトリを指定してください",
+                 システム辞書は `system.bin` などを含むディレクトリを指定してください",
                 dict_dir.display()
             )));
         }
@@ -417,21 +417,17 @@ impl Default for MecabDictIndexCompiler {
 
 #[cfg(feature = "embed-dictionary")]
 pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
-    let mut paths = Vec::new();
-
-    for entry in walkdir::WalkDir::new(dir) {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file()
-            && let Some(extension) = path.extension()
-            && (extension == "dic" || extension == "bin")
-        {
-            paths.push(path.to_path_buf());
+    let mut paths = Vec::with_capacity(3);
+    for name in ["char.bin", "matrix.bin", "system.bin"] {
+        let path = dir.join(name);
+        if !path.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{} がありません", path.display()),
+            ));
         }
+        paths.push(path);
     }
-
-    paths.sort();
-
     Ok(paths)
 }
 

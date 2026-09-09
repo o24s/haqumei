@@ -895,10 +895,7 @@ impl OpenJTalk {
         &mut self,
         features: &[NjdFeature],
     ) -> Result<Vec<Label>, HaqumeiError> {
-        let njd = njd::features_to_njd(features)?;
-        Ok(haqumei_jpreprocess_jpcommon::njdnodes_to_features(
-            &njd.nodes,
-        ))
+        njd::extract_fullcontext_labels(features)
     }
 
     /// NJD の特徴から、発話両端の無音を除いた音素列を返します。
@@ -906,13 +903,7 @@ impl OpenJTalk {
         &mut self,
         features: &[NjdFeature],
     ) -> Result<Vec<Phoneme>, HaqumeiError> {
-        let njd = njd::features_to_njd(features)?;
-        haqumei_jpreprocess_jpcommon::njdnodes_to_phonemes_with_sources(&njd.nodes)
-            .into_iter()
-            .map(|phone| phone.phoneme)
-            .filter(|phone| phone != "sil")
-            .map(|phone| phone.parse())
-            .collect()
+        njd::extract_phonemes(features)
     }
 
     impl_batch_method_openjtalk!(

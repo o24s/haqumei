@@ -1,8 +1,8 @@
-use super::{Analysis, Lexicon, Model, Node, invalid};
-use sha2::{Digest, Sha256};
+use super::{Analysis, Lexicon, Model, Node, invalid, read_characters, read_matrix};
 use std::{
     fmt, fs,
     io::{self, Write},
+    path::Path,
     sync::Arc,
 };
 
@@ -92,115 +92,19 @@ impl Lexicon {
 
 impl Model {
     fn make_tokenizer(&self) -> io::Result<SharedTokenizer> {
-        let data = &self.0;
-        let mut hash = Sha256::new();
-        hash.update(b"haqumei-vibrato-archive-v1");
-        for lex in data
-            .dictionaries
-            .iter()
-            .chain(std::iter::once(&data.unknown))
-        {
-            hash.update((lex.bytes.len() as u64).to_le_bytes());
-            hash.update(&lex.bytes);
-        }
-        for name in &data.category_names {
-            hash.update(name.as_bytes());
-            hash.update([0]);
-        }
-        for info in &data.chars {
-            hash.update(info.0.to_le_bytes());
-        }
-        for cost in &data.matrix {
-            hash.update(cost.to_le_bytes());
-        }
-        let cache = dirs::cache_dir().map(|p| {
-            p.join("haqumei")
-                .join("vibrato")
-                .join(format!("{}.dict", hex::encode(hash.finalize())))
-        });
-        if let Some(path) = &cache
-            && let Ok(dict) = vibrato::Dictionary::from_path(path, vibrato::LoadMode::Validate)
-        {
-            return Self::tokenizer_from(dict);
-        }
-        let mut chars = String::new();
-        use std::fmt::Write as _;
-        for (index, name) in data.category_names.iter().enumerate() {
-            let info = data
-                .chars
-                .iter()
-                .find(|c| c.category() == index)
-                .copied()
-                .unwrap_or(super::CharInfo((index as u32) << 18));
-            writeln!(
-                chars,
-                "{name} {} {} {}",
-                u8::from(info.invoke()),
-                u8::from(info.group()),
-                info.length()
-            )
-            .unwrap();
-        }
-        let mut start = 0usize;
-        while start < data.chars.len() {
-            let info = data.chars[start];
-            let mut end = start + 1;
-            while end < data.chars.len() && data.chars[end].0 == info.0 {
-                end += 1;
+        let dict = vibrato::Dictionary::from_path(&self.0.system_path, vibrato::LoadMode::Validate)
+            .map_err(io::Error::other)?;
+        let mut tokenizer = Self::tokenizer_from(dict)?.0.as_ref().clone();
+        if !self.0.user_dictionaries.is_empty() {
+            let mut csv = Vec::new();
+            for (index, lexicon) in self.0.user_dictionaries.iter().enumerate().rev() {
+                csv.extend(lexicon.csv(index as u8 + 1, false)?);
             }
-            write!(
-                chars,
-                "0x{start:04X}..0x{:04X} {}",
-                end - 1,
-                data.category_names[info.category()]
-            )
-            .unwrap();
-            for (i, name) in data.category_names.iter().enumerate() {
-                if i != info.category() && info.0 & (1 << i) != 0 {
-                    write!(chars, " {name}").unwrap();
-                }
-            }
-            chars.push('\n');
-            start = end;
+            tokenizer = tokenizer
+                .with_user_lexicon(csv.as_slice())
+                .map_err(io::Error::other)?;
         }
-        let mut matrix = Vec::new();
-        writeln!(matrix, "{} {}", data.left_size, data.right_size)?;
-        for left in 0..data.right_size {
-            for right in 0..data.left_size {
-                writeln!(
-                    matrix,
-                    "{right} {left} {}",
-                    data.matrix[right + data.left_size * left]
-                )?;
-            }
-        }
-        let mut lexicon = Vec::new();
-        // 同点では先に指定された辞書を選ぶため、vibrato への登録順を反転する。
-        for (i, lex) in data.dictionaries.iter().enumerate().rev() {
-            lexicon.extend(lex.csv(i as u8, false)?);
-        }
-        let unknown = data.unknown.csv(255, true)?;
-        let dict = vibrato::SystemDictionaryBuilder::from_readers(
-            lexicon.as_slice(),
-            matrix.as_slice(),
-            chars.as_bytes(),
-            unknown.as_slice(),
-        )
-        .map_err(io::Error::other)?;
-        let mut bytes = Vec::new();
-        dict.write(&mut bytes).map_err(io::Error::other)?;
-        if let Some(path) = cache
-            && let Some(parent) = path.parent()
-            && fs::create_dir_all(parent).is_ok()
-        {
-            // 読み込み中の mmap を切り詰めないよう、別ファイルへの書き込み後に置き換える。
-            if let Ok(mut file) = tempfile::NamedTempFile::new_in(parent)
-                && file.write_all(&bytes).is_ok()
-            {
-                let _ = file.persist(path);
-            }
-        }
-        Self::tokenizer_from(vibrato::Dictionary::from_bytes(&bytes).map_err(io::Error::other)?)
+        Ok(SharedTokenizer(Arc::new(tokenizer)))
     }
 
     fn tokenizer_from(dict: vibrato::Dictionary) -> io::Result<SharedTokenizer> {
@@ -223,6 +127,90 @@ impl Model {
             .map_err(|e| invalid(e))?;
         Ok(Worker(tokenizer.0.new_worker(), self.clone()))
     }
+}
+
+pub(super) fn write_system_dictionary(directory: &Path, path: &Path) -> io::Result<()> {
+    let system = Lexicon::open(&directory.join("sys.dic"))?;
+    if system.kind != 0 {
+        return Err(invalid("システム辞書の種類が不正です"));
+    }
+    let unknown = Lexicon::open(&directory.join("unk.dic"))?;
+    if unknown.kind != 2
+        || unknown.left_size != system.left_size
+        || unknown.right_size != system.right_size
+    {
+        return Err(invalid("未知語辞書がシステム辞書と互換ではありません"));
+    }
+    let (category_names, char_infos) = read_characters(&directory.join("char.bin"))?;
+    let (left_size, right_size, costs) = read_matrix(&directory.join("matrix.bin"))?;
+    if left_size != system.left_size || right_size != system.right_size {
+        return Err(invalid("接続行列と辞書の文脈 ID の範囲が一致しません"));
+    }
+
+    let mut chars = String::new();
+    use std::fmt::Write as _;
+    for (index, name) in category_names.iter().enumerate() {
+        let info = char_infos
+            .iter()
+            .find(|info| info.category() == index)
+            .copied()
+            .unwrap_or(super::CharInfo((index as u32) << 18));
+        writeln!(
+            chars,
+            "{name} {} {} {}",
+            u8::from(info.invoke()),
+            u8::from(info.group()),
+            info.length()
+        )
+        .unwrap();
+    }
+    let mut start = 0usize;
+    while start < char_infos.len() {
+        let info = char_infos[start];
+        let mut end = start + 1;
+        while end < char_infos.len() && char_infos[end].0 == info.0 {
+            end += 1;
+        }
+        write!(
+            chars,
+            "0x{start:04X}..0x{:04X} {}",
+            end - 1,
+            category_names[info.category()]
+        )
+        .unwrap();
+        for (index, name) in category_names.iter().enumerate() {
+            if index != info.category() && info.0 & (1 << index) != 0 {
+                write!(chars, " {name}").unwrap();
+            }
+        }
+        chars.push('\n');
+        start = end;
+    }
+
+    let mut matrix = Vec::new();
+    writeln!(matrix, "{left_size} {right_size}")?;
+    for left in 0..right_size {
+        for right in 0..left_size {
+            writeln!(matrix, "{right} {left} {}", costs[right + left_size * left])?;
+        }
+    }
+    let lexicon = system.csv(0, false)?;
+    let unknown = unknown.csv(255, true)?;
+    let dictionary = vibrato::SystemDictionaryBuilder::from_readers(
+        lexicon.as_slice(),
+        matrix.as_slice(),
+        chars.as_bytes(),
+        unknown.as_slice(),
+    )
+    .map_err(io::Error::other)?;
+    let mut bytes = Vec::new();
+    dictionary.write(&mut bytes).map_err(io::Error::other)?;
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(&bytes)?;
+    file.persist(path).map_err(io::Error::other)?;
+    Ok(())
 }
 
 impl Worker {

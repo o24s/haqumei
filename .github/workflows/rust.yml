@@ -51,11 +51,9 @@ jobs:
           cache-on-failure: true
           cache-bin: false
 
-      # build.rs downloads the compressed dictionary and embeds it as-is; with
-      # `download-dictionary` nothing else in the cache directory is touched at
-      # build time, so only that file is cached. The rest of the directory is the
-      # runtime extraction cache (the expanded .dic is over 1 GB) and must stay
-      # out. A stale entry costs nothing: build.rs checks the file against
+      # build.rs verifies and embeds the downloaded archive unchanged, so only
+      # that file is cached. The runtime extraction cache stays out.
+      # A stale entry costs nothing: build.rs checks the file against
       # COMPRESSED_DICTIONARY_HASH and re-downloads on mismatch, which is also
       # why restore-keys may hand back an older dictionary.
       - name: Cache the downloaded dictionary

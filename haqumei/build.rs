@@ -13,13 +13,13 @@ use std::{
 };
 
 #[cfg(feature = "download-dictionary")]
-const DICTIONARY_URL: &str = "https://github.com/o24s/haqumei/releases/download/dictionary-20260829/dictionary-20260829.tar.zst";
+const DICTIONARY_URL: &str =
+    "https://github.com/o24s/haqumei/releases/download/dictionary-20260909/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
-    "c338ea8d785df4e9ab38d9a8b5e602bdda9abe349ed2fdb94880ac051d521b1d";
-#[cfg(feature = "download-dictionary")]
-const DICTIONARY_HASH: &str = "e02c49364287546b26a3650148323fcea8a80aaa6ca4bb35c41caa60f460ca07";
+    "5802f29334476f4e467fd0630e5a5047b7e26215aeb91a1d97b6ca1f13145702";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
+const RUNTIME_DICTIONARY_FILES: [&str; 3] = ["char.bin", "matrix.bin", "system.bin"];
 
 #[cfg(feature = "download-dictionary")]
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -31,6 +31,8 @@ static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_SRC");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
+    println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_ARCHIVE");
+    println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_RELEASE_NONCE");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("OUT_DIR is missing")?);
     if env::var_os("DOCS_RS").is_some() {
         println!(
@@ -40,6 +42,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .display()
         );
         println!("cargo:rustc-env=HAQUMEI_DICT_HASH=docs");
+        return Ok(());
+    }
+    if let Some(path) = env::var_os("HAQUMEI_DICT_ARCHIVE") {
+        if env::var_os("CARGO_FEATURE_EMBED_DICTIONARY").is_none() {
+            return Err("HAQUMEI_DICT_ARCHIVE requires the embed-dictionary feature".into());
+        }
+        let path = PathBuf::from(path).canonicalize()?;
+        println!("cargo:rerun-if-changed={}", path.display());
+        let prepared = out_dir.join("supplied-dictionary");
+        if prepared.exists() {
+            fs::remove_dir_all(&prepared)?;
+        }
+        fs::create_dir_all(&prepared)?;
+        tar::Archive::new(zstd::Decoder::new(File::open(&path)?)?).unpack(&prepared)?;
+        let hash = validate_archive_dictionary(&prepared)?;
+        println!("cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}", path.display());
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={hash}");
         return Ok(());
     }
     let has_download = env::var_os("CARGO_FEATURE_DOWNLOAD_DICTIONARY").is_some();
@@ -98,11 +117,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             fs::copy(&cached_dict_path, &compressed_dict_path)?;
         }
 
+        let prepared = out_dir.join("prepared-dictionary");
+        if prepared.exists() {
+            fs::remove_dir_all(&prepared)?;
+        }
+        fs::create_dir_all(&prepared)?;
+        tar::Archive::new(zstd::Decoder::new(File::open(&compressed_dict_path)?)?)
+            .unpack(&prepared)?;
+        let hash = validate_archive_dictionary(&prepared)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             compressed_dict_path.display()
         );
-        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={}", DICTIONARY_HASH);
+        println!("cargo:rustc-env=HAQUMEI_DICT_HASH={hash}");
     }
 
     if has_build && env::var_os("CARGO_FEATURE_EMBED_DICTIONARY").is_some() {
@@ -121,11 +148,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             &compiled,
             &Default::default(),
         )?;
-        let encoder = zstd::Encoder::new(File::create(&archive_path)?, 19)?;
-        let mut tar = tar::Builder::new(encoder);
-        tar.append_dir_all(".", &compiled)?;
-        tar.into_inner()?.finish()?;
-        let hash = hash_files(&compiled, &["dic", "bin"])?;
+        write_dictionary_archive(&compiled, &archive_path, 19)?;
+        let hash = validate_dictionary(&compiled)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
             archive_path.display()
@@ -135,24 +159,69 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn hash_files(dir: &Path, extensions: &[&str]) -> Result<String, Box<dyn Error>> {
-    let mut paths = Vec::new();
-    for entry in walkdir::WalkDir::new(dir) {
-        let entry = entry?;
-        if entry.file_type().is_file()
-            && entry
-                .path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .is_some_and(|ext| extensions.contains(&ext))
-        {
-            paths.push(entry.into_path());
-        }
-    }
-    paths.sort();
+fn hash_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
     let mut hash = Sha256::new();
-    for path in paths {
-        hash.update(fs::read(path)?);
+    for name in RUNTIME_DICTIONARY_FILES {
+        let path = dir.join(name);
+        if !path.is_file() {
+            return Err(format!("dictionary archive must contain {name}").into());
+        }
+        hash.update(fs::read(&path)?);
     }
     Ok(hex::encode(hash.finalize()))
+}
+
+fn validate_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
+    let hash = hash_dictionary(dir)?;
+    let model = haqumei_jpreprocess_dictionary::mecab::Model::open(dir, &[])?;
+    model.worker()?.analyze("あ")?;
+    Ok(hash)
+}
+
+fn validate_archive_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            return Err("dictionary archive must contain exactly three files at its root".into());
+        }
+        names.push(
+            entry
+                .file_name()
+                .into_string()
+                .map_err(|_| "dictionary archive contains a non-UTF-8 file name")?,
+        );
+    }
+    names.sort();
+    let expected = RUNTIME_DICTIONARY_FILES.map(str::to_owned);
+    if names != expected {
+        return Err(format!(
+            "dictionary archive must contain exactly {} at its root",
+            RUNTIME_DICTIONARY_FILES.join(", ")
+        )
+        .into());
+    }
+    validate_dictionary(dir)
+}
+
+fn write_dictionary_archive(
+    source: &Path,
+    output: &Path,
+    level: i32,
+) -> Result<(), Box<dyn Error>> {
+    let encoder = zstd::Encoder::new(File::create(output)?, level)?;
+    let mut archive = tar::Builder::new(encoder);
+    for name in RUNTIME_DICTIONARY_FILES {
+        let mut file = File::open(source.join(name))?;
+        let mut header = tar::Header::new_gnu();
+        header.set_size(file.metadata()?.len());
+        header.set_mode(0o644);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_mtime(0);
+        header.set_cksum();
+        archive.append_data(&mut header, name, &mut file)?;
+    }
+    archive.into_inner()?.finish()?;
+    Ok(())
 }

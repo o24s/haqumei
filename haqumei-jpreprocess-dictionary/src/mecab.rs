@@ -10,6 +10,11 @@ use std::{
 mod backend;
 pub use backend::Worker;
 
+/// MeCab 互換辞書から Haqumei 用の vibrato-rkyv システム辞書を生成します。
+pub fn write_system_dictionary(directory: &Path, output: &Path) -> io::Result<()> {
+    backend::write_system_dictionary(directory, output)
+}
+
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
@@ -26,7 +31,7 @@ fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
     ))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Lexicon {
     bytes: Vec<u8>,
     trie_end: usize,
@@ -103,6 +108,7 @@ impl Lexicon {
         ))
     }
 
+    #[cfg(test)]
     fn prefixes(&self, key: &[u8]) -> Vec<(usize, u32)> {
         let mut results = Vec::new();
         let Some((mut base, _)) = self.unit(0) else {
@@ -190,6 +196,65 @@ impl CharInfo {
     }
 }
 
+fn read_characters(path: &Path) -> io::Result<(Vec<String>, Vec<CharInfo>)> {
+    let bytes = fs::read(path)?;
+    let count = u32_at(&bytes, 0).ok_or_else(|| invalid("文字種のヘッダーがありません"))? as usize;
+    let names_end = 4usize
+        .checked_add(
+            count
+                .checked_mul(32)
+                .ok_or_else(|| invalid("文字種が多すぎます"))?,
+        )
+        .ok_or_else(|| invalid("文字種が多すぎます"))?;
+    if count == 0 || count > 18 || names_end.checked_add(4 * 0xffff) != Some(bytes.len()) {
+        return Err(invalid("文字種のファイル長が不正です"));
+    }
+    let mut names = Vec::with_capacity(count);
+    for index in 0..count {
+        let name = &bytes[4 + 32 * index..4 + 32 * (index + 1)];
+        let end = name
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(name.len());
+        names.push(
+            String::from_utf8(name[..end].to_vec())
+                .map_err(|_| invalid("文字種名が UTF-8 ではありません"))?,
+        );
+    }
+    let chars = bytes[names_end..]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|bytes| CharInfo(u32::from_le_bytes(*bytes)))
+        .collect::<Vec<_>>();
+    if chars.iter().any(|info| info.category() >= count) {
+        return Err(invalid("文字種の番号が不正です"));
+    }
+    Ok((names, chars))
+}
+
+fn read_matrix(path: &Path) -> io::Result<(usize, usize, Vec<i16>)> {
+    let bytes = fs::read(path)?;
+    let left_size =
+        u16_at(&bytes, 0).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
+    let right_size =
+        u16_at(&bytes, 2).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
+    let expected_length = left_size
+        .checked_mul(right_size)
+        .and_then(|size| size.checked_mul(2))
+        .and_then(|size| size.checked_add(4));
+    if left_size == 0 || right_size == 0 || expected_length != Some(bytes.len()) {
+        return Err(invalid("接続行列のファイル長が不正です"));
+    }
+    let matrix = bytes[4..]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|bytes| i16::from_le_bytes(*bytes))
+        .collect();
+    Ok((left_size, right_size, matrix))
+}
+
 /// 解析された候補形態素。特徴量には表層形を含みません。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Node {
@@ -228,11 +293,14 @@ pub struct Analysis {
 
 #[derive(Debug)]
 struct Data {
-    dictionaries: Vec<Lexicon>,
-    unknown: Lexicon,
+    system_path: PathBuf,
+    user_dictionaries: Vec<Lexicon>,
+    #[cfg(test)]
+    reference_dictionaries: Vec<Lexicon>,
+    #[cfg(test)]
+    reference_unknown: Option<Lexicon>,
     #[cfg(test)]
     unknown_values: Vec<u32>,
-    category_names: Vec<String>,
     tokenizer: std::sync::OnceLock<Result<backend::SharedTokenizer, String>>,
     chars: Vec<CharInfo>,
     matrix: Vec<i16>,
@@ -245,104 +313,83 @@ struct Data {
 pub struct Model(Arc<Data>);
 
 impl Model {
-    /// MeCab 形式の UTF-8 辞書と、指定順のユーザー辞書を読み込みます。
+    /// Haqumei 用の vibrato-rkyv システム辞書と、指定順の MeCab 互換
+    /// ユーザー辞書を読み込みます。
+    ///
+    /// `directory` には `system.bin`、`char.bin`、`matrix.bin` が必要です。
     pub fn open(directory: &Path, user_dictionaries: &[PathBuf]) -> io::Result<Self> {
         if user_dictionaries.len() >= 255 {
             return Err(invalid("ユーザー辞書は 254 個まで指定できます"));
         }
-        let mut dictionaries = vec![Lexicon::open(&directory.join("sys.dic"))?];
-        if dictionaries[0].kind != 0 {
-            return Err(invalid("システム辞書の種類が不正です"));
+        let system_path = directory.join("system.bin");
+        if !system_path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{} がありません", system_path.display()),
+            ));
         }
+        let mut users = Vec::with_capacity(user_dictionaries.len());
         for path in user_dictionaries {
             let dictionary = Lexicon::open(path)?;
-            if dictionary.kind != 1
-                || dictionary.left_size != dictionaries[0].left_size
-                || dictionary.right_size != dictionaries[0].right_size
-            {
-                return Err(invalid("ユーザー辞書がシステム辞書と互換ではありません"));
+            if dictionary.kind != 1 {
+                return Err(invalid("ユーザー辞書の種類が不正です"));
             }
-            dictionaries.push(dictionary);
+            users.push(dictionary);
         }
-        let unknown = Lexicon::open(&directory.join("unk.dic"))?;
-        if unknown.kind != 2
-            || unknown.left_size != dictionaries[0].left_size
-            || unknown.right_size != dictionaries[0].right_size
-        {
-            return Err(invalid("未知語辞書がシステム辞書と互換ではありません"));
+        let (_, chars) = read_characters(&directory.join("char.bin"))?;
+        let (left_size, right_size, matrix) = read_matrix(&directory.join("matrix.bin"))?;
+        if users.iter().any(|dictionary| {
+            dictionary.left_size != left_size || dictionary.right_size != right_size
+        }) {
+            return Err(invalid("ユーザー辞書がシステム辞書と互換ではありません"));
         }
-        let bytes = fs::read(directory.join("char.bin"))?;
-        let count =
-            u32_at(&bytes, 0).ok_or_else(|| invalid("文字種のヘッダーがありません"))? as usize;
-        let names_end = 4usize
-            .checked_add(
-                count
-                    .checked_mul(32)
-                    .ok_or_else(|| invalid("文字種が多すぎます"))?,
-            )
-            .ok_or_else(|| invalid("文字種が多すぎます"))?;
-        if count == 0 || count > 18 || names_end.checked_add(4 * 0xffff) != Some(bytes.len()) {
-            return Err(invalid("文字種のファイル長が不正です"));
-        }
-        let mut unknown_values = Vec::with_capacity(count);
-        let mut category_names = Vec::with_capacity(count);
-        for i in 0..count {
-            let name = &bytes[4 + 32 * i..4 + 32 * (i + 1)];
-            let end = name.iter().position(|b| *b == 0).unwrap_or(name.len());
-            category_names.push(
-                String::from_utf8(name[..end].to_vec())
-                    .map_err(|_| invalid("文字種名が UTF-8 ではありません"))?,
-            );
-            let value = unknown
-                .prefixes(&name[..end])
-                .into_iter()
-                .find(|(n, _)| *n == end)
-                .map(|(_, v)| v)
-                .ok_or_else(|| invalid("未知語辞書に文字種がありません"))?;
-            unknown_values.push(value);
-        }
-        let chars: Vec<_> = bytes[names_end..]
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|b| CharInfo(u32::from_le_bytes(*b)))
-            .collect();
-        if chars.iter().any(|c| c.category() >= count) {
-            return Err(invalid("文字種の番号が不正です"));
-        }
-        let bytes = fs::read(directory.join("matrix.bin"))?;
-        let left_size =
-            u16_at(&bytes, 0).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
-        let right_size =
-            u16_at(&bytes, 2).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
-        let expected_length = left_size
-            .checked_mul(right_size)
-            .and_then(|size| size.checked_mul(2))
-            .and_then(|size| size.checked_add(4));
-        if left_size != dictionaries[0].left_size
-            || right_size != dictionaries[0].right_size
-            || expected_length != Some(bytes.len())
-        {
-            return Err(invalid("接続行列と辞書の文脈 ID の範囲が一致しません"));
-        }
-        let matrix = bytes[4..]
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|b| i16::from_le_bytes(*b))
-            .collect();
         Ok(Self(Arc::new(Data {
-            dictionaries,
-            unknown,
+            system_path,
+            user_dictionaries: users,
             #[cfg(test)]
-            unknown_values,
-            category_names,
+            reference_dictionaries: Vec::new(),
+            #[cfg(test)]
+            reference_unknown: None,
+            #[cfg(test)]
+            unknown_values: Vec::new(),
             tokenizer: std::sync::OnceLock::new(),
             chars,
             matrix,
             left_size,
             right_size,
         })))
+    }
+
+    #[cfg(test)]
+    fn open_with_reference(directory: &Path, user_dictionaries: &[PathBuf]) -> io::Result<Self> {
+        let mut model = Self::open(directory, user_dictionaries)?;
+        let data = Arc::get_mut(&mut model.0).unwrap();
+        let system = Lexicon::open(&directory.join("sys.dic"))?;
+        let unknown = Lexicon::open(&directory.join("unk.dic"))?;
+        if system.kind != 0
+            || unknown.kind != 2
+            || system.left_size != data.left_size
+            || system.right_size != data.right_size
+            || unknown.left_size != data.left_size
+            || unknown.right_size != data.right_size
+        {
+            return Err(invalid("MeCab 互換辞書の文脈 ID の範囲が一致しません"));
+        }
+        let (category_names, _) = read_characters(&directory.join("char.bin"))?;
+        for name in category_names {
+            let value = unknown
+                .prefixes(name.as_bytes())
+                .into_iter()
+                .find(|(length, _)| *length == name.len())
+                .map(|(_, value)| value)
+                .ok_or_else(|| invalid("未知語辞書に文字種がありません"))?;
+            data.unknown_values.push(value);
+        }
+        data.reference_dictionaries.push(system);
+        data.reference_dictionaries
+            .extend(data.user_dictionaries.iter().cloned());
+        data.reference_unknown = Some(unknown);
+        Ok(model)
     }
 
     /// 前の形態素の右文脈 ID と、次の形態素の左文脈 ID から接続コストを返します。
@@ -403,7 +450,7 @@ impl Model {
             return Ok(Vec::new());
         }
         let mut nodes = Vec::new();
-        for (index, dictionary) in self.0.dictionaries.iter().enumerate() {
+        for (index, dictionary) in self.0.reference_dictionaries.iter().enumerate() {
             for (length, value) in dictionary.prefixes(&text.as_bytes()[start..end]) {
                 if length > 0 {
                     if !text.is_char_boundary(start + length) {
@@ -425,7 +472,7 @@ impl Model {
             let mut next = start + width;
             let mut grouped_end = None;
             let add = |stop, nodes: &mut Vec<Node>| {
-                self.0.unknown.append(
+                self.0.reference_unknown.as_ref().unwrap().append(
                     self.0.unknown_values[kind.category()],
                     start..stop,
                     255,
@@ -683,11 +730,11 @@ mod tests {
         let unknown = lexicon(&[("DEFAULT", 100, 0, "unknown")], 2);
         let unknown_values = vec![unknown.prefixes(b"DEFAULT").last().unwrap().1];
         Model(Arc::new(Data {
-            category_names: Vec::new(),
+            system_path: PathBuf::new(),
             tokenizer: std::sync::OnceLock::new(),
-            dictionaries: vec![lexicon(entries, 0)],
-            unknown,
-            #[cfg(test)]
+            user_dictionaries: Vec::new(),
+            reference_dictionaries: vec![lexicon(entries, 0)],
+            reference_unknown: Some(unknown),
             unknown_values,
             chars: vec![CharInfo(1 | (1 << 26)); 0xffff],
             matrix: vec![0; 4],
@@ -701,10 +748,14 @@ mod tests {
         let data = &model.0;
         fs::write(
             directory.path().join("sys.dic"),
-            &data.dictionaries[0].bytes,
+            &data.reference_dictionaries[0].bytes,
         )
         .unwrap();
-        fs::write(directory.path().join("unk.dic"), &data.unknown.bytes).unwrap();
+        fs::write(
+            directory.path().join("unk.dic"),
+            &data.reference_unknown.as_ref().unwrap().bytes,
+        )
+        .unwrap();
         let mut chars = 1u32.to_le_bytes().to_vec();
         let mut name = [0; 32];
         name[..7].copy_from_slice(b"DEFAULT");
@@ -720,6 +771,7 @@ mod tests {
             matrix.extend(cost.to_le_bytes());
         }
         fs::write(directory.path().join("matrix.bin"), matrix).unwrap();
+        write_system_dictionary(directory.path(), &directory.path().join("system.bin")).unwrap();
         directory
     }
 
@@ -729,11 +781,13 @@ mod tests {
         let directory = write_model(&model);
         Model::open(directory.path(), &[]).unwrap();
         for (offset, value) in [(8, 1u32), (16, 3u32), (20, 3u32)] {
-            let mut bytes = model.0.unknown.bytes.clone();
+            let mut bytes = model.0.reference_unknown.as_ref().unwrap().bytes.clone();
             bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
             fs::write(directory.path().join("unk.dic"), bytes).unwrap();
             assert_eq!(
-                Model::open(directory.path(), &[]).unwrap_err().kind(),
+                write_system_dictionary(directory.path(), &directory.path().join("new.bin"))
+                    .unwrap_err()
+                    .kind(),
                 io::ErrorKind::InvalidData
             );
         }
@@ -744,8 +798,8 @@ mod tests {
         let model = model(&[("a", 0, 0, "system")]);
         let directory = write_model(&model);
         for (name, lexicon) in [
-            ("sys.dic", &model.0.dictionaries[0]),
-            ("unk.dic", &model.0.unknown),
+            ("sys.dic", &model.0.reference_dictionaries[0]),
+            ("unk.dic", model.0.reference_unknown.as_ref().unwrap()),
         ] {
             let mut bytes = lexicon.bytes.clone();
             for offset in [16, 20] {
@@ -772,7 +826,7 @@ mod tests {
         user.bytes[from..from + 8].fill(0);
         let path = directory.path().join("user.dic");
         fs::write(&path, user.bytes).unwrap();
-        let model = Model::open(directory.path(), &[path]).unwrap();
+        let model = Model::open_with_reference(directory.path(), &[path]).unwrap();
         assert_eq!(
             model.analyze_reference("あ").unwrap_err().kind(),
             io::ErrorKind::InvalidData
@@ -840,7 +894,8 @@ mod tests {
         data.chars
             .fill(CharInfo(1 | (1 << 26) | (1 << 30) | (1 << 31)));
         data.chars[0x20] = CharInfo(2);
-        data.dictionaries.push(lexicon(&[("a", -1, 0, "user")], 1));
+        data.reference_dictionaries
+            .push(lexicon(&[("a", -1, 0, "user")], 1));
         let analysis = model.analyze_reference("a").unwrap();
         assert_eq!(analysis.nodes[analysis.best_path[0]].dictionary_index, 1);
         assert!(
@@ -910,8 +965,24 @@ mod comparison_tests {
             build_user(src, &[csv], &path).unwrap();
             users.push(path);
         }
-        let model = Model::open(&output, &users).unwrap();
+        let system_path = output.join("system.bin");
+        let system_before = fs::read(&system_path).unwrap();
+        let model = Model::open_with_reference(&output, &users).unwrap();
         let mut worker = model.worker().unwrap();
+        assert_eq!(fs::read(&system_path).unwrap(), system_before);
+        let changed = Model::open(&output, &users[..1]).unwrap();
+        changed.worker().unwrap().analyze("axb").unwrap();
+        assert_eq!(fs::read(&system_path).unwrap(), system_before);
+        fs::remove_file(output.join("sys.dic")).unwrap();
+        fs::remove_file(output.join("unk.dic")).unwrap();
+        Model::open(&output, &users)
+            .unwrap()
+            .worker()
+            .unwrap()
+            .analyze("axb")
+            .unwrap();
+        fs::remove_file(&system_path).unwrap();
+        assert!(Model::open(&output, &[]).is_err());
         for text in [
             "",
             "   ",
@@ -944,7 +1015,7 @@ mod comparison_tests {
         let directory = std::env::var_os("HAQUMEI_TEST_DICTIONARY").unwrap();
         let input =
             fs::read_to_string(std::env::var_os("HAQUMEI_TEST_SENTENCES").unwrap()).unwrap();
-        let model = Model::open(Path::new(&directory), &[]).unwrap();
+        let model = Model::open_with_reference(Path::new(&directory), &[]).unwrap();
         let mut worker = model.worker().unwrap();
         let mut failures = Vec::new();
         let mut order_only = 0;

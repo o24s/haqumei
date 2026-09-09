@@ -342,6 +342,27 @@ pub(crate) fn features_to_njd(
     Ok(NJD { nodes })
 }
 
+pub(super) fn extract_fullcontext_labels(
+    features: &[NjdFeature],
+) -> Result<Vec<haqumei_jlabel::Label>, HaqumeiError> {
+    let njd = features_to_njd(features)?;
+    Ok(haqumei_jpreprocess_jpcommon::njdnodes_to_features(
+        &njd.nodes,
+    ))
+}
+
+pub(super) fn extract_phonemes(
+    features: &[NjdFeature],
+) -> Result<Vec<crate::Phoneme>, HaqumeiError> {
+    let njd = features_to_njd(features)?;
+    haqumei_jpreprocess_jpcommon::njdnodes_to_phonemes_with_sources(&njd.nodes)
+        .into_iter()
+        .map(|phone| phone.phoneme)
+        .filter(|phone| phone != "sil")
+        .map(|phone| phone.parse())
+        .collect()
+}
+
 fn rust_njd_to_features(njd: &haqumei_jpreprocess_njd::NJD) -> Vec<NjdFeature> {
     njd.nodes
         .iter()

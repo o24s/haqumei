@@ -32,6 +32,10 @@ const DEFAULT_OUT_DIR: &str = "../compiled";
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
 struct Cli {
+    /// 既存の MeCab 辞書ディレクトリに system.bin を生成する
+    #[arg(long, value_name = "DIR", conflicts_with_all = ["dict_dir", "out_dir", "user_dict"])]
+    convert_mecab: Option<PathBuf>,
+
     /// 辞書ソースのディレクトリ (`*.csv`, `*.def` を含む)
     #[arg(long, value_name = "DIR")]
     dict_dir: Option<PathBuf>,
@@ -61,6 +65,19 @@ struct Cli {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let Some(directory) = &cli.convert_mecab {
+        let result = haqumei_jpreprocess_dictionary::mecab::write_system_dictionary(
+            directory,
+            &directory.join("system.bin"),
+        );
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     // 引数を省略した場合は、呼び出し位置に依存しないようクレートからの相対で解決する
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()));

@@ -190,6 +190,14 @@ pub fn build_system_with_charsets(
             &charsets,
         )?;
     }
+    if (all || options.sysdic || options.unknown || options.charcategory || options.matrix)
+        && charsets.output.encoding == UTF_8
+        && ["sys.dic", "unk.dic", "char.bin", "matrix.bin"]
+            .iter()
+            .all(|file| output.join(file).is_file())
+    {
+        crate::mecab::write_system_dictionary(output, &output.join("system.bin"))?;
+    }
     if input.join("dicrc").is_file() && input != output {
         fs::copy(input.join("dicrc"), output.join("dicrc"))?;
     }

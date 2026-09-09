@@ -9,4 +9,5 @@ clap.workspace = true
 csv.workspace = true
 glob.workspace = true
 haqumei = { path = "../haqumei"}
+haqumei-jpreprocess-dictionary.workspace = true
 thiserror.workspace = true
