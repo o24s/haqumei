@@ -17,9 +17,10 @@ const DICTIONARY_URL: &str =
     "https://github.com/o24s/haqumei/releases/download/dictionary-20260909/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
-    "5802f29334476f4e467fd0630e5a5047b7e26215aeb91a1d97b6ca1f13145702";
+    "d56d7220629988bee1be60f2d4d409f20e4366102afbfff46e939f1c13466d54";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 const RUNTIME_DICTIONARY_FILES: [&str; 3] = ["char.bin", "matrix.bin", "system.bin"];
+const DICTIONARY_LICENSE_NAME: &str = "COPYING";
 
 #[cfg(feature = "download-dictionary")]
 static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -154,7 +155,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(env::VarError::NotPresent) => 19,
             Err(error) => return Err(error.into()),
         };
-        write_dictionary_archive(&compiled, &archive_path, compression_level)?;
+        let copying = source.join(DICTIONARY_LICENSE_NAME);
+        write_dictionary_archive(
+            &compiled,
+            &archive_path,
+            copying.is_file().then_some(copying.as_path()),
+            compression_level,
+        )?;
         let hash = validate_dictionary(&compiled)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",
@@ -189,7 +196,7 @@ fn validate_archive_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         if !entry.file_type()?.is_file() {
-            return Err("dictionary archive must contain exactly three files at its root".into());
+            return Err("dictionary archive must contain only files at its root".into());
         }
         names.push(
             entry
@@ -199,11 +206,16 @@ fn validate_archive_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
         );
     }
     names.sort();
-    let expected = RUNTIME_DICTIONARY_FILES.map(str::to_owned);
+    let mut expected = RUNTIME_DICTIONARY_FILES.map(str::to_owned).to_vec();
+    if dir.join(DICTIONARY_LICENSE_NAME).is_file() {
+        expected.push(DICTIONARY_LICENSE_NAME.to_owned());
+        expected.sort();
+    }
     if names != expected {
         return Err(format!(
-            "dictionary archive must contain exactly {} at its root",
-            RUNTIME_DICTIONARY_FILES.join(", ")
+            "dictionary archive must contain exactly {} at its root, with an optional {}",
+            RUNTIME_DICTIONARY_FILES.join(", "),
+            DICTIONARY_LICENSE_NAME,
         )
         .into());
     }
@@ -213,6 +225,7 @@ fn validate_archive_dictionary(dir: &Path) -> Result<String, Box<dyn Error>> {
 fn write_dictionary_archive(
     source: &Path,
     output: &Path,
+    copying: Option<&Path>,
     level: i32,
 ) -> Result<(), Box<dyn Error>> {
     let encoder = zstd::Encoder::new(File::create(output)?, level)?;
@@ -227,6 +240,17 @@ fn write_dictionary_archive(
         header.set_mtime(0);
         header.set_cksum();
         archive.append_data(&mut header, name, &mut file)?;
+    }
+    if let Some(copying) = copying {
+        let mut file = File::open(copying)?;
+        let mut header = tar::Header::new_gnu();
+        header.set_size(file.metadata()?.len());
+        header.set_mode(0o644);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_mtime(0);
+        header.set_cksum();
+        archive.append_data(&mut header, DICTIONARY_LICENSE_NAME, &mut file)?;
     }
     archive.into_inner()?.finish()?;
     Ok(())

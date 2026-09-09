@@ -4,7 +4,7 @@ version = "0.1.5"
 edition = "2024"
 authors = ["o24s <fulmlumo@gmail.com>"]
 description = "An ONNX-based English-to-Katakana translator for the Haqumei Japanese G2P library."
-license = "Apache-2.0"
+license = "MIT"
 repository = "https://github.com/o24s/haqumei"
 readme = "README.md"
 

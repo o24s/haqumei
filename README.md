@@ -697,7 +697,7 @@ On Windows (PowerShell):
 
 > **Note:** If the environment variable is not set, the build script falls back to `dictionary`, relative to the crate root.
 
-Setting `HAQUMEI_DICT_ARCHIVE` to a prebuilt `.tar.zst` dictionary skips dictionary downloading and compilation. The archive must contain `system.bin`, `char.bin`, and `matrix.bin` at its root.
+Setting `HAQUMEI_DICT_ARCHIVE` to a prebuilt `.tar.zst` dictionary skips dictionary downloading and compilation. The archive must contain `system.bin`, `char.bin`, and `matrix.bin` at its root. Haqumei's distributed archive also contains `COPYING` with the dictionary license notices.
 
 `system.bin` is a `vibrato-rkyv` dictionary converted for Haqumei to preserve MeCab-compatible analysis results. It is neither a renamed `sys.dic` nor interchangeable with a standard Vibrato dictionary. Convert a UTF-8 MeCab-compatible dictionary directory containing `sys.dic`, `unk.dic`, `char.bin`, and `matrix.bin` with `cargo run -p haqumei-dict-tool -- --convert-mecab /path/to/compiled`. The command writes `system.bin` into the same directory.
 

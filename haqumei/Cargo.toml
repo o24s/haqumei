@@ -11,6 +11,7 @@ repository = "https://github.com/o24s/haqumei"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
 include = [
+    "LICENSE",
     "src/*",
     "data/**",
     "LICENSE-pyopenjtalk",
