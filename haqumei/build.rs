@@ -32,6 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_SRC");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
     println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_ARCHIVE");
+    println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_COMPRESSION_LEVEL");
     println!("cargo:rerun-if-env-changed=HAQUMEI_DICT_RELEASE_NONCE");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("OUT_DIR is missing")?);
     if env::var_os("DOCS_RS").is_some() {
@@ -148,7 +149,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             &compiled,
             &Default::default(),
         )?;
-        write_dictionary_archive(&compiled, &archive_path, 19)?;
+        let compression_level = match env::var("HAQUMEI_DICT_COMPRESSION_LEVEL") {
+            Ok(level) => level.parse()?,
+            Err(env::VarError::NotPresent) => 19,
+            Err(error) => return Err(error.into()),
+        };
+        write_dictionary_archive(&compiled, &archive_path, compression_level)?;
         let hash = validate_dictionary(&compiled)?;
         println!(
             "cargo:rustc-env=HAQUMEI_EMBED_DICT_PATH={}",

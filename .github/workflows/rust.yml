@@ -83,4 +83,6 @@ jobs:
 
       - name: Build and test the source dictionary
         if: runner.os == 'Linux'
+        env:
+          HAQUMEI_DICT_COMPRESSION_LEVEL: 1
         run: cargo test -p haqumei --lib --no-default-features --features "embed-dictionary build-dictionary"

@@ -4,8 +4,7 @@
 
 拡張されたHTSスタイルのコンテキストラベルと、文字列間のパーサー/シリアライザー用の構造体を提供します。
 
-`haqumei` は [korguchi](https://github.com/korguchi)氏 の拡張した[感嘆符をフルコンテキストラベルに追加する改善](https://github.com/o24s/haqumei/commit/4f41b847be617bff1adc96852694c784eb6f0476)を含む [tsukumijima](https://github.com/tsukumijima)氏 の [Open JTalk フォーク](https://github.com/tsukumijima/open_jtalk) をバインディングしています。
-`haqumei` はフルコンテキストラベルを扱うため、それに合わせた構造体の拡張を行っています。
+`haqumei-jlabel` は、[korguchi](https://github.com/korguchi) 氏が [tsukumijima](https://github.com/tsukumijima) 氏の [Open JTalk フォーク](https://github.com/tsukumijima/open_jtalk)に加えた[感嘆符をフルコンテキストラベルに含める拡張](https://github.com/o24s/haqumei/commit/4f41b847be617bff1adc96852694c784eb6f0476)に対応しています。
 
 `haqumei-jlabel` における `jlabel` からの変更部分は、オリジナルと同様に BSD 3-Clause License の下で公開します。
 

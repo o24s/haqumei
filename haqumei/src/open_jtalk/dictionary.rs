@@ -135,9 +135,9 @@ impl Dictionary {
 
         let mut needs_unpack = true;
 
-        if dict_path.exists() {
-            let paths = collect_dict_files(&dict_path)?;
-
+        if dict_path.exists()
+            && let Some(paths) = collect_cached_dict_files(&dict_path)?
+        {
             let mut metadata_hasher = Sha256::new();
 
             for path in &paths {
@@ -431,6 +431,21 @@ pub(crate) fn collect_dict_files(dir: &Path) -> Result<Vec<PathBuf>, std::io::Er
     Ok(paths)
 }
 
+#[cfg(feature = "embed-dictionary")]
+fn collect_cached_dict_files(dir: &Path) -> Result<Option<Vec<PathBuf>>, HaqumeiError> {
+    match collect_dict_files(dir) {
+        Ok(paths) => Ok(Some(paths)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            fs::remove_dir_all(dir).map_err(|source| HaqumeiError::CacheIo {
+                path: dir.to_path_buf(),
+                source,
+            })?;
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg(test)]
 mod compiler_tests {
     use super::MecabDictIndexCompiler;
@@ -479,5 +494,26 @@ mod compiler_tests {
             );
             assert!(bytes.ends_with(feature));
         }
+    }
+}
+
+#[cfg(all(test, feature = "embed-dictionary"))]
+mod embedded_tests {
+    use std::fs;
+
+    #[test]
+    fn incomplete_cached_dictionary_is_removed() {
+        let directory = tempfile::tempdir().unwrap();
+        let dict_dir = directory.path().join("decompressed");
+        fs::create_dir(&dict_dir).unwrap();
+        fs::write(dict_dir.join("char.bin"), []).unwrap();
+        fs::write(dict_dir.join("matrix.bin"), []).unwrap();
+
+        assert!(
+            super::collect_cached_dict_files(&dict_dir)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!dict_dir.exists());
     }
 }

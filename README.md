@@ -73,7 +73,7 @@
 | **Prosody Information Retrieval** | Provides phoneme sequences annotated with prosodic symbols, along with a word-to-phoneme mapping carrying structured prosody information (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).) |
 | **More Detailed Phoneme Labels** | Through allophone resolution for moraic nasals (撥音) and geminate consonants (促音), you can choose from several options for the allophones introduced as dedicated phoneme labels. (See [here](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) for details.) |
 | **Performance** | Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark)) |
-| **Accuracy** | Successive dictionary and logic improvements reach 0.87% PER on [jsut-label](https://github.com/prj-beatrice/jsut-label) and 0.81% CER on [ROHAN](https://github.com/mmorise/rohan4600). Further changes build on the dictionary and the accuracy techniques of [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy)) |
+| **Accuracy** | Successive dictionary and logic improvements reach 0.83% PER on [jsut-label](https://github.com/prj-beatrice/jsut-label) and 0.78% CER on [ROHAN](https://github.com/mmorise/rohan4600). Further changes build on the dictionary and the accuracy techniques of [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy)) |
 | **Unknown Word Fallbacks** | Reading estimation for English words that would otherwise be unknown via `haqumei-kanalizer`, an on'yomi fallback for kanji that match no dictionary entry, and accent correction for words written entirely in katakana. |
 | **Concurrency** | Enables concurrent G2P processing across multiple threads using the `*_batch` methods. |
 | **Diverse Options** | Using [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html), you can flexibly customize allophone phoneme label introduction, Unicode normalization, and reading behavior. |
@@ -572,7 +572,7 @@ The figures are the phoneme error rate (PER) on [prj-beatrice/jsut-label](https:
 | :--- | ---: | ---: |
 | pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
 | pyopenjtalk-plus 0.4.1.post9 | 1.09% | 1.60% |
-| **haqumei 0.9.0** | **0.87%** | **0.81%** |
+| **haqumei 0.12.0** | **0.83%** | **0.78%** |
 
 \* vanilla `pyopenjtalk` has no way to write long vowels and yotsugana in their
 original spelling, so its output cannot be brought to ROHAN's notation. Most of that
@@ -586,21 +586,21 @@ Every combination is listed under "All option combinations" below.
 
 | G2P | options | jsut-label (PER) | ROHAN (KER) |
 | :--- | :--- | ---: | ---: |
-| pyopenjtalk | - | 1.31%\* | 5.02% |
+| pyopenjtalk | - | 1.31% | 5.02% |
 | pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10%\* | 4.63% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
 | pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10%\* | 4.63% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
 | pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.62% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.09%\* | 4.65% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.09% | 4.65% |
 | pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.64% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.11%\* | 4.66% |
-| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.81% |
-| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 1.00%\* | 3.82% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.87% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.96%\* | 3.88% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.84% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.87%\* | 3.85% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.11% | 4.66% |
+| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.78% |
+| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.96% | 3.79% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.83% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.84% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.83% | 3.81% |
 
 `-` means it was not measured. The options that restore the original spelling
 (`revert_long_vowels` / `revert_yotsugana`) only mean something for ROHAN, which
@@ -619,7 +619,7 @@ uv run python run_all.py --datasets phoneme,no_lvs --sources jsut-label,rohan460
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **0.87%** (Substitute=1636, Delete=395, Insert=554, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **0.83%** (Substitute=1459, Delete=434, Insert=580, N=297843)
 
 `HaqumeiOptions`:
 ```rust
@@ -631,7 +631,7 @@ HaqumeiOptions {
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): **0.81%** (Substitute=824, Delete=154, Insert=246, N=150637)
+Katakana Error Rate (S+D+I / N_expected): **0.78%** (Substitute=757, Delete=164, Insert=250, N=150637)
 
 `HaqumeiOptions`:
 ```rust
