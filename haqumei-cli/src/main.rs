@@ -15,7 +15,7 @@ struct Cli {
     text: Option<String>,
 
     /// 入力ファイルへのパス。
-    /// 指定がない場合は、引数 [TEXT] または標準入力から読み取ります。
+    /// 指定がない場合は、引数 `TEXT` または標準入力から読み取ります。
     #[arg(short, long, value_name = "FILE")]
     input: Option<PathBuf>,
 
@@ -196,7 +196,7 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     split_n_before_r: bool,
 
-    /// ch, j の前の撥音「ン」をさらに専用の Npl [ɲ] (硬口蓋鼻音) に解決する (split_n_allophones が必要)
+    /// ch, j の前の撥音「ン」をさらに専用の Npl `[ɲ]` (硬口蓋鼻音) に解決する (split_n_allophones が必要)
     #[arg(long)]
     split_n_before_palatal_affricate: bool,
 
@@ -204,7 +204,7 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     split_q_allophones: bool,
 
-    /// 語末やポーズ前における、後続子音を伴わない促音「ッ」を専用の声門閉鎖音 ClQ [ʔ] として出力する
+    /// 語末やポーズ前における、後続子音を伴わない促音「ッ」を専用の声門閉鎖音 ClQ `[ʔ]` として出力する
     #[arg(long)]
     enable_final_glottal_stop: bool,
 }
