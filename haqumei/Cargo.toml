@@ -17,6 +17,7 @@ include = [
     "LICENSE-pyopenjtalk",
     "dictionary/COPYING",
     "build.rs",
+    "yomi_model/**",
 ]
 
 [features]
