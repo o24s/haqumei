@@ -14,10 +14,11 @@ use haqumei_kanalizer::{ConvertOptions, MaxLength};
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 
 use crate::{
-    Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, NjdFeature, OpenJTalk,
-    Phoneme, ProsodicPhoneme, UnicodeNormalization,
+    Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, MecabMorph, NjdFeature,
+    OpenJTalk, Phoneme, ProsodicPhoneme, UnicodeNormalization,
     data::OLD_PROVINCE_NAMES,
     errors::HaqumeiError,
+    open_jtalk::njd_char_spans,
     utils::{
         count_mora, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
         split_kana_mora,
@@ -283,17 +284,13 @@ fn should_use_kanalizer(chars: &[char]) -> bool {
 ///
 /// "IT" は辞書に拾われ、pos == "名詞" になる一方で、"it" は "i" と "t" と分かれた
 /// pos_group1 == "アルファベット" の `NjdFeature` になってしまう。
-/// そこで、連続するアルファベットを結合し、条件を満たすものを `Kanalizer` に通している。
-pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
+/// そこで、入力上で隣接するアルファベットを結合し、条件を満たすものを `Kanalizer` に通している。
+pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>, morphs: &[MecabMorph]) {
+    let mut spans = njd_char_spans(njd_features, morphs);
+    let has_source_positions = !morphs.is_empty();
     let mut i = 0;
     while i < njd_features.len() {
         let is_filler = njd_features[i].pos == "フィラー";
-        let is_alphabet = njd_features[i].pos_group1 == "アルファベット";
-
-        if !is_filler && !is_alphabet {
-            i += 1;
-            continue;
-        }
 
         if njd_features[i]
             .string
@@ -306,17 +303,24 @@ pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
 
         let mut end = i + 1;
 
-        // "アルファベット" (バラバラの文字) の場合のみ、後続のアルファベットをマージする。
-        // "フィラー" (未知英単語) の場合は既に1つの単語としてまとまっているのでマージしない。
-        if is_alphabet {
-            while end < njd_features.len() && njd_features[end].pos_group1 == "アルファベット"
-            {
-                end += 1;
-            }
-            if end - i == 1 {
-                i += 1;
-                continue;
-            }
+        // MeCab が英単語を既知語と接尾のアルファベットに分けることがある。
+        // 形態素の品詞ではなく元の文字位置を使うと、"notes" は 1 語に戻せる一方、
+        // "notes So" の空白を挟んだ "s" と "S" は別の語として残る。
+        while end < njd_features.len()
+            && njd_features[end]
+                .string
+                .chars()
+                .all(|c| matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
+            && (!has_source_positions || spans[end - 1].end == spans[end].start)
+        {
+            end += 1;
+        }
+
+        // 辞書に 1 形態素で収録された語は、辞書の読みを優先する。1 文字の
+        // アルファベットも従来どおり文字名で読む。
+        if end - i == 1 && !is_filler {
+            i += 1;
+            continue;
         }
 
         if end - i > 1 {
@@ -341,12 +345,17 @@ pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
             njd_features[i].mora_size = mora_size;
 
             njd_features.drain(i + 1..end);
+            if has_source_positions {
+                spans[i].end = spans[end - 1].end;
+                spans.drain(i + 1..end);
+            }
         }
 
         let f = &mut njd_features[i];
 
         if let Some(kana) = KANALIZER_CACHE.get(&f.string) {
             f.read = kana.clone();
+            f.mora_size = count_mora(&kana) as i32;
             f.pron = kana;
             f.acc = 0;
 
@@ -380,6 +389,157 @@ pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>) {
         }
 
         i += 1;
+    }
+}
+
+/// 空白に接しておらず、英字に挟まれたハイフンから休止を除く。
+pub(crate) fn suppress_english_hyphen_pause(
+    njd_features: &mut [NjdFeature],
+    morphs: &[MecabMorph],
+) {
+    if morphs.is_empty() || njd_features.len() < 3 {
+        return;
+    }
+
+    #[inline(always)]
+    fn is_alphabet(s: &str) -> bool {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
+    }
+
+    let spans = njd_char_spans(njd_features, morphs);
+    for i in 1..njd_features.len() - 1 {
+        if !matches!(njd_features[i].string.as_str(), "−" | "‐")
+            || !is_alphabet(&njd_features[i - 1].string)
+            || !is_alphabet(&njd_features[i + 1].string)
+            || spans[i - 1].end != spans[i].start
+            || spans[i].end != spans[i + 1].start
+        {
+            continue;
+        }
+
+        njd_features[i].read.clear();
+        njd_features[i].pron.clear();
+        njd_features[i].mora_size = 0;
+        njd_features[i].acc = 0;
+    }
+}
+
+/// 入力上で英字から始まって連続する英数字を 1 つの形態素へ戻す。
+pub(crate) fn merge_english_alphanumeric_words(
+    njd_features: &mut Vec<NjdFeature>,
+    morphs: &[MecabMorph],
+) {
+    if morphs.is_empty() || njd_features.len() < 2 {
+        return;
+    }
+
+    #[derive(Debug)]
+    struct Run {
+        start: usize,
+        end: usize,
+        surface: String,
+        has_alphabet: bool,
+        has_digit: bool,
+    }
+
+    let mut runs: Vec<Run> = Vec::new();
+    for morph in morphs {
+        let has_alphabet = morph
+            .surface
+            .chars()
+            .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
+        let has_digit = morph
+            .surface
+            .chars()
+            .any(|c| matches!(c, '0'..='9' | '０'..='９'));
+        let is_alphanumeric = !morph.surface.is_empty()
+            && morph.surface.chars().all(|c| {
+                matches!(
+                    c,
+                    'A'..='Z'
+                        | 'a'..='z'
+                        | 'Ａ'..='Ｚ'
+                        | 'ａ'..='ｚ'
+                        | '0'..='9'
+                        | '０'..='９'
+                )
+            });
+
+        if !is_alphanumeric {
+            continue;
+        }
+
+        if let Some(run) = runs.last_mut()
+            && run.end == morph.char_span.start
+        {
+            run.end = morph.char_span.end;
+            run.surface.push_str(&morph.surface);
+            run.has_alphabet |= has_alphabet;
+            run.has_digit |= has_digit;
+        } else {
+            runs.push(Run {
+                start: morph.char_span.start,
+                end: morph.char_span.end,
+                surface: morph.surface.clone(),
+                has_alphabet,
+                has_digit,
+            });
+        }
+    }
+
+    let mut spans = njd_char_spans(njd_features, morphs);
+    let mut feature_cursor = 0;
+    for run in runs.into_iter().filter(|run| {
+        run.has_alphabet
+            && run.has_digit
+            && run
+                .surface
+                .chars()
+                .next()
+                .is_some_and(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
+    }) {
+        let Some(start) = (feature_cursor..spans.len())
+            .find(|&i| spans[i].start == run.start && spans[i].end <= run.end)
+        else {
+            continue;
+        };
+
+        let mut end = start;
+        let mut reaches_run_end = false;
+        while let Some(span) = spans.get(end) {
+            if span.start < run.start || span.end > run.end {
+                break;
+            }
+            reaches_run_end |= span.start < span.end && span.end == run.end;
+            end += 1;
+        }
+
+        if end - start < 2 || !reaches_run_end {
+            feature_cursor = end;
+            continue;
+        }
+
+        let mut read = String::new();
+        let mut pron = String::new();
+        let mut mora_size = 0;
+        for feature in &njd_features[start..end] {
+            read.push_str(&feature.read);
+            pron.push_str(&feature.pron);
+            mora_size += feature.mora_size;
+        }
+
+        njd_features[start].string = run.surface.clone();
+        njd_features[start].orig = run.surface;
+        njd_features[start].read = read;
+        njd_features[start].pron = pron;
+        njd_features[start].mora_size = mora_size;
+        njd_features.drain(start + 1..end);
+
+        spans[start] = run.start..run.end;
+        spans.drain(start + 1..end);
+        feature_cursor = start + 1;
     }
 }
 

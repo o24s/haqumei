@@ -44,10 +44,11 @@ use crate::{
     nani_predict::NaniPredictor,
     open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY, reading_protection::protected_indices},
     postprocess::{
-        modify_acc_after_chaining, modify_context_reading, modify_english_words,
-        modify_filler_accent, modify_fraction_denominator, modify_old_province_yomi,
-        modify_placeholder_maru, predict_kana_english, process_odori_features, read_unknown_kanji,
-        restore_loanword_kana, retreat_acc_nuc, split_prefix_accent_phrase,
+        merge_english_alphanumeric_words, modify_acc_after_chaining, modify_context_reading,
+        modify_english_words, modify_filler_accent, modify_fraction_denominator,
+        modify_old_province_yomi, modify_placeholder_maru, predict_kana_english,
+        process_odori_features, read_unknown_kanji, restore_loanword_kana, retreat_acc_nuc,
+        split_prefix_accent_phrase, suppress_english_hyphen_pause,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -719,9 +720,21 @@ impl Haqumei {
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
-        if self.options.protect_user_dict_readings {
+        // `predict_kana_english` が英単語の区切りを決めるには、空白も含む MeCab
+        // 形態素の位置が要る。英字を含まないときは `OpenJTalk::run_frontend` を使い、
+        // 英字を含むときだけ詳細な解析結果を残す。
+        let needs_english_positions = self.options.predict_kana_english
+            && text
+                .chars()
+                .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
+
+        if self.options.protect_user_dict_readings || needs_english_positions {
             let (njd_features, morphs) = self.open_jtalk.run_frontend_detailed(text)?;
-            let protected = protected_indices(&njd_features, &morphs);
+            let protected = if self.options.protect_user_dict_readings {
+                protected_indices(&njd_features, &morphs)
+            } else {
+                HashMap::new()
+            };
             return self.apply_postprocessing(text, njd_features, &protected, &morphs);
         }
 
@@ -868,8 +881,10 @@ impl Haqumei {
             self.predict_nani_reading(&mut njd_features);
         }
         if options.predict_kana_english {
-            predict_kana_english(&mut njd_features);
+            predict_kana_english(&mut njd_features, morphs);
             modify_english_words(text, &mut njd_features);
+            merge_english_alphanumeric_words(&mut njd_features, morphs);
+            suppress_english_hyphen_pause(&mut njd_features, morphs);
         }
 
         // 読みを確定させた後、アクセント関連の補正より前に文脈依存の読みを解決する

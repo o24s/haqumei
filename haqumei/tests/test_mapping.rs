@@ -152,9 +152,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
             ("\u{3000}", vec!["sp"]),
             ("ｈａｑｕｍｅｉ", vec!["h", "a", "k", "u", "m", "e", "i"]),
             ("\u{3000}", vec!["sp"]),
-            ("ｇ", vec!["j", "i", "i"]),
-            ("２", vec!["ts", "u", "u"]),
-            ("ｐ", vec!["p", "i", "i"]),
+            ("ｇ２ｐ", vec!["j", "i", "i", "ts", "u", "u", "p", "i", "i"]),
         ];
 
         let result = haqumei.g2p_mapping(NIGHTMARE_TEXT).unwrap();
@@ -402,6 +400,82 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
         assert_eq!(result, expected);
     }
 
+    /// 英字形態素の結合は入力の空白を越えず、同じ英単語の中では品詞境界を越える。
+    #[test]
+    fn test_mapping_english_word_boundaries_follow_input_spaces() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let mapping = haqumei.g2p_mapping_detailed("notes So").unwrap();
+
+        let words: Vec<&str> = mapping.iter().map(|item| item.word.as_str()).collect();
+        assert_eq!(words, ["ｎｏｔｅｓ", "\u{3000}", "Ｓｏ"]);
+        assert_eq!(mapping[0].char_span, 0..5);
+        assert_eq!(mapping[1].char_span, 5..6);
+        assert_eq!(mapping[2].char_span, 6..8);
+        assert_eq!(mapping[0].pron, "ノーツ");
+        assert_eq!(mapping[2].pron, "ソー");
+
+        // `run_frontend` も同じ境界を使う。2 回目は推定結果のキャッシュを使うので、
+        // モーラ数もキャッシュ前と一致することを確かめる。
+        let features = haqumei.run_frontend("notes So").unwrap();
+        let words: Vec<(&str, &str, i32)> = features
+            .iter()
+            .map(|feature| {
+                (
+                    feature.string.as_str(),
+                    feature.pron.as_str(),
+                    feature.mora_size,
+                )
+            })
+            .collect();
+        assert_eq!(words, [("ｎｏｔｅｓ", "ノーツ", 3), ("Ｓｏ", "ソー", 2)]);
+    }
+
+    /// 英字に密着したハイフンだけを無音にし、ほかのマイナス記号には休止を残す。
+    #[test]
+    fn test_mapping_english_hyphen_does_not_pause() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        for text in ["end-to-end", "end‐to‐end"] {
+            let mapping = haqumei.g2p_mapping_detailed(text).unwrap();
+            let hyphens: Vec<_> = mapping
+                .iter()
+                .filter(|item| matches!(item.word.as_str(), "−" | "‐"))
+                .collect();
+            assert_eq!(hyphens.len(), 2, "入力: {text}");
+            assert!(
+                hyphens
+                    .iter()
+                    .all(|item| item.phonemes.is_empty() && item.is_ignored),
+                "入力: {text}"
+            );
+            assert!(
+                haqumei
+                    .g2p(text)
+                    .unwrap()
+                    .iter()
+                    .all(|phoneme| *phoneme != Phoneme::Pau),
+                "入力: {text}"
+            );
+
+            let prosody = haqumei.g2p_mapping_prosody(text).unwrap();
+            assert!(
+                prosody
+                    .iter()
+                    .filter(|item| matches!(item.word.as_str(), "−" | "‐"))
+                    .all(|item| item.phonemes.is_empty() && item.is_ignored),
+                "入力: {text}"
+            );
+        }
+
+        for text in ["3-2", "あ-い", "end - to", "-end", "end-"] {
+            let mapping = haqumei.g2p_mapping(text).unwrap();
+            assert!(
+                mapping.iter().any(|item| item.phonemes == ["pau"]),
+                "入力: {text}"
+            );
+        }
+    }
+
     /// "２0" は数字展開によって "二" と "十" に増える。(要素数増)
     /// "ｉｔ" は `predict_kana_english` によってマージされ 1つに減る。(要素数減)
     #[test]
@@ -477,9 +551,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
         let expected = vec![
             ("ｔｈａｎｋｓ", vec!["s", "a", "N", "k", "u", "s", "u"]),
             ("\u{3000}", vec!["sp"]),
-            ("ｇ", vec!["j", "i", "i"]),
-            ("２", vec!["ts", "u", "u"]),
-            ("ｐ", vec!["p", "i", "i"]),
+            ("ｇ２ｐ", vec!["j", "i", "i", "ts", "u", "u", "p", "i", "i"]),
         ];
 
         assert_eq!(result, expected);
@@ -503,11 +575,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 
         assert_eq!(
             mapped1,
-            vec![
-                ("ｇ", vec!["j", "i", "i"]),
-                ("２", vec!["ts", "u", "u"]),
-                ("ｐ", vec!["p", "i", "i"]),
-            ]
+            vec![("ｇ２ｐ", vec!["j", "i", "i", "ts", "u", "u", "p", "i", "i"],)]
         );
 
         let text2 = "text2video image2 text";
@@ -525,16 +593,32 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
         assert_eq!(
             mapped2,
             vec![
-                ("ｔｅｘｔ", vec!["t", "e", "k", "I", "s", "u", "t", "o"]),
-                ("２", vec!["t", "u", "u"]),
-                ("ｖｉｄｅｏ", vec!["b", "i", "d", "e", "o"]),
+                (
+                    "ｔｅｘｔ２ｖｉｄｅｏ",
+                    vec![
+                        "t", "e", "k", "I", "s", "u", "t", "o", "t", "u", "u", "b", "i", "d", "e",
+                        "o",
+                    ],
+                ),
                 ("\u{3000}", vec!["sp"]),
-                ("ｉｍａｇｅ", vec!["i", "m", "a", "a", "j", "u"]),
-                ("二", vec!["n", "i"]),
+                ("ｉｍａｇｅ２", vec!["i", "m", "a", "a", "j", "u", "n", "i"],),
                 ("\u{3000}", vec!["sp"]),
                 ("ｔｅｘｔ", vec!["t", "e", "k", "I", "s", "u", "t", "o"]),
             ]
         );
+    }
+
+    #[test]
+    fn test_mapping_mixed_japanese_and_alphanumeric_words() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let mapping = haqumei
+            .g2p_mapping("このJapaneseなG2Pはvery精度がhigh。")
+            .unwrap();
+
+        let g2p = mapping.iter().find(|item| item.word == "Ｇ２Ｐ").unwrap();
+        assert_eq!(g2p.phonemes, ["j", "i", "i", "ts", "u", "u", "p", "i", "i"]);
+        assert_eq!(g2p.char_span, 11..14);
+        assert!(!mapping.iter().any(|item| item.word == "Ｇ２"));
     }
 
     /// 数字の縮約が空白をまたぐとき、その空白が mapping から消えないこと。
