@@ -485,6 +485,16 @@ mod tests {
     }
 
     #[test]
+    fn test_corpus_based_unvoicing_environments() {
+        let mut haqumei = Haqumei::new().unwrap();
+
+        assert_eq!(
+            haqumei.g2p("地質").unwrap(),
+            ["ch", "i", "sh", "I", "ts", "u"]
+        );
+    }
+
+    #[test]
     fn test_g2p_iu_normalize_iu() {
         let mut haqumei = Haqumei::with_options(HaqumeiOptions {
             normalize_iu: Some(IuPronunciation::Iu),

@@ -9,6 +9,13 @@
 //! 4. アクセント核で無声化しない
 //! 5. 無声子音(`k ky s sh t ty ch ts h f hy p py`)に囲まれた「`i`」と「`u`」が無声化
 //!    - 例外：`s->s`, `s->sh`, `f->f`, `f->h`, `f->hy`, `h->f`, `h->h`, `h->hy`
+//! 6. 破擦音の後、摩擦音の前にある「`i`」と「`u`」は有声のままにする
+//!
+//! ## 参照文献
+//!
+//! - Maekawa, K. & Kikuchi, H. (2005). Corpus-based analysis of vowel
+//!   devoicing in spontaneous Japanese: an interim report. *Voicing in
+//!   Japanese*, 205-228. 規則 6 は Tables 6-7 に基づく。
 
 use haqumei_jpreprocess_core::pronunciation::{
     Mora, MoraEnum,
@@ -169,6 +176,25 @@ fn apply_unvoice_rule(mora_curr: &Mora, mora_next: Option<&Mora>) -> Option<bool
         return None;
     }
 
+    #[inline(always)]
+    fn is_affricate(consonant: Option<Consonant>) -> bool {
+        matches!(consonant, Some(Consonant::Ch | Consonant::Ts))
+    }
+
+    #[inline(always)]
+    fn is_fricative(consonant: Option<Consonant>) -> bool {
+        matches!(
+            consonant,
+            Some(Consonant::F | Consonant::H | Consonant::S | Consonant::Sh)
+        )
+    }
+
+    // Maekawa, K. & Kikuchi, H. (2005) によると、
+    // 破擦音から摩擦音へ続く環境の無声化率は /i/ で 33.3%、/u/ で 48.1% だった。
+    if is_affricate(curr_consonant) && is_fricative(next_consonant) {
+        return Some(true);
+    }
+
     Some(match (curr_consonant, next_consonant) {
         (Some(Consonant::S), Some(Consonant::S | Consonant::Sh)) => true,
         (
@@ -217,7 +243,36 @@ fn apply_unvoice_rule(mora_curr: &Mora, mora_next: Option<&Mora>) -> Option<bool
 mod tests {
     use haqumei_jpreprocess_core::pronunciation::{Mora, MoraEnum};
 
-    use crate::{NJD, unvoiced_vowel::njd_set_unvoiced_vowel};
+    use crate::{
+        NJD,
+        unvoiced_vowel::{apply_unvoice_rule, njd_set_unvoiced_vowel},
+    };
+
+    fn mora(mora_enum: MoraEnum) -> Mora {
+        Mora {
+            mora_enum,
+            is_voiced: true,
+        }
+    }
+
+    #[test]
+    fn corpus_based_manner_interactions() {
+        for (current, next, expected) in [
+            // 破擦音から摩擦音へ続く /i/ と /u/ は有声が最頻だった。
+            (MoraEnum::Chi, MoraEnum::Hi, Some(true)),
+            (MoraEnum::Tsu, MoraEnum::Fu, Some(true)),
+            // 摩擦音から破擦音・破裂音へ続く環境は 95% 以上が無声だった。
+            (MoraEnum::Shi, MoraEnum::Chi, Some(false)),
+            (MoraEnum::Fu, MoraEnum::Tsu, Some(false)),
+            (MoraEnum::Hi, MoraEnum::Ki, Some(false)),
+            (MoraEnum::Fu, MoraEnum::Ku, Some(false)),
+        ] {
+            assert_eq!(
+                apply_unvoice_rule(&mora(current), Some(&mora(next))),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn exclamation_keeps_the_desu_unvoicing_rule() {
