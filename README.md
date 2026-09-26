@@ -46,6 +46,7 @@
   - [Python](#python-1)
 - [Advanced Features](#advanced-features)
   - [Word-Phoneme Mapping APIs](#word-phoneme-mapping-apis)
+  - [IPA Transcription (`g2ipa`)](#ipa-transcription-g2ipa)
   - [Getting Reading Candidates (`g2p_candidates`)](#getting-reading-candidates-g2p_candidates)
   - [Modifying Output with G2P Options](#modifying-output-with-g2p-options)
 - [Prosody Features (`g2p_prosody` / `g2p_mapping_prosody`)](#prosody-features-g2p_prosody--g2p_mapping_prosody)
@@ -70,6 +71,7 @@
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | Provides mapping information between words ($\approx$ surface forms / dictionary entries) and phonemes, which was previously difficult to obtain directly. Enables retrieval of detailed analysis results with minimal loss of information from the input text, including unknown-word information. (See [Advanced Features](#advanced-features)) |
+| **IPA Transcription** | Converts the full phoneme sequence to typed broad-IPA phones, grouped by word. `g2ipa_prosody` also retains pitch accent and prosodic boundaries (`g2ipa`, `g2ipa_prosody`). |
 | **Prosody Information Retrieval** | Provides phoneme sequences annotated with prosodic symbols, along with a word-to-phoneme mapping carrying structured prosody information (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).) |
 | **More Detailed Phoneme Labels** | Through allophone resolution for moraic nasals (撥音) and geminate consonants (促音), you can choose from several options for the allophones introduced as dedicated phoneme labels. (See [here](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) for details.) |
 | **Performance** | Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark)) |
@@ -322,6 +324,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 ```
+
+### IPA Transcription (`g2ipa`)
+
+`g2ipa` converts the complete phoneme sequence instead of replacing each `Phoneme`
+independently. This lets a geminate and its following consonant become one phone—for
+example, `cl + k` becomes `kː` rather than `kːk`. Moraic nasals are resolved from their
+surrounding phones where the context determines the realization.
+
+The result is a rule-based broad phonetic transcription, not a narrow transcription of a
+recording. `g2ipa` returns a `WordIpaMap` for each word. Its `IpaToken` values distinguish
+phones, unknown input, and context that could not be resolved. A phone is an `IpaPhone`
+enum value rather than a runtime string; `IpaPhone::as_str()` returns its IPA symbol.
+Allophone-label options do not change the IPA tokens: `g2ipa` always reapplies its
+conservative, evidence-based rules to moraic nasals and geminates.
+
+```rust
+use haqumei::{Haqumei, IpaPhone, IpaToken};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+  let mapping = haqumei.g2ipa("学校")?;
+  assert_eq!(mapping[0].word, "学校");
+  assert_eq!(mapping[0].tokens, [
+    IpaToken::Phone(IpaPhone::G),
+    IpaToken::Phone(IpaPhone::A),
+    IpaToken::Phone(IpaPhone::LongK),
+    IpaToken::Phone(IpaPhone::LongO),
+  ]);
+  Ok(())
+}
+```
+
+`g2ipa_prosody` returns `WordIpaProsody`. Each token has an ordered list of
+`IpaTokenProsody` values retaining the `PitchAccent` of every source phoneme and any
+boundary inside a compound phone. The corresponding `g2ipa_batch` and
+`g2ipa_prosody_batch` methods process multiple inputs
+concurrently. Python exposes the same four methods and structured result types. The CLI
+uses `--mode ipa` for the plain mapping and `--mode ipa-prosody` for pitch and boundaries.
 
 ### Getting Reading Candidates (`g2p_candidates`)
 

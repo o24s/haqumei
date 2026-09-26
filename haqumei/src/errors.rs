@@ -64,6 +64,9 @@ pub enum HaqumeiError {
     #[error("Unknown phoneme string: {0:?}")]
     UnknownPhoneme(String),
 
+    #[error("Unknown IPA phone string: {0:?}")]
+    UnknownIpaPhone(String),
+
     #[error(transparent)]
     JpCommonLabelError(#[from] JpCommonLabelError),
 

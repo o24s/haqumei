@@ -46,6 +46,140 @@ impl Parse for Entries {
 }
 
 #[proc_macro]
+pub fn ipa_phones(input: TokenStream) -> TokenStream {
+    let Entries { items } = parse_macro_input!(input as Entries);
+
+    if items.len() > 256 {
+        return syn::Error::new_spanned(&items[255].name, "too many IPA phones for repr(u8)")
+            .to_compile_error()
+            .into();
+    }
+
+    let mut seen = HashSet::new();
+    for item in &items {
+        let symbol = item.value.value();
+        if !seen.insert(symbol.clone()) {
+            return syn::Error::new_spanned(
+                &item.value,
+                format!("duplicate IPA phone string: {symbol:?}"),
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
+
+    let attrs = items.iter().map(|item| &item.attrs).collect::<Vec<_>>();
+    let names = items.iter().map(|item| &item.name).collect::<Vec<_>>();
+    let symbols = items.iter().map(|item| &item.value).collect::<Vec<_>>();
+
+    quote! {
+        /// IPA 変換器が出力する phone の有限集合。
+        ///
+        /// IPA 記号は [`IpaPhone::as_str`] または [`core::fmt::Display`] で取得する。
+        #[repr(u8)]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[non_exhaustive]
+        pub enum IpaPhone {
+            #(
+                #( #attrs )*
+                #names
+            ),*
+        }
+
+        impl IpaPhone {
+            /// 定義済みの IPA phone を列挙順に並べたスライス。
+            pub const ALL: &'static [Self] = &[
+                #( Self::#names ),*
+            ];
+
+            /// 定義済みの IPA 記号を列挙順に並べたスライス。
+            pub const SYMBOLS: &'static [&'static str] = &[
+                #( #symbols ),*
+            ];
+
+            /// IPA 記号を返す。
+            #[inline]
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    #( Self::#names => #symbols ),*
+                }
+            }
+        }
+
+        impl ::core::fmt::Debug for IpaPhone {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl ::core::fmt::Display for IpaPhone {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl ::core::str::FromStr for IpaPhone {
+            type Err = crate::HaqumeiError;
+
+            fn from_str(s: &str) -> ::core::result::Result<Self, Self::Err> {
+                match s {
+                    #( #symbols => Ok(Self::#names) ),*,
+                    _ => Err(crate::HaqumeiError::UnknownIpaPhone(s.to_owned())),
+                }
+            }
+        }
+
+        impl ::core::convert::AsRef<str> for IpaPhone {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl ::core::borrow::Borrow<str> for IpaPhone {
+            fn borrow(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl ::core::cmp::PartialEq<&str> for IpaPhone {
+            fn eq(&self, other: &&str) -> bool {
+                self.as_str() == *other
+            }
+        }
+
+        impl ::core::cmp::PartialEq<IpaPhone> for &str {
+            fn eq(&self, other: &IpaPhone) -> bool {
+                *self == other.as_str()
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl ::serde::Serialize for IpaPhone {
+            fn serialize<S>(&self, serializer: S) -> ::core::result::Result<S::Ok, S::Error>
+            where
+                S: ::serde::Serializer,
+            {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de> ::serde::Deserialize<'de> for IpaPhone {
+            fn deserialize<D>(deserializer: D) -> ::core::result::Result<Self, D::Error>
+            where
+                D: ::serde::Deserializer<'de>,
+            {
+                let symbol = <::std::string::String as ::serde::Deserialize>::deserialize(
+                    deserializer,
+                )?;
+                symbol.parse().map_err(::serde::de::Error::custom)
+            }
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
 pub fn phonemes(input: TokenStream) -> TokenStream {
     let Entries { items } = parse_macro_input!(input as Entries);
 

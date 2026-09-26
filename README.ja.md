@@ -46,6 +46,7 @@
   - [Python](#python-1)
 - [Advanced Features](#advanced-features)
   - [Word-Phoneme Mapping APIs について](#word-phoneme-mapping-apis-について)
+  - [IPA 変換 (`g2ipa`)](#ipa-変換-g2ipa)
   - [読みの候補を得る (`g2p_candidates`)](#読みの候補を得る-g2p_candidates)
   - [G2P オプションで出力を変更する](#g2p-オプションで出力を変更する)
 - [プロソディ機能 (`g2p_prosody` / `g2p_mapping_prosody`)](#プロソディ機能-g2p_prosody--g2p_mapping_prosody)
@@ -71,6 +72,7 @@
 | | |
 | :--- | :--- |
 | **Word-Phoneme Mapping APIs** | 従来は直接取得が難しかった、単語 ($\approx$ 表層形・辞書エントリ) と音素のマッピング情報を提供します。入力テキストに対して情報のロスが少なく、未知語情報を含む詳細な解析結果を取得可能です。 ([Advanced Features](#advanced-features)) |
+| **IPA 変換** | 音素列全体を型付きの広い IPA phone に変換し、単語ごとに返します。`g2ipa_prosody` はピッチアクセントと韻律境界も保持します (`g2ipa`, `g2ipa_prosody`)。 |
 | **プロソディ情報の取得** | プロソディ記号付き音素列と、構造化されたプロソディー情報をもつ単語と音素列マッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。) |
 | **より詳細な音素ラベル** | 撥音・促音に対する条件異音 (allophone) 解決によって、専用の音素ラベルとして導入された異音の取得をいくつかの選択肢から設定できます。 (詳細は、[ここ](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) を参照してください。) |
 | **パフォーマンス** | Rustによるネイティブ実装によって高速な処理を実現しています。([ベンチマーク](#ベンチマーク)) |
@@ -330,6 +332,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 ```
+
+### IPA 変換 (`g2ipa`)
+
+`g2ipa` は `Phoneme` を一つずつ置換せず、音素列全体を変換します。促音と後続子音を
+一つの phone として扱うため、`cl + k` は `kːk` ではなく `kː` になります。撥音も、
+前後の音から実現を決められる環境では文脈に応じて変換されます。
+
+出力は規則による広い音声表記であり、録音を観測した狭い音声表記ではありません。
+`g2ipa` は単語ごとの `WordIpaMap` を返します。`IpaToken` は phone、未知の入力、
+文脈から解決できなかった音素を別々に表します。phone は実行時に作る文字列ではなく
+`IpaPhone` の列挙値であり、`IpaPhone::as_str()` から IPA 記号を取得できます。
+異音ラベルを選ぶオプションは IPA token に影響しません。`g2ipa` は撥音と促音に対し、
+根拠の強い保守的な規則を常に適用し直します。
+
+```rust
+use haqumei::{Haqumei, IpaPhone, IpaToken};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut haqumei = Haqumei::new()?;
+  let mapping = haqumei.g2ipa("学校")?;
+  assert_eq!(mapping[0].word, "学校");
+  assert_eq!(mapping[0].tokens, [
+    IpaToken::Phone(IpaPhone::G),
+    IpaToken::Phone(IpaPhone::A),
+    IpaToken::Phone(IpaPhone::LongK),
+    IpaToken::Phone(IpaPhone::LongO),
+  ]);
+  Ok(())
+}
+```
+
+`g2ipa_prosody` は `WordIpaProsody` を返します。各 IPA token の
+`IpaTokenProsody` は、token を構成する音素の `PitchAccent` と途中の境界を
+入力順に保持します。`g2ipa_batch` と
+`g2ipa_prosody_batch` は複数の入力を並行して処理します。Python の `Haqumei`
+クラスにも同じ四つのメソッドと構造化された返り値があります。CLI では通常の mapping を
+`--mode ipa`、ピッチと境界を `--mode ipa-prosody` で利用できます。
 
 ### 読みの候補を得る (`g2p_candidates`)
 

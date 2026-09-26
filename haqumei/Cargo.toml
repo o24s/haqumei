@@ -72,3 +72,6 @@ zstd.workspace = true
 
 reqwest = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true

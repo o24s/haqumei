@@ -5,6 +5,7 @@ pub mod errors;
 pub mod features;
 #[macro_use]
 mod macros;
+pub mod ipa;
 pub mod nani_predict;
 pub mod open_jtalk;
 pub mod options;
@@ -30,6 +31,9 @@ pub use candidates::{
     Candidates,
 };
 pub use features::NjdFeature;
+pub use ipa::{
+    IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, WordIpaMap, WordIpaProsody,
+};
 pub use open_jtalk::{
     LatticeNode, MecabDictIndexCompiler, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk,
     njd_char_spans, unset_user_dictionary, update_global_dictionary,
@@ -1043,6 +1047,16 @@ impl Haqumei {
     impl_batch_method_haqumei!(
         /// プロソディ記号付き音素マッピングのバッチ処理。
         g2p_mapping_prosody_batch => g2p_mapping_prosody -> Vec<WordPhonemeProsody>
+    );
+
+    impl_batch_method_haqumei!(
+        /// 単語ごとの IPA の広い音声表記への変換を並行して行うバッチ処理。
+        g2ipa_batch => g2ipa -> Vec<WordIpaMap>
+    );
+
+    impl_batch_method_haqumei!(
+        /// ピッチアクセントと韻律境界を保持した IPA 変換のバッチ処理。
+        g2ipa_prosody_batch => g2ipa_prosody -> Vec<WordIpaProsody>
     );
 
     impl_batch_method_haqumei!(

@@ -54,6 +54,33 @@ $ haqumei-cli "青い空" --mode prosody --prosody-format prefix
 ^ L_a H_o L_i # H_s H_o L_r L_a $
 ```
 
+### IPA Output
+
+`--mode ipa` produces a broad IPA transcription using the context around moraic nasals
+and geminate consonants. Allophone-label options do not change this transcription;
+`ipa` always uses the conservative rules built into the IPA converter. The API result is
+grouped by word; text output flattens that mapping for display.
+
+```bash
+$ haqumei-cli "学校" --mode ipa
+ɡ a kː oː
+
+$ haqumei-cli "学校" --mode ipa-prosody --prosody-format prefix
+L_ɡ L_a H_kː H_oː
+
+$ haqumei-cli "コーヒー" --mode ipa-prosody --prosody-format prefix
+L_k {LH}_oː H_h {HL}_iː
+```
+
+`ipa-prosody` adds pitch accent and prosodic boundaries. In text output, `#` marks an
+accent-phrase boundary, `_` a pause, and `?` or `!` an interrogative or exclamatory
+ending. If pitch changes inside a phone built from multiple source phonemes, `{LH}_oː`
+retains that sequence; `{L#L}_kː` similarly retains an internal accent-phrase boundary.
+The same pitch sequence is `oː:{01}` in numeric format and `oː{LH}` in default format.
+Unknown input is printed as `{unk}`, while context that cannot be resolved is
+printed as, for example, `{unresolved:cl}`. JSON output preserves the word mappings,
+typed IPA phones, pitch, and boundaries.
+
 ### JSON Lines Output
 
 Supports structured JSON output by specifying `--format json`.
@@ -70,6 +97,8 @@ $ haqumei-cli "テスト" --mode mapping-detailed --format json
 `haqumei-cli` supports various output modes:
 
 - `g2p` (default): Flat phoneme sequence.
+- `ipa` (`g2ipa`, `ipa-mapping`, `g2ipa-mapping`): Word-grouped, context-sensitive broad IPA transcription.
+- `ipa-prosody` (`g2ipa-prosody`): IPA mapping with pitch accent and prosodic boundaries.
 - `prosody`: Phoneme sequence with prosodic symbols (accents, pitch, boundaries).
 - `g2p-detailed`: Detailed phoneme sequence (symbols converted to `sp`, `unk`, etc.).
 - `kana`: Katakana sequence.

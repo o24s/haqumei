@@ -9,6 +9,15 @@ pub enum PyPitchAccent {
     High,
 }
 
+impl From<PitchAccent> for PyPitchAccent {
+    fn from(pitch: PitchAccent) -> Self {
+        match pitch {
+            PitchAccent::Low => Self::Low,
+            PitchAccent::High => Self::High,
+        }
+    }
+}
+
 #[pyclass(name = "ProsodyFormat", module = "haqumei", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PyProsodyFormat {
@@ -46,10 +55,7 @@ impl From<ProsodicPhoneme> for PyProsodicPhoneme {
             ProsodicPhoneme::Phoneme { phoneme, pitch } => Self {
                 kind: "phoneme",
                 phoneme: Some(phoneme.as_str()),
-                pitch: pitch.map(|p| match p {
-                    PitchAccent::Low => PyPitchAccent::Low,
-                    PitchAccent::High => PyPitchAccent::High,
-                }),
+                pitch: pitch.map(Into::into),
             },
             ProsodicPhoneme::AccentPhraseBoundary => Self {
                 kind: "accent_phrase_boundary",

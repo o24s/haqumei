@@ -54,6 +54,32 @@ $ haqumei-cli "青い空" --mode prosody --prosody-format prefix
 ^ L_a H_o L_i # H_s H_o L_r L_a $
 ```
 
+### IPA の出力
+
+`--mode ipa` は、撥音や促音の前後関係を使った広い IPA 音声表記を出力します。
+異音ラベルを選ぶオプションは出力を変えず、IPA 変換器が持つ保守的な規則を常に使います。
+API の返り値は単語ごとの mapping であり、テキスト出力では表示用に平坦化します。
+
+```bash
+$ haqumei-cli "学校" --mode ipa
+ɡ a kː oː
+
+$ haqumei-cli "学校" --mode ipa-prosody --prosody-format prefix
+L_ɡ L_a H_kː H_oː
+
+$ haqumei-cli "コーヒー" --mode ipa-prosody --prosody-format prefix
+L_k {LH}_oː H_h {HL}_iː
+```
+
+`ipa-prosody` はピッチアクセントと韻律境界を加えます。テキスト形式では、
+アクセント句境界を `#`、ポーズを `_`、疑問と感嘆の終結を `?` と `!` で表します。
+複数音素から作る phone の途中でピッチが変わる場合は `{LH}_oː`、途中に
+アクセント句境界がある場合は `{L#L}_kː` のように、phone 内の並びを `{}` で表します。
+同じ並びは numeric 形式では `oː:{01}`、default 形式では `oː{LH}` になります。
+未知語は `{unk}`、文脈から変換できなかった音素は `{unresolved:cl}` のように
+出力します。JSON 形式では、単語 mapping、型付き IPA phone、ピッチ、境界を
+そのまま保持します。
+
 ### JSON Lines 形式での出力
 
 `--format json` を指定することで、構造化された JSON 形式での出力に対応しています。
@@ -70,6 +96,8 @@ $ haqumei-cli "テスト" --mode mapping-detailed --format json
 `haqumei-cli` は様々な出力モードをサポートしています。
 
 - `g2p` (デフォルト): 音素列 (フラット)
+- `ipa` (`g2ipa`, `ipa-mapping`, `g2ipa-mapping`): 単語ごとの文脈に基づく広い IPA 音声表記
+- `ipa-prosody` (`g2ipa-prosody`): ピッチアクセントと韻律境界を含む IPA mapping
 - `prosody`: プロソディ記号付き音素列
 - `g2p-detailed`: 詳細な音素列 (記号等を `sp` や `unk` に変換)
 - `kana`: カタカナ

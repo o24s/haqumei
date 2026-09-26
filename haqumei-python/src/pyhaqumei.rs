@@ -11,7 +11,10 @@ use std::sync::Mutex;
 use crate::PyDictionary;
 use crate::{
     IuPronunciation, PyHaqumei, PyMecabMorph, PyNjdFeature, UnicodeNormalization,
-    prosody::PyProsodyFormat, to_py_err, word_phoneme::PyWordPhonemeProsody,
+    ipa::{PyWordIpaMap, PyWordIpaProsody},
+    prosody::PyProsodyFormat,
+    to_py_err,
+    word_phoneme::PyWordPhonemeProsody,
 };
 use crate::{
     candidates::{PyCandidateOptions, PyCandidates, PyCandidatesDetail, PyCandidatesProsody},
@@ -272,6 +275,31 @@ impl PyHaqumei {
         })
     }
 
+    fn g2ipa(&self, text: &str) -> PyResult<Vec<PyWordIpaMap>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2ipa(text)
+            .map_err(to_py_err)
+            .map(|words| words.into_iter().map(Into::into).collect())
+    }
+
+    fn g2ipa_batch(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<PyWordIpaMap>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2ipa_batch(&texts)
+                .map_err(to_py_err)
+                .map(|batch| {
+                    batch
+                        .into_iter()
+                        .map(|words| words.into_iter().map(Into::into).collect())
+                        .collect()
+                })
+        })
+    }
+
     fn g2p_detailed(&self, text: &str) -> PyResult<Vec<&'static str>> {
         self.inner
             .lock()
@@ -529,6 +557,35 @@ impl PyHaqumei {
                     batch
                         .into_iter()
                         .map(|m| m.into_iter().map(PyWordPhonemeProsody::from).collect())
+                        .collect()
+                })
+        })
+    }
+
+    fn g2ipa_prosody(&self, text: &str) -> PyResult<Vec<PyWordIpaProsody>> {
+        self.inner
+            .lock()
+            .unwrap()
+            .g2ipa_prosody(text)
+            .map_err(to_py_err)
+            .map(|words| words.into_iter().map(Into::into).collect())
+    }
+
+    fn g2ipa_prosody_batch(
+        &self,
+        py: Python<'_>,
+        texts: Vec<String>,
+    ) -> PyResult<Vec<Vec<PyWordIpaProsody>>> {
+        py.detach(|| {
+            self.inner
+                .lock()
+                .unwrap()
+                .g2ipa_prosody_batch(&texts)
+                .map_err(to_py_err)
+                .map(|batch| {
+                    batch
+                        .into_iter()
+                        .map(|words| words.into_iter().map(Into::into).collect())
                         .collect()
                 })
         })

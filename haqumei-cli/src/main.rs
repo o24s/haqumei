@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use clap::{Args, Parser, ValueEnum};
-use haqumei::{Haqumei, HaqumeiOptions, IuPronunciation, ProsodyFormat, UnicodeNormalization};
+use haqumei::{
+    Haqumei, HaqumeiOptions, IpaBoundary, IpaToken, IpaTokenProsody, IuPronunciation, PitchAccent,
+    ProsodicIpa, ProsodyFormat, UnicodeNormalization,
+};
 use std::fs::File;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
@@ -31,7 +34,8 @@ struct Cli {
     #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Text)]
     format: OutputFormat,
 
-    /// プロソディ出力フォーマット (mode が prosody または mapping-prosody の場合に有効)
+    /// プロソディ出力フォーマット
+    /// (mode が prosody、mapping-prosody、ipa-prosody の場合に有効)
     #[arg(long, value_enum, default_value_t = CliProsodyFormat::Default)]
     prosody_format: CliProsodyFormat,
 
@@ -50,6 +54,12 @@ struct Cli {
 enum OutputMode {
     /// 音素列 (フラット)
     G2p,
+    /// 異音解決オプションに依存しない IPA の広い音声表記
+    #[value(aliases = ["g2ipa", "ipa-mapping", "g2ipa-mapping"])]
+    Ipa,
+    /// ピッチアクセントと韻律境界を含む IPA の広い音声表記
+    #[value(alias = "g2ipa-prosody")]
+    IpaProsody,
     /// プロソディ記号付き音素列
     Prosody,
     /// 詳細な音素列 (記号等は sp, unk などに変換)
@@ -406,6 +416,139 @@ fn write_json<T: serde::Serialize>(writer: &mut dyn Write, data: &T) -> Result<(
     Ok(())
 }
 
+fn format_ipa_token(token: &IpaToken) -> String {
+    match token {
+        IpaToken::Phone(phone) => phone.as_str().to_owned(),
+        IpaToken::Unknown => "{unk}".to_owned(),
+        IpaToken::Unresolved(phoneme) => format!("{{unresolved:{}}}", phoneme.as_str()),
+        _ => "{ipa-token}".to_owned(),
+    }
+}
+
+fn format_ipa_boundary(boundary: IpaBoundary) -> &'static str {
+    match boundary {
+        IpaBoundary::AccentPhrase => "#",
+        IpaBoundary::Pause => "_",
+        IpaBoundary::Interrogative => "?",
+        IpaBoundary::Exclamatory => "!",
+        _ => "{boundary}",
+    }
+}
+
+fn uniform_pitch(prosody: &[IpaTokenProsody]) -> Option<Option<PitchAccent>> {
+    let IpaTokenProsody::Pitch(first) = prosody.first()? else {
+        return None;
+    };
+    prosody
+        .iter()
+        .all(|item| matches!(item, IpaTokenProsody::Pitch(pitch) if pitch == first))
+        .then_some(*first)
+}
+
+fn format_ipa_prosody_path(prosody: &[IpaTokenProsody], numeric: bool) -> String {
+    prosody
+        .iter()
+        .map(|item| match item {
+            IpaTokenProsody::Pitch(Some(PitchAccent::Low)) => {
+                if numeric {
+                    "0"
+                } else {
+                    "L"
+                }
+            }
+            IpaTokenProsody::Pitch(Some(PitchAccent::High)) => {
+                if numeric {
+                    "1"
+                } else {
+                    "H"
+                }
+            }
+            IpaTokenProsody::Pitch(None) => "-",
+            IpaTokenProsody::Boundary(boundary) => format_ipa_boundary(*boundary),
+            _ => "?",
+        })
+        .collect()
+}
+
+fn update_previous_pitch(prosody: &[IpaTokenProsody], previous_pitch: &mut Option<PitchAccent>) {
+    for item in prosody {
+        match item {
+            IpaTokenProsody::Pitch(Some(pitch)) => *previous_pitch = Some(*pitch),
+            IpaTokenProsody::Pitch(None) => {}
+            IpaTokenProsody::Boundary(_) => *previous_pitch = None,
+            _ => {}
+        }
+    }
+}
+
+fn format_prosodic_ipa(
+    item: &ProsodicIpa,
+    format: ProsodyFormat,
+    previous_pitch: &mut Option<PitchAccent>,
+) -> Vec<String> {
+    match item {
+        ProsodicIpa::Token { token, prosody } => {
+            let token = format_ipa_token(token);
+            let pitch = uniform_pitch(prosody);
+            match format {
+                ProsodyFormat::Default => {
+                    let Some(pitch) = pitch else {
+                        let path = format_ipa_prosody_path(prosody, false);
+                        update_previous_pitch(prosody, previous_pitch);
+                        return vec![format!("{token}{{{path}}}")];
+                    };
+                    let mut output = Vec::new();
+                    if let Some(current) = pitch {
+                        match (*previous_pitch, current) {
+                            (Some(PitchAccent::Low), PitchAccent::High) => {
+                                output.push("[".to_owned());
+                            }
+                            (Some(PitchAccent::High), PitchAccent::Low) => {
+                                output.push("]".to_owned());
+                            }
+                            _ => {}
+                        }
+                        *previous_pitch = Some(current);
+                    }
+                    output.push(token);
+                    output
+                }
+                ProsodyFormat::Prefix => {
+                    if let Some(pitch) = pitch {
+                        let prefix = match pitch {
+                            Some(PitchAccent::High) => "H_",
+                            Some(PitchAccent::Low) => "L_",
+                            None => "",
+                        };
+                        vec![format!("{prefix}{token}")]
+                    } else {
+                        let path = format_ipa_prosody_path(prosody, false);
+                        vec![format!("{{{path}}}_{token}")]
+                    }
+                }
+                ProsodyFormat::Numeric => {
+                    if let Some(pitch) = pitch {
+                        let suffix = match pitch {
+                            Some(PitchAccent::High) => ":1",
+                            Some(PitchAccent::Low) => ":0",
+                            None => "",
+                        };
+                        vec![format!("{token}{suffix}")]
+                    } else {
+                        let path = format_ipa_prosody_path(prosody, true);
+                        vec![format!("{token}:{{{path}}}")]
+                    }
+                }
+            }
+        }
+        ProsodicIpa::Boundary(boundary) => {
+            *previous_pitch = None;
+            vec![format_ipa_boundary(*boundary).to_owned()]
+        }
+        _ => vec!["{ipa-prosody}".to_owned()],
+    }
+}
+
 macro_rules! handle_batch {
     ($texts:expr, $writer:expr, $format:expr, $res_batch:expr, |$res:ident| $text_format:block) => {
         for (text, $res) in $texts.iter().zip($res_batch) {
@@ -434,6 +577,29 @@ fn process_batch(
             let res_batch = haqumei.g2p_batch(texts)?;
             handle_batch!(texts, writer, format, res_batch, |res| {
                 writeln!(writer, "{}", res.join(" "))?;
+            });
+        }
+        OutputMode::Ipa => {
+            let res_batch = haqumei.g2ipa_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                let tokens: Vec<_> = res
+                    .iter()
+                    .flat_map(|word| word.tokens.iter())
+                    .map(format_ipa_token)
+                    .collect();
+                writeln!(writer, "{}", tokens.join(" "))?;
+            });
+        }
+        OutputMode::IpaProsody => {
+            let res_batch = haqumei.g2ipa_prosody_batch(texts)?;
+            handle_batch!(texts, writer, format, res_batch, |res| {
+                let mut previous_pitch = None;
+                let tokens: Vec<_> = res
+                    .iter()
+                    .flat_map(|word| word.tokens.iter())
+                    .flat_map(|item| format_prosodic_ipa(item, prosody_format, &mut previous_pitch))
+                    .collect();
+                writeln!(writer, "{}", tokens.join(" "))?;
             });
         }
         OutputMode::Prosody => {
@@ -600,4 +766,58 @@ fn process_batch(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use haqumei::{IpaPhone, Phoneme};
+
+    #[test]
+    fn ipa_text_keeps_boundaries_and_diagnostics_distinct() {
+        assert_eq!(format_ipa_token(&IpaToken::Phone(IpaPhone::LongK)), "kː");
+        assert_eq!(format_ipa_boundary(IpaBoundary::AccentPhrase), "#");
+        assert_eq!(format_ipa_boundary(IpaBoundary::Pause), "_");
+        assert_eq!(format_ipa_token(&IpaToken::Unknown), "{unk}");
+        assert_eq!(
+            format_ipa_token(&IpaToken::Unresolved(Phoneme::Cl)),
+            "{unresolved:cl}"
+        );
+    }
+
+    #[test]
+    fn ipa_modes_accept_api_name_aliases() {
+        let ipa = Cli::try_parse_from(["haqumei-cli", "--mode", "g2ipa"]).unwrap();
+        assert!(matches!(ipa.mode, OutputMode::Ipa));
+
+        let mapping = Cli::try_parse_from(["haqumei-cli", "--mode", "g2ipa-mapping"]).unwrap();
+        assert!(matches!(mapping.mode, OutputMode::Ipa));
+
+        let prosody = Cli::try_parse_from(["haqumei-cli", "--mode", "g2ipa-prosody"]).unwrap();
+        assert!(matches!(prosody.mode, OutputMode::IpaProsody));
+    }
+
+    #[test]
+    fn ipa_text_keeps_compound_token_prosody() {
+        let token = ProsodicIpa::Token {
+            token: IpaToken::Phone(IpaPhone::LongO),
+            prosody: vec![
+                IpaTokenProsody::Pitch(Some(PitchAccent::Low)),
+                IpaTokenProsody::Pitch(Some(PitchAccent::High)),
+            ],
+        };
+
+        assert_eq!(
+            format_prosodic_ipa(&token, ProsodyFormat::Prefix, &mut None),
+            ["{LH}_oː"]
+        );
+        assert_eq!(
+            format_prosodic_ipa(&token, ProsodyFormat::Numeric, &mut None),
+            ["oː:{01}"]
+        );
+        assert_eq!(
+            format_prosodic_ipa(&token, ProsodyFormat::Default, &mut None),
+            ["oː{LH}"]
+        );
+    }
 }

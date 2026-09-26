@@ -46,6 +46,23 @@ class ProsodyFormat(IntEnum):
     Numeric = 2
     """`a:0`, `o:1` のような数値サフィックス表現"""
 
+class IpaBoundary(IntEnum):
+    """IPA phone と分けて保持する韻律境界。"""
+
+    AccentPhrase = 0
+    Pause = 1
+    Interrogative = 2
+    Exclamatory = 3
+
+class IpaPhone:
+    """Haqumei が出力できる IPA phone。"""
+
+    symbol: str
+    """IPA 記号。"""
+
+    def __str__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
+
 class NjdFeature:
     """
     このクラスは Rust 側で生成された読み取り専用のデータ構造です。
@@ -254,6 +271,58 @@ class WordPhonemeProsody:
     文字列である。`text2mecab` は制御文字と範囲外の文字を出力せず、半角カナと濁点の
     並び (`ｶﾞ`) を 1 文字にまとめるので、入力と文字数が変わることがある。
     """
+
+    def __eq__(self, other: object) -> bool: ...
+
+class IpaToken:
+    """IPA 変換後の一要素。値を持つフィールドは `kind` によって決まる。"""
+
+    kind: Literal["phone", "unknown", "unresolved"]
+    phone: IpaPhone | None
+    """`kind == "phone"` の場合に限り、IPA phone を保持する。"""
+    phoneme: Phoneme | None
+    """`kind == "unresolved"` の場合に限り、変換できなかった音素を保持する。"""
+
+    def __eq__(self, other: object) -> bool: ...
+
+class IpaTokenProsody:
+    """一つの IPA token を構成する入力要素の韻律情報。"""
+
+    kind: Literal["pitch", "boundary"]
+    pitch: PitchAccent | None
+    boundary: IpaBoundary | None
+
+    def __eq__(self, other: object) -> bool: ...
+
+class ProsodicIpa:
+    """ピッチアクセントまたは韻律境界を保持した IPA の一要素。"""
+
+    kind: Literal["token", "boundary"]
+    token: IpaToken | None
+    prosody: list[IpaTokenProsody]
+    boundary: IpaBoundary | None
+
+    def __eq__(self, other: object) -> bool: ...
+
+class WordIpaMap:
+    """単語と IPA token の対応。"""
+
+    word: str
+    tokens: list[IpaToken]
+    is_unknown: bool
+    is_ignored: bool
+    char_span: tuple[int, int]
+
+    def __eq__(self, other: object) -> bool: ...
+
+class WordIpaProsody:
+    """単語と、ピッチアクセント・韻律境界を保持した IPA の対応。"""
+
+    word: str
+    tokens: list[ProsodicIpa]
+    is_unknown: bool
+    is_ignored: bool
+    char_span: tuple[int, int]
 
     def __eq__(self, other: object) -> bool: ...
 
@@ -1133,6 +1202,20 @@ class Haqumei:
             List[str]: 音素記号のリスト。
         """
 
+    def g2ipa(self, text: str) -> list[WordIpaMap]:
+        """テキストを単語ごとの IPA の広い音声表記へ変換します。
+
+        phone、未知音、未解決音素を `IpaToken.kind` で区別します。
+        促音と後続子音は一つの長子音へまとめられます。
+        異音ラベルを選ぶオプションは IPA token に影響しません。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordIpaMap]: 単語ごとの IPA token と未知語情報。
+        """
+
     def g2p_detailed(self, text: str) -> list[str]:
         """より詳細な G2P 変換。
         - 既知語: 通常の音素列 (読点などは `pau`)
@@ -1279,6 +1362,20 @@ class Haqumei:
             List[WordPhonemeProsody]: 形態素ごとのプロソディ情報とNJD特徴量を保持する構造体のリスト。
         """
 
+    def g2ipa_prosody(self, text: str) -> list[WordIpaProsody]:
+        """単語ごとの IPA token にピッチアクセントと韻律境界を付けて返します。
+
+        複数音素から作る token も、各音素のピッチと途中の境界を
+        `IpaTokenProsody` の列に保持します。
+        IPA token は異音ラベルを選ぶオプションに影響されません。
+
+        Args:
+            text (str): 入力テキスト。
+
+        Returns:
+            List[WordIpaProsody]: ピッチと境界を保持した単語ごとの IPA 変換結果。
+        """
+
     def g2p_candidates(
         self, text: str, options: CandidateOptions | None = None
     ) -> Candidates:
@@ -1374,6 +1471,12 @@ class Haqumei:
         Returns:
             List[List[str]]: 各テキストに対応する音素リストのリスト。
         """
+
+    def g2ipa_batch(self, texts: list[str]) -> list[list[WordIpaMap]]:
+        """複数のテキストに対して `g2ipa` を並列に実行します。"""
+
+    def g2ipa_prosody_batch(self, texts: list[str]) -> list[list[WordIpaProsody]]:
+        """複数のテキストに対して `g2ipa_prosody` を並列に実行します。"""
 
     def g2p_detailed_batch(self, texts: list[str]) -> list[list[str]]:
         """すべてのトークンを保持する詳細な G2P 変換のバッチ処理。

@@ -1,6 +1,7 @@
 #![allow(clippy::clone_on_copy)]
 
 pub mod candidates;
+pub mod ipa;
 pub mod jlabel;
 pub mod prosody;
 pub mod pyhaqumei;
@@ -13,6 +14,10 @@ use pyo3::{prelude::*, types::PyTuple};
 use std::{path::PathBuf, sync::Mutex};
 
 use crate::{
+    ipa::{
+        PyIpaBoundary, PyIpaPhone, PyIpaToken, PyIpaTokenProsody, PyProsodicIpa, PyWordIpaMap,
+        PyWordIpaProsody,
+    },
     prosody::{PyPitchAccent, PyProsodicPhoneme, PyProsodyFormat},
     word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemeProsody},
 };
@@ -185,6 +190,14 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWordPhonemeMap>()?;
     m.add_class::<PyWordPhonemeDetail>()?;
     m.add_class::<PyWordPhonemeProsody>()?;
+
+    m.add_class::<PyIpaPhone>()?;
+    m.add_class::<PyIpaToken>()?;
+    m.add_class::<PyIpaTokenProsody>()?;
+    m.add_class::<PyIpaBoundary>()?;
+    m.add_class::<PyProsodicIpa>()?;
+    m.add_class::<PyWordIpaMap>()?;
+    m.add_class::<PyWordIpaProsody>()?;
 
     m.add_class::<crate::candidates::PyCandidateOptions>()?;
     m.add_class::<crate::candidates::PyCandidateReading>()?;
