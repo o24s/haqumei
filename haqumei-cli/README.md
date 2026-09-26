@@ -65,11 +65,14 @@ grouped by word; text output flattens that mapping for display.
 $ haqumei-cli "学校" --mode ipa
 ɡ a kː oː
 
+$ haqumei-cli "検査" --mode ipa
+k e {N:s} s a
+
 $ haqumei-cli "学校" --mode ipa-prosody --prosody-format prefix
 L_ɡ L_a H_kː H_oː
 
 $ haqumei-cli "コーヒー" --mode ipa-prosody --prosody-format prefix
-L_k {LH}_oː H_h {HL}_iː
+L_k {LH}_oː H_ç {HL}_iː
 ```
 
 `ipa-prosody` adds pitch accent and prosodic boundaries. In text output, `#` marks an
@@ -77,9 +80,10 @@ accent-phrase boundary, `_` a pause, and `?` or `!` an interrogative or exclamat
 ending. If pitch changes inside a phone built from multiple source phonemes, `{LH}_oː`
 retains that sequence; `{L#L}_kː` similarly retains an internal accent-phrase boundary.
 The same pitch sequence is `oː:{01}` in numeric format and `oː{LH}` in default format.
-Unknown input is printed as `{unk}`, while context that cannot be resolved is
-printed as, for example, `{unresolved:cl}`. JSON output preserves the word mappings,
-typed IPA phones, pitch, and boundaries.
+Dedicated labels classify sounds without fixing a single IPA realization: `{N:s}`,
+for example, identifies a moraic nasal before /s/ without specifying its closure.
+Unknown input is printed as `{unk}`. JSON output distinguishes `Special` labels from
+`Phone` values and preserves word mappings, pitch, and boundaries.
 
 ### JSON Lines Output
 

@@ -15,8 +15,8 @@ use std::{path::PathBuf, sync::Mutex};
 
 use crate::{
     ipa::{
-        PyIpaBoundary, PyIpaPhone, PyIpaToken, PyIpaTokenProsody, PyProsodicIpa, PyWordIpaMap,
-        PyWordIpaProsody,
+        PyIpaBoundary, PyIpaPhone, PyIpaToken, PyIpaTokenProsody, PyProsodicIpa, PySpecialPhone,
+        PyWordIpaMap, PyWordIpaProsody,
     },
     prosody::{PyPitchAccent, PyProsodicPhoneme, PyProsodyFormat},
     word_phoneme::{PyWordPhonemeDetail, PyWordPhonemeMap, PyWordPhonemeProsody},
@@ -192,6 +192,7 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWordPhonemeProsody>()?;
 
     m.add_class::<PyIpaPhone>()?;
+    m.add_class::<PySpecialPhone>()?;
     m.add_class::<PyIpaToken>()?;
     m.add_class::<PyIpaTokenProsody>()?;
     m.add_class::<PyIpaBoundary>()?;

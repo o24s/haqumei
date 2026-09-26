@@ -77,7 +77,7 @@ pub fn ipa_phones(input: TokenStream) -> TokenStream {
         ///
         /// IPA 記号は [`IpaPhone::as_str`] または [`core::fmt::Display`] で取得する。
         #[repr(u8)]
-        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Clone, Copy, PartialEq, Eq)]
         #[non_exhaustive]
         pub enum IpaPhone {
             #(
@@ -138,6 +138,13 @@ pub fn ipa_phones(input: TokenStream) -> TokenStream {
         impl ::core::borrow::Borrow<str> for IpaPhone {
             fn borrow(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        // Borrow<str> による検索には、str と同じハッシュ値が必要になる。
+        impl ::core::hash::Hash for IpaPhone {
+            fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+                ::core::hash::Hash::hash(self.as_str(), state);
             }
         }
 
@@ -222,7 +229,7 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[repr(u8)]
-        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Clone, Copy, PartialEq, Eq)]
         pub enum Phoneme {
             #(
                 #( #attrs )*
@@ -367,6 +374,13 @@ pub fn phonemes(input: TokenStream) -> TokenStream {
         impl ::core::borrow::Borrow<str> for Phoneme {
             fn borrow(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        // Borrow<str> による検索には、str と同じハッシュ値が必要になる。
+        impl ::core::hash::Hash for Phoneme {
+            fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+                ::core::hash::Hash::hash(self.as_str(), state);
             }
         }
 

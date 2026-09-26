@@ -334,27 +334,43 @@ surrounding phones where the context determines the realization.
 
 The result is a rule-based broad phonetic transcription, not a narrow transcription of a
 recording. `g2ipa` returns a `WordIpaMap` for each word. Its `IpaToken` values distinguish
-phones, unknown input, and context that could not be resolved. A phone is an `IpaPhone`
-enum value rather than a runtime string; `IpaPhone::as_str()` returns its IPA symbol.
+IPA phones (`Phone`), dedicated labels (`Special`), and unknown input (`Unknown`).
+`IpaToken::as_str()` returns the IPA symbol, dedicated label, or `{unk}` as a string.
 Allophone-label options do not change the IPA tokens: `g2ipa` always reapplies its
-conservative, evidence-based rules to moraic nasals and geminates.
+context rules to moraic nasals and geminates. Where the context does not determine
+whether a moraic nasal has oral closure, `g2ipa` classifies it by the following sound.
+For example, `{N:s}` identifies a moraic nasal before /s/ without specifying its closure.
+These labels are defined by [`SpecialPhone`](haqumei/src/ipa.rs); braces distinguish
+them from standard IPA symbols.
+Geminate affricates retain their closure: for example, “グッズ” contains `[dːz]`.
 
 ```rust
-use haqumei::{Haqumei, IpaPhone, IpaToken};
+use haqumei::{Haqumei, IpaToken};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
-  let mapping = haqumei.g2ipa("学校")?;
-  assert_eq!(mapping[0].word, "学校");
-  assert_eq!(mapping[0].tokens, [
-    IpaToken::Phone(IpaPhone::G),
-    IpaToken::Phone(IpaPhone::A),
-    IpaToken::Phone(IpaPhone::LongK),
-    IpaToken::Phone(IpaPhone::LongO),
-  ]);
+  for text in ["学校", "検査", "関与", "新票"] {
+    let mapping = haqumei.g2ipa(text)?;
+    let ipa: String = mapping.iter()
+      .flat_map(|word| word.tokens.iter())
+      .map(IpaToken::as_str)
+      .collect();
+    println!("{text}: {ipa}");
+  }
   Ok(())
 }
 ```
+
+```text
+学校: ɡakːoː
+検査: ke{N:s}sa
+関与: ka{N:y}jo
+新票: ɕi{N:hy}çoː
+```
+
+Unknown input is displayed as `{unk}`. Dedicated labels and unknown input are separate
+token types. Python exposes the same distinction through `token.kind`, with string
+output available as `str(token)` or `token.symbol`.
 
 `g2ipa_prosody` returns `WordIpaProsody`. Each token has an ordered list of
 `IpaTokenProsody` values retaining the `PitchAccent` of every source phoneme and any

@@ -1,6 +1,40 @@
 use super::*;
 
 #[test]
+fn protected_english_words_are_not_merged_into_neighbors() {
+    let mut engine = OpenJTalk::new().unwrap();
+    let mut original = engine.run_frontend("Ｂ Ｃ Ｄ").unwrap();
+    let mut morphs = engine.run_mecab_detailed("Ｂ Ｃ Ｄ").unwrap();
+    morphs.retain(|m| !m.is_ignored);
+    assert_eq!(original.len(), 3);
+    for (i, (feature, morph)) in original.iter_mut().zip(&mut morphs).enumerate() {
+        feature.pos = "フィラー".to_owned();
+        morph.char_span = i..i + 1;
+    }
+
+    // 隣接する英字でも、先頭・中間・末尾の保護対象はそれぞれ独立した語として残る。
+    for protected_index in 0..3 {
+        let mut features = original.clone();
+        let protected = HashMap::from([(protected_index, protected_index)]);
+        predict_kana_english(&mut features, &morphs, &protected);
+        assert!(
+            features.contains(&original[protected_index]),
+            "{protected_index}"
+        );
+        assert_eq!(
+            features.iter().map(|f| f.pron.as_str()).collect::<String>(),
+            original.iter().map(|f| f.pron.as_str()).collect::<String>()
+        );
+        assert_eq!(features.len(), if protected_index == 1 { 3 } else { 2 });
+    }
+
+    let mut unprotected = original;
+    predict_kana_english(&mut unprotected, &morphs, &HashMap::new());
+    assert_eq!(unprotected.len(), 1);
+    assert_eq!(unprotected[0].string, "ＢＣＤ");
+}
+
+#[test]
 fn test_modify_acc_after_chaining_mut() {
     let mut features = [
         NjdFeature {

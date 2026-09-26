@@ -340,28 +340,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 前後の音から実現を決められる環境では文脈に応じて変換されます。
 
 出力は規則による広い音声表記であり、録音を観測した狭い音声表記ではありません。
-`g2ipa` は単語ごとの `WordIpaMap` を返します。`IpaToken` は phone、未知の入力、
-文脈から解決できなかった音素を別々に表します。phone は実行時に作る文字列ではなく
-`IpaPhone` の列挙値であり、`IpaPhone::as_str()` から IPA 記号を取得できます。
+`g2ipa` は単語ごとの `WordIpaMap` を返します。`IpaToken` は IPA phone (`Phone`)、
+専用ラベル (`Special`)、未知音 (`Unknown`) を区別します。
+`IpaToken::as_str()` が IPA 記号、専用ラベル、または未知音の `{unk}` を文字列で返します。
 異音ラベルを選ぶオプションは IPA token に影響しません。`g2ipa` は撥音と促音に対し、
-根拠の強い保守的な規則を常に適用し直します。
+文脈による規則を常に適用し直します。口腔閉鎖の有無を決められない撥音は、
+後続音によって分類します。たとえば `{N:s}` は `/s/` の前の撥音を表し、
+閉鎖位置や閉鎖の有無は指定しません。専用ラベルの定義は
+[`SpecialPhone`](haqumei/src/ipa.rs) にあり、波括弧で標準 IPA の記号と区別します。
+破擦音の促音は閉鎖を含めて表し、たとえば「グッズ」では `[dːz]` を返します。
 
 ```rust
-use haqumei::{Haqumei, IpaPhone, IpaToken};
+use haqumei::{Haqumei, IpaToken};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut haqumei = Haqumei::new()?;
-  let mapping = haqumei.g2ipa("学校")?;
-  assert_eq!(mapping[0].word, "学校");
-  assert_eq!(mapping[0].tokens, [
-    IpaToken::Phone(IpaPhone::G),
-    IpaToken::Phone(IpaPhone::A),
-    IpaToken::Phone(IpaPhone::LongK),
-    IpaToken::Phone(IpaPhone::LongO),
-  ]);
+  for text in ["学校", "検査", "関与", "新票"] {
+    let mapping = haqumei.g2ipa(text)?;
+    let ipa: String = mapping.iter()
+      .flat_map(|word| word.tokens.iter())
+      .map(IpaToken::as_str)
+      .collect();
+    println!("{text}: {ipa}");
+  }
   Ok(())
 }
 ```
+
+```text
+学校: ɡakːoː
+検査: ke{N:s}sa
+関与: ka{N:y}jo
+新票: ɕi{N:hy}çoː
+```
+
+未知音は `{unk}` と表示します。専用ラベルとは token の種類を分けています。
+Python でも `token.kind` で区別でき、`str(token)` または `token.symbol` で
+文字列を取得できます。
 
 `g2ipa_prosody` は `WordIpaProsody` を返します。各 IPA token の
 `IpaTokenProsody` は、token を構成する音素の `PitchAccent` と途中の境界を

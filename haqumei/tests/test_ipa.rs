@@ -1,6 +1,6 @@
 use haqumei::{
     Haqumei, HaqumeiOptions, IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, PitchAccent,
-    ProsodicIpa, WordIpaMap, WordIpaProsody,
+    ProsodicIpa, SpecialPhone, WordIpaMap, WordIpaProsody,
 };
 
 fn phone(phone: IpaPhone) -> IpaToken {
@@ -74,6 +74,80 @@ fn test_g2ipa_sequence_rules() {
             phone(IpaPhone::I),
         ]
     );
+}
+
+#[test]
+fn test_g2ipa_preserves_affricate_closures() {
+    let mut haqumei = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("グッズ", "dːz"),
+        ("あっち", "tːɕ"),
+        ("エッジ", "dːʑ"),
+        ("ガッツ", "tːs"),
+        ("安全", "dz"),
+    ] {
+        let tokens = flatten(&haqumei.g2ipa(text).unwrap());
+        assert!(
+            tokens
+                .iter()
+                .any(|token| matches!(token, IpaToken::Phone(p) if p.as_str() == expected)),
+            "{text}: {tokens:?}"
+        );
+    }
+}
+
+#[test]
+fn test_g2ipa_classifies_variable_nasals() {
+    let mut haqumei = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("検査", SpecialPhone::NBeforeS),
+        ("感謝", SpecialPhone::NBeforeSh),
+        ("関与", SpecialPhone::NBeforeY),
+        ("新票", SpecialPhone::NBeforeHy),
+        ("カンヒ", SpecialPhone::NBeforeHy),
+    ] {
+        let tokens = flatten(&haqumei.g2ipa(text).unwrap());
+        assert!(
+            tokens.contains(&IpaToken::Special(expected)),
+            "{text}: {tokens:?}"
+        );
+        let prosody_mapping = haqumei.g2ipa_prosody(text).unwrap();
+        let prosodic_tokens: Vec<_> = prosody_mapping
+            .iter()
+            .flat_map(|word| word.tokens.iter())
+            .filter_map(|item| match item {
+                ProsodicIpa::Token { token, .. } => Some(*token),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tokens, prosodic_tokens, "{text}");
+        let original = haqumei.g2p_mapping_prosody(text).unwrap();
+        let (word_index, pitch) = original
+            .iter()
+            .enumerate()
+            .find_map(|(word_index, word)| {
+                word.phonemes.iter().find_map(|item| match item {
+                    haqumei::ProsodicPhoneme::Phoneme {
+                        phoneme: haqumei::Phoneme::Nn,
+                        pitch,
+                    } => Some((word_index, pitch)),
+                    _ => None,
+                })
+            })
+            .unwrap();
+        assert!(
+            prosody_mapping[word_index]
+                .tokens
+                .iter()
+                .any(|item| matches!(
+                    item, ProsodicIpa::Token { token, prosody }
+                        if *token == IpaToken::Special(expected)
+                            && *prosody == [IpaTokenProsody::Pitch(*pitch)]
+                )),
+            "{text}"
+        );
+    }
+    assert!(flatten(&haqumei.g2ipa("カンヒ").unwrap()).contains(&phone(IpaPhone::Hy)));
 }
 
 #[test]
@@ -299,6 +373,9 @@ fn test_g2ipa_is_independent_of_allophone_options() {
         "あっ あ",
         "本 も",
         "5.6",
+        "検査",
+        "グッズ",
+        "カンヒ",
     ];
     let mut baseline = Haqumei::new().unwrap();
     let expected: Vec<_> = texts
@@ -360,4 +437,15 @@ fn test_ipa_phone_is_typed_and_parseable() {
     assert_eq!("ɡʲː".parse::<IpaPhone>().unwrap(), IpaPhone::LongGy);
     assert_eq!(IpaPhone::NasalizedU.as_str(), "ɯ̃");
     assert!("not-ipa".parse::<IpaPhone>().is_err());
+}
+
+#[test]
+fn test_ipa_phone_supports_string_hash_lookup() {
+    use std::collections::HashSet;
+
+    let phones: HashSet<_> = IpaPhone::ALL.iter().copied().collect();
+    for phone in IpaPhone::ALL {
+        assert!(phones.contains(phone.as_str()), "{phone}");
+    }
+    assert!(!phones.contains("not-ipa"));
 }

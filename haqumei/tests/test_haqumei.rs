@@ -492,6 +492,7 @@ mod tests {
             haqumei.g2p("地質").unwrap(),
             ["ch", "i", "sh", "I", "ts", "u"]
         );
+        assert_eq!(haqumei.g2p("地表").unwrap(), ["ch", "i", "hy", "o", "o"]);
     }
 
     #[test]

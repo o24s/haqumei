@@ -185,7 +185,14 @@ fn apply_unvoice_rule(mora_curr: &Mora, mora_next: Option<&Mora>) -> Option<bool
     fn is_fricative(consonant: Option<Consonant>) -> bool {
         matches!(
             consonant,
-            Some(Consonant::F | Consonant::H | Consonant::S | Consonant::Sh)
+            Some(
+                Consonant::F
+                    | Consonant::Fy
+                    | Consonant::H
+                    | Consonant::Hy
+                    | Consonant::S
+                    | Consonant::Sh
+            )
         )
     }
 
@@ -261,6 +268,9 @@ mod tests {
             // 破擦音から摩擦音へ続く /i/ と /u/ は有声が最頻だった。
             (MoraEnum::Chi, MoraEnum::Hi, Some(true)),
             (MoraEnum::Tsu, MoraEnum::Fu, Some(true)),
+            (MoraEnum::Chi, MoraEnum::Hyo, Some(true)),
+            (MoraEnum::Chi, MoraEnum::Hya, Some(true)),
+            (MoraEnum::Tsu, MoraEnum::Fyu, Some(true)),
             // 摩擦音から破擦音・破裂音へ続く環境は 95% 以上が無声だった。
             (MoraEnum::Shi, MoraEnum::Chi, Some(false)),
             (MoraEnum::Fu, MoraEnum::Tsu, Some(false)),

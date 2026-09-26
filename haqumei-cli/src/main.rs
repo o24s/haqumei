@@ -202,11 +202,13 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     split_n_allophones: bool,
 
-    /// r/ry の前の撥音「ン」をさらに専用の Nr [n̠] (後部歯茎鼻音) に解決する (split_n_allophones が必要)
+    /// r/ry の前の撥音「ン」を専用ラベル Nr に分ける
+    /// (--split-n-allophones または --use-allophones が必要)
     #[arg(long)]
     split_n_before_r: bool,
 
-    /// ch, j の前の撥音「ン」をさらに専用の Npl `[ɲ]` (硬口蓋鼻音) に解決する (split_n_allophones が必要)
+    /// ch, j の前の撥音「ン」をさらに専用の Npl `[ɲ]` (硬口蓋鼻音) に解決する
+    /// (--split-n-allophones または --use-allophones が必要)
     #[arg(long)]
     split_n_before_palatal_affricate: bool,
 
@@ -417,12 +419,7 @@ fn write_json<T: serde::Serialize>(writer: &mut dyn Write, data: &T) -> Result<(
 }
 
 fn format_ipa_token(token: &IpaToken) -> String {
-    match token {
-        IpaToken::Phone(phone) => phone.as_str().to_owned(),
-        IpaToken::Unknown => "{unk}".to_owned(),
-        IpaToken::Unresolved(phoneme) => format!("{{unresolved:{}}}", phoneme.as_str()),
-        _ => "{ipa-token}".to_owned(),
-    }
+    token.to_string()
 }
 
 fn format_ipa_boundary(boundary: IpaBoundary) -> &'static str {
@@ -771,17 +768,17 @@ fn process_batch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use haqumei::{IpaPhone, Phoneme};
+    use haqumei::{IpaPhone, SpecialPhone};
 
     #[test]
-    fn ipa_text_keeps_boundaries_and_diagnostics_distinct() {
+    fn ipa_text_distinguishes_phones_labels_unknowns_and_boundaries() {
         assert_eq!(format_ipa_token(&IpaToken::Phone(IpaPhone::LongK)), "kː");
         assert_eq!(format_ipa_boundary(IpaBoundary::AccentPhrase), "#");
         assert_eq!(format_ipa_boundary(IpaBoundary::Pause), "_");
         assert_eq!(format_ipa_token(&IpaToken::Unknown), "{unk}");
         assert_eq!(
-            format_ipa_token(&IpaToken::Unresolved(Phoneme::Cl)),
-            "{unresolved:cl}"
+            format_ipa_token(&IpaToken::Special(SpecialPhone::Sokuon)),
+            "{Q}"
         );
     }
 

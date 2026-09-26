@@ -90,6 +90,27 @@ fn test_userdict() {
         assert_eq!(&p, expected);
     }
 
+    let mut protected = crate::Haqumei::from_path_with_userdict(
+        &dict_dir,
+        &user_out_path,
+        crate::HaqumeiOptions {
+            protect_user_dict_readings: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(protected.g2k("GNU2").unwrap(), "グヌーニ");
+    let expected = ["g", "u", "n", "u", "u", "n", "i"];
+    assert_eq!(protected.g2p("GNU2").unwrap(), expected);
+    let mapping = protected.g2p_mapping("GNU2").unwrap();
+    assert_eq!(mapping.len(), 1);
+    assert_eq!(mapping[0].phonemes, expected);
+    assert_eq!(mapping[0].char_span, 0..4);
+    let frontend = protected.run_frontend("GNU2").unwrap();
+    assert_eq!(frontend[0].read, "グヌーニ");
+    assert_eq!(frontend[0].mora_size, 4);
+    assert_eq!(protected.g2p_batch(&["GNU2"]).unwrap()[0], expected);
+
     const XYZ: &str = "e cl k U s u w a i z e cl t o";
     assert_ne!(ojt_with_userdic.g2p("XYZ").unwrap().join(" "), XYZ);
 

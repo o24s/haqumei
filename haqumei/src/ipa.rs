@@ -9,7 +9,10 @@
 //! 日本語 `/w/` の `[β̞]` は、連続変異を一つの記号へ畳んだ広表記上の約束である。
 //! 既存の異音解決オプションは音響モデルへ渡す音素ラベルを選ぶための設定なので、
 //! IPA の判断には使わない。撥音と促音は未解決の形へ戻し、本モジュールの文脈規則で
-//! 一意に変換する。
+//! 変換する。閉鎖の有無を選べない撥音などは、後続音によって分類し、
+//! [`IpaToken::Special`] で専用ラベルを返す。専用ラベルは `{N:s}` のように
+//! 波括弧で囲み、IPA 記号と区別する。閉鎖位置や閉鎖の有無までは指定しない。
+//! r・ch・j の前の撥音を `[n]`、発話末促音を `[ʔ]` とするのも、広表記上の約束である。
 //!
 //! # 主な参照文献
 //!
@@ -25,6 +28,8 @@
 //!   2010*, 925–928.
 //! - Kawahara, S. (2005). Voicing and geminacy in Japanese: An acoustic and
 //!   perceptual study. *UMOP*, 31, 87–120.
+//! - Kawahara, S. (2015). The phonetics of sokuon, or geminate obstruents.
+//!   In *Handbook of Japanese Phonetics and Phonology*, 43–78.
 //! - Tanner, J., Sonderegger, M., & Torreira, F. (2019). Durational evidence that
 //!   Tokyo Japanese vowel devoicing is not gradient reduction. *Frontiers in
 //!   Psychology*, 10, 821.
@@ -50,11 +55,13 @@ ipa_phones! {
     LongB = "bː",
     LongBy = "bʲː",
     Ch = "tɕ",
-    LongCh = "tɕː",
+    LongCh = "tːɕ",
     D = "d",
     Dy = "dʲ",
     LongD = "dː",
     LongDy = "dʲː",
+    Dz = "dz",
+    LongDz = "dːz",
     E = "e",
     LongE = "eː",
     NasalizedE = "ẽ",
@@ -78,7 +85,7 @@ ipa_phones! {
     NasalizedI = "ĩ",
     UnvoicedI = "i̥",
     J = "dʑ",
-    LongJ = "dʑː",
+    LongJ = "dːʑ",
     K = "k",
     Kw = "kʷ",
     Ky = "kʲ",
@@ -108,7 +115,7 @@ ipa_phones! {
     T = "t",
     LongT = "tː",
     Ts = "ts",
-    LongTs = "tsː",
+    LongTs = "tːs",
     Ty = "tʲ",
     LongTy = "tʲː",
     U = "ɯ",
@@ -120,21 +127,122 @@ ipa_phones! {
     W = "β̞",
     Y = "j",
     Z = "z",
-    LongZ = "zː",
     GlottalStop = "ʔ",
 }
 
-/// IPA 変換後の一要素。
+/// 一つの IPA phone に固定せず、音素の種類や後続音によって分類する専用ラベル。
+///
+/// [`Self::as_str`] は `{N:s}` などの表記を返します。標準 IPA の記号ではありません。
+/// `NBeforeS` などの後続音による分類は、閉鎖位置や閉鎖の有無を指定しません。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum SpecialPhone {
+    /// s の前の撥音。`{N:s}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:s}"))]
+    NBeforeS,
+    /// sh `[ɕ]` の前の撥音。`{N:sh}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:sh}"))]
+    NBeforeSh,
+    /// y `[j]` の前の撥音。`{N:y}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:y}"))]
+    NBeforeY,
+    /// hy `[ç]` の前の撥音。「ヒ」の h も含みます。`{N:hy}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:hy}"))]
+    NBeforeHy,
+    /// fy `[ɸʲ]` の前の撥音。`{N:fy}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:fy}"))]
+    NBeforeFy,
+    /// v の前の撥音。`{N:v}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:v}"))]
+    NBeforeV,
+    /// 促音の前の撥音。促音の後まで調音点の同化を適用しません。`{N:cl}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:cl}"))]
+    NBeforeSokuon,
+    /// 撥音の前の撥音。`{N:N}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:N}"))]
+    NBeforeN,
+    /// 母音・w・h・f の前で、直前の有声母音を参照できない撥音。`{N:vowel}`。
+    ///
+    /// 鼻音化母音による広表記を採用する環境ですが、母音の音質は指定しません。
+    #[cfg_attr(feature = "serde", serde(rename = "{N:vowel}"))]
+    NasalizedMora,
+    /// 後続音による分類を行わない撥音。未知音・空白の直前など。`{N}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{N}"))]
+    MoraicNasal,
+    /// 長子音や発話末の声門閉鎖へ変換しない促音。`{Q}`。
+    #[cfg_attr(feature = "serde", serde(rename = "{Q}"))]
+    Sokuon,
+}
+
+impl SpecialPhone {
+    /// 定義済みの専用ラベルを列挙順に並べたスライス。
+    pub const ALL: &'static [Self] = &[
+        Self::NBeforeS,
+        Self::NBeforeSh,
+        Self::NBeforeY,
+        Self::NBeforeHy,
+        Self::NBeforeFy,
+        Self::NBeforeV,
+        Self::NBeforeSokuon,
+        Self::NBeforeN,
+        Self::NasalizedMora,
+        Self::MoraicNasal,
+        Self::Sokuon,
+    ];
+
+    /// IPA 記号と区別できる、波括弧付きのラベルを返します。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NBeforeS => "{N:s}",
+            Self::NBeforeSh => "{N:sh}",
+            Self::NBeforeY => "{N:y}",
+            Self::NBeforeHy => "{N:hy}",
+            Self::NBeforeFy => "{N:fy}",
+            Self::NBeforeV => "{N:v}",
+            Self::NBeforeSokuon => "{N:cl}",
+            Self::NBeforeN => "{N:N}",
+            Self::NasalizedMora => "{N:vowel}",
+            Self::MoraicNasal => "{N}",
+            Self::Sokuon => "{Q}",
+        }
+    }
+}
+
+impl std::fmt::Display for SpecialPhone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// IPA 記号・専用ラベル・未知音のいずれかを表す、変換後の一要素。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum IpaToken {
     /// 一つの IPA phone。
     Phone(IpaPhone),
+    /// 音素の種類や後続音による専用ラベル。
+    Special(SpecialPhone),
     /// 入力が [`Phoneme::Unk`] だった位置。
     Unknown,
-    /// 文脈が足りず、IPA phone を一つに決められなかった音素。
-    Unresolved(Phoneme),
+}
+
+impl IpaToken {
+    /// IPA 記号、波括弧付きの専用ラベル、または未知音の `{unk}` を返します。
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Phone(phone) => phone.as_str(),
+            Self::Special(label) => label.as_str(),
+            Self::Unknown => "{unk}",
+        }
+    }
+}
+
+impl std::fmt::Display for IpaToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// IPA phone と分けて保持する韻律境界。
@@ -265,7 +373,7 @@ enum LocatedInput {
 impl Haqumei {
     /// 入力テキストを単語ごとの IPA の広い音声表記へ変換する。
     ///
-    /// 返り値は phone、未知音、未解決音素を区別する。促音と後続子音は一つの
+    /// 返り値は IPA phone、専用ラベル、未知音を区別する。促音と後続子音は一つの
     /// 長子音へまとめられるため、単純な `Phoneme` ごとの置換ではない。
     /// [`HaqumeiOptions`](crate::HaqumeiOptions) の異音解決オプションには影響されない。
     pub fn g2ipa(&mut self, text: &str) -> Result<Vec<WordIpaMap>, HaqumeiError> {
@@ -452,7 +560,7 @@ fn transcribe(input: &[LocatedInput]) -> Vec<LocatedIpaToken> {
                 }
             }
             LocatedInput::Phoneme(phoneme) => {
-                let current = canonicalize_allophone(phoneme);
+                let current = contextualize_consonant(input, i, canonicalize_allophone(phoneme));
 
                 if current.phoneme.is_sokuon() {
                     let context = following_context(input, i);
@@ -485,7 +593,7 @@ fn transcribe(input: &[LocatedInput]) -> Vec<LocatedIpaToken> {
                         token: if matches!(context, FollowingContext::UtteranceFinal) {
                             TranscribedToken::Ipa(IpaToken::Phone(IpaPhone::GlottalStop))
                         } else {
-                            TranscribedToken::Ipa(IpaToken::Unresolved(current.phoneme))
+                            TranscribedToken::Ipa(IpaToken::Special(SpecialPhone::Sokuon))
                         },
                         source: vec![current.position],
                     });
@@ -520,7 +628,18 @@ fn transcribe(input: &[LocatedInput]) -> Vec<LocatedIpaToken> {
                 }
 
                 if current.phoneme == Phoneme::Nn {
-                    transcribe_unresolved_n(input, i, current, &mut output);
+                    transcribe_moraic_nasal(input, i, current, &mut output);
+                    continue;
+                }
+
+                // 撥音後の z は破擦音で表す。Maekawa (2023, Table 1) の /aNzeN/ も [dz]。
+                if current.phoneme == Phoneme::Z
+                    && preceding_phoneme(input, i).is_some_and(|p| p.is_moraic_nasal())
+                {
+                    output.push(LocatedIpaToken {
+                        token: TranscribedToken::Ipa(IpaToken::Phone(IpaPhone::Dz)),
+                        source: vec![current.position],
+                    });
                     continue;
                 }
 
@@ -538,7 +657,7 @@ fn following_context(input: &[LocatedInput], i: usize) -> FollowingContext {
             LocatedInput::Phoneme(phoneme) => {
                 return FollowingContext::Phoneme {
                     index,
-                    phoneme: canonicalize_allophone(phoneme),
+                    phoneme: contextualize_consonant(input, index, canonicalize_allophone(phoneme)),
                 };
             }
             LocatedInput::Barrier(LocatedBarrier {
@@ -597,7 +716,7 @@ fn same_vowel_run_len(input: &[LocatedInput], i: usize) -> usize {
         .count()
 }
 
-fn transcribe_unresolved_n(
+fn transcribe_moraic_nasal(
     input: &[LocatedInput],
     i: usize,
     current: LocatedPhoneme,
@@ -644,12 +763,22 @@ fn transcribe_unresolved_n(
                 });
                 return;
             }
-            IpaToken::Unresolved(Phoneme::Nn)
+            IpaToken::Special(SpecialPhone::NasalizedMora)
         }
         None if matches!(context, FollowingContext::UtteranceFinal) => {
             IpaToken::Phone(IpaPhone::Nq)
         }
-        _ => IpaToken::Unresolved(Phoneme::Nn),
+        _ => IpaToken::Special(match next {
+            Some(Phoneme::S) => SpecialPhone::NBeforeS,
+            Some(Phoneme::Sh) => SpecialPhone::NBeforeSh,
+            Some(Phoneme::Y) => SpecialPhone::NBeforeY,
+            Some(Phoneme::Hy) => SpecialPhone::NBeforeHy,
+            Some(Phoneme::Fy) => SpecialPhone::NBeforeFy,
+            Some(Phoneme::V) => SpecialPhone::NBeforeV,
+            Some(Phoneme::Cl) => SpecialPhone::NBeforeSokuon,
+            Some(Phoneme::Nn) => SpecialPhone::NBeforeN,
+            _ => SpecialPhone::MoraicNasal,
+        }),
     };
 
     output.push(LocatedIpaToken {
@@ -679,20 +808,41 @@ fn canonicalize_allophone(mut phoneme: LocatedPhoneme) -> LocatedPhoneme {
     phoneme
 }
 
+fn contextualize_consonant(
+    input: &[LocatedInput],
+    i: usize,
+    mut phoneme: LocatedPhoneme,
+) -> LocatedPhoneme {
+    // 「ヒ」の音素列は h i なので、[ç] への変換には後続母音も使う。
+    // 撥音から後続子音を調べるときも、h と ç の環境を区別する。
+    if phoneme.phoneme == Phoneme::H
+        && matches!(input.get(i + 1), Some(LocatedInput::Phoneme(next))
+            if matches!(next.phoneme, Phoneme::I | Phoneme::UnvoicedI))
+    {
+        phoneme.phoneme = Phoneme::Hy;
+    }
+    phoneme
+}
+
+fn preceding_phoneme(input: &[LocatedInput], i: usize) -> Option<Phoneme> {
+    for item in input[..i].iter().rev() {
+        match item {
+            LocatedInput::Phoneme(phoneme) => return Some(phoneme.phoneme),
+            LocatedInput::Barrier(LocatedBarrier {
+                kind: BarrierKind::Structural,
+                boundary: Some(IpaBoundary::AccentPhrase),
+                ..
+            }) => {}
+            LocatedInput::Barrier(_) => return None,
+        }
+    }
+    None
+}
+
 fn uses_nasalized_vowel(next: Phoneme) -> bool {
-    next.is_vowel()
-        || matches!(
-            next,
-            Phoneme::Y
-                | Phoneme::W
-                | Phoneme::S
-                | Phoneme::Sh
-                | Phoneme::F
-                | Phoneme::Fy
-                | Phoneme::H
-                | Phoneme::Hy
-                | Phoneme::V
-        )
+    // Maekawa (2023, Table 1) では s・j・ç の前に閉鎖と鼻音化母音の両方がある。
+    // 撥音を鼻音化母音に変換するのは、後続音が母音・w・h・ɸ の場合に限る。
+    next.is_vowel() || matches!(next, Phoneme::W | Phoneme::F | Phoneme::H)
 }
 
 fn nasalized_vowel(phoneme: Phoneme) -> Option<IpaPhone> {
@@ -709,11 +859,8 @@ fn nasalized_vowel(phoneme: Phoneme) -> Option<IpaPhone> {
 fn push_single_phoneme(phoneme: LocatedPhoneme, output: &mut Vec<LocatedIpaToken>) {
     let token = match phoneme.phoneme {
         Phoneme::Unk => IpaToken::Unknown,
-        Phoneme::Sp | Phoneme::Pau => IpaToken::Unresolved(phoneme.phoneme),
-        phoneme => match fixed_ipa(phoneme) {
-            Some(symbol) => IpaToken::Phone(symbol),
-            None => IpaToken::Unresolved(phoneme),
-        },
+        // 撥音・促音・境界は transcribe と flatten で処理済み。
+        phoneme => IpaToken::Phone(fixed_ipa(phoneme).expect("通常音素には IPA 記号がある")),
     };
 
     output.push(LocatedIpaToken {
@@ -765,6 +912,8 @@ fn boundary_strength(boundary: IpaBoundary) -> u8 {
 }
 
 fn long_consonant(phoneme: Phoneme) -> Option<IpaPhone> {
+    // 破擦音の長さは閉鎖の長さとして表す。Kawahara (2015, §2.3.2)。
+    // z の促音も閉鎖を含む [dːz] を採用する。同書 p.54, 注13。
     let value = match phoneme {
         Phoneme::P => IpaPhone::LongP,
         Phoneme::Py => IpaPhone::LongPy,
@@ -789,7 +938,7 @@ fn long_consonant(phoneme: Phoneme) -> Option<IpaPhone> {
         Phoneme::G => IpaPhone::LongG,
         Phoneme::Gy => IpaPhone::LongGy,
         Phoneme::Gw => IpaPhone::LongGw,
-        Phoneme::Z => IpaPhone::LongZ,
+        Phoneme::Z => IpaPhone::LongDz,
         Phoneme::J => IpaPhone::LongJ,
         _ => return None,
     };
@@ -897,8 +1046,8 @@ mod tests {
         TranscribedToken::Ipa(IpaToken::Phone(phone))
     }
 
-    fn unresolved(phoneme: Phoneme) -> TranscribedToken {
-        TranscribedToken::Ipa(IpaToken::Unresolved(phoneme))
+    fn special(label: SpecialPhone) -> TranscribedToken {
+        TranscribedToken::Ipa(IpaToken::Special(label))
     }
 
     fn boundary(boundary: IpaBoundary) -> TranscribedToken {
@@ -957,6 +1106,7 @@ mod tests {
             (Phoneme::ClS, Phoneme::Hy, IpaPhone::LongHy),
             (Phoneme::ClV, Phoneme::Gy, IpaPhone::LongGy),
             (Phoneme::ClV, Phoneme::J, IpaPhone::LongJ),
+            (Phoneme::ClV, Phoneme::Z, IpaPhone::LongDz),
         ];
 
         for (sokuon, consonant, expected) in cases {
@@ -974,9 +1124,15 @@ mod tests {
 
     #[test]
     fn all_sokuon_labels_need_an_utterance_boundary_for_a_glottal_stop() {
-        assert_eq!(tokens(&[Phoneme::ClQ], false), [unresolved(Phoneme::Cl)]);
+        assert_eq!(
+            tokens(&[Phoneme::ClQ], false),
+            [special(SpecialPhone::Sokuon)]
+        );
         assert_eq!(tokens(&[Phoneme::Cl], true), [phone(IpaPhone::GlottalStop)]);
-        assert_eq!(tokens(&[Phoneme::Cl], false), [unresolved(Phoneme::Cl)]);
+        assert_eq!(
+            tokens(&[Phoneme::Cl], false),
+            [special(SpecialPhone::Sokuon)]
+        );
     }
 
     #[test]
@@ -992,13 +1148,13 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_n_uses_both_sides() {
+    fn moraic_nasal_uses_both_sides() {
         assert_eq!(
-            tokens(&[Phoneme::I, Phoneme::Nn, Phoneme::S], true),
+            tokens(&[Phoneme::I, Phoneme::Nn, Phoneme::A], true),
             [
                 phone(IpaPhone::I),
                 phone(IpaPhone::NasalizedI),
-                phone(IpaPhone::S)
+                phone(IpaPhone::A)
             ]
         );
         assert_eq!(
@@ -1006,7 +1162,123 @@ mod tests {
             [phone(IpaPhone::M), phone(IpaPhone::P)]
         );
         assert_eq!(tokens(&[Phoneme::Nn], true), [phone(IpaPhone::Nq)]);
-        assert_eq!(tokens(&[Phoneme::Nn], false), [unresolved(Phoneme::Nn)]);
+        assert_eq!(
+            tokens(&[Phoneme::Nn], false),
+            [special(SpecialPhone::MoraicNasal)]
+        );
+    }
+
+    #[test]
+    fn variable_nasals_are_classified_by_following_consonant() {
+        for (next, expected) in [
+            (Phoneme::S, SpecialPhone::NBeforeS),
+            (Phoneme::Sh, SpecialPhone::NBeforeSh),
+            (Phoneme::Y, SpecialPhone::NBeforeY),
+            (Phoneme::Hy, SpecialPhone::NBeforeHy),
+            (Phoneme::Fy, SpecialPhone::NBeforeFy),
+            (Phoneme::V, SpecialPhone::NBeforeV),
+        ] {
+            let result = tokens(&[Phoneme::A, Phoneme::Nn, next, Phoneme::A], true);
+            assert_eq!(result[1], special(expected), "{next}");
+        }
+        assert_eq!(
+            tokens(&[Phoneme::A, Phoneme::Nn, Phoneme::H, Phoneme::I], true),
+            [
+                phone(IpaPhone::A),
+                special(SpecialPhone::NBeforeHy),
+                phone(IpaPhone::Hy),
+                phone(IpaPhone::I)
+            ]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::Cl, Phoneme::H, Phoneme::UnvoicedI], true),
+            [phone(IpaPhone::LongHy), phone(IpaPhone::UnvoicedI)]
+        );
+    }
+
+    #[test]
+    fn special_labels_preserve_mora_types_without_absorbing_neighbors() {
+        assert_eq!(
+            tokens(&[Phoneme::Nn, Phoneme::ClP, Phoneme::K], true),
+            [special(SpecialPhone::NBeforeSokuon), phone(IpaPhone::LongK)]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::Nn, Phoneme::Nm, Phoneme::P], true),
+            [
+                special(SpecialPhone::NBeforeN),
+                phone(IpaPhone::M),
+                phone(IpaPhone::P)
+            ]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::Nn, Phoneme::A], true),
+            [special(SpecialPhone::NasalizedMora), phone(IpaPhone::A)]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::UnvoicedI, Phoneme::Nn, Phoneme::A], true),
+            [
+                phone(IpaPhone::UnvoicedI),
+                special(SpecialPhone::NasalizedMora),
+                phone(IpaPhone::A)
+            ]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::Nn, Phoneme::Unk], true),
+            [
+                special(SpecialPhone::MoraicNasal),
+                TranscribedToken::Ipa(IpaToken::Unknown)
+            ]
+        );
+        assert_eq!(
+            tokens(&[Phoneme::Cl, Phoneme::R, Phoneme::A], true),
+            [
+                special(SpecialPhone::Sokuon),
+                phone(IpaPhone::R),
+                phone(IpaPhone::A)
+            ]
+        );
+    }
+
+    #[test]
+    fn special_nasal_context_crosses_accent_phrase_but_not_spaces() {
+        let mut input = located(&[Phoneme::Nn, Phoneme::S]);
+        let LocatedInput::Phoneme(first) = input[0] else {
+            unreachable!()
+        };
+        input.insert(
+            1,
+            LocatedInput::Barrier(LocatedBarrier {
+                kind: BarrierKind::Structural,
+                boundary: Some(IpaBoundary::AccentPhrase),
+                position: first.position,
+            }),
+        );
+        let result = transcribe(&input);
+        assert_eq!(result[0].token, special(SpecialPhone::NBeforeS));
+        assert_eq!(result[0].source, vec![first.position]);
+        assert_eq!(result[1].token, boundary(IpaBoundary::AccentPhrase));
+        assert_eq!(result[2].token, phone(IpaPhone::S));
+
+        let LocatedInput::Barrier(barrier) = &mut input[1] else {
+            unreachable!()
+        };
+        barrier.boundary = None;
+        let result = transcribe(&input);
+        assert_eq!(result[0].token, special(SpecialPhone::MoraicNasal));
+        assert_eq!(result[1].token, phone(IpaPhone::S));
+    }
+
+    #[test]
+    fn special_labels_do_not_collide_with_ipa_or_unknown_input() {
+        let mut labels = std::collections::HashSet::new();
+        for label in SpecialPhone::ALL {
+            let symbol = label.as_str();
+            assert!(symbol.starts_with('{') && symbol.ends_with('}'));
+            assert!(labels.insert(symbol), "{symbol}");
+            assert!(!IpaPhone::SYMBOLS.contains(&symbol));
+            assert!(symbol.parse::<IpaPhone>().is_err());
+            assert_ne!(symbol, IpaToken::Unknown.as_str());
+        }
     }
 
     #[test]
@@ -1146,6 +1418,19 @@ mod tests {
             TranscribedToken::Boundary(IpaBoundary::Interrogative)
         );
         assert_eq!(output[0].source.len(), 3);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_keeps_special_labels_distinct_from_ipa() {
+        for label in SpecialPhone::ALL {
+            let token = IpaToken::Special(*label);
+            let json = serde_json::to_value(token).unwrap();
+            assert_eq!(json, serde_json::json!({ "Special": label.as_str() }));
+            assert_eq!(serde_json::from_value::<IpaToken>(json).unwrap(), token);
+        }
+        assert!(serde_json::from_value::<IpaToken>(serde_json::json!({"Phone": "{N:s}"})).is_err());
+        assert!(serde_json::from_value::<IpaToken>(serde_json::json!({"Special": "n"})).is_err());
     }
 
     #[cfg(feature = "serde")]

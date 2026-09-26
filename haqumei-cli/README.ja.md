@@ -64,11 +64,14 @@ API の返り値は単語ごとの mapping であり、テキスト出力では�
 $ haqumei-cli "学校" --mode ipa
 ɡ a kː oː
 
+$ haqumei-cli "検査" --mode ipa
+k e {N:s} s a
+
 $ haqumei-cli "学校" --mode ipa-prosody --prosody-format prefix
 L_ɡ L_a H_kː H_oː
 
 $ haqumei-cli "コーヒー" --mode ipa-prosody --prosody-format prefix
-L_k {LH}_oː H_h {HL}_iː
+L_k {LH}_oː H_ç {HL}_iː
 ```
 
 `ipa-prosody` はピッチアクセントと韻律境界を加えます。テキスト形式では、
@@ -76,9 +79,10 @@ L_k {LH}_oː H_h {HL}_iː
 複数音素から作る phone の途中でピッチが変わる場合は `{LH}_oː`、途中に
 アクセント句境界がある場合は `{L#L}_kː` のように、phone 内の並びを `{}` で表します。
 同じ並びは numeric 形式では `oː:{01}`、default 形式では `oː{LH}` になります。
-未知語は `{unk}`、文脈から変換できなかった音素は `{unresolved:cl}` のように
-出力します。JSON 形式では、単語 mapping、型付き IPA phone、ピッチ、境界を
-そのまま保持します。
+一つの IPA phone に固定しない音は専用ラベルで分類します。たとえば `{N:s}` は
+/s/ の前の撥音を表し、閉鎖位置や閉鎖の有無は指定しません。未知音は `{unk}` です。
+JSON 形式でも専用ラベルを `Special`、IPA phone を `Phone` として区別し、
+単語 mapping、ピッチ、境界を保持します。
 
 ### JSON Lines 形式での出力
 

@@ -8,6 +8,7 @@ mod unknown_kanji;
 mod utils;
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Range;
 
 use haqumei_kanalizer::{ConvertOptions, MaxLength};
@@ -285,17 +286,23 @@ fn should_use_kanalizer(chars: &[char]) -> bool {
 /// "IT" は辞書に拾われ、pos == "名詞" になる一方で、"it" は "i" と "t" と分かれた
 /// pos_group1 == "アルファベット" の `NjdFeature` になってしまう。
 /// そこで、入力上で隣接するアルファベットを結合し、条件を満たすものを `Kanalizer` に通している。
-pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>, morphs: &[MecabMorph]) {
+pub(crate) fn predict_kana_english(
+    njd_features: &mut Vec<NjdFeature>,
+    morphs: &[MecabMorph],
+    protected: &HashMap<usize, usize>,
+) {
     let mut spans = njd_char_spans(njd_features, morphs);
     let has_source_positions = !morphs.is_empty();
     let mut i = 0;
     while i < njd_features.len() {
         let is_filler = njd_features[i].pos == "フィラー";
 
-        if njd_features[i]
-            .string
-            .chars()
-            .any(|c| !matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
+        // 保護対象を隣の英字と結合すると、元の読みを復元する位置が失われる。
+        if protected.contains_key(&spans[i].start)
+            || njd_features[i]
+                .string
+                .chars()
+                .any(|c| !matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
         {
             i += 1;
             continue;
@@ -307,6 +314,7 @@ pub(crate) fn predict_kana_english(njd_features: &mut Vec<NjdFeature>, morphs: &
         // 形態素の品詞ではなく元の文字位置を使うと、"notes" は 1 語に戻せる一方、
         // "notes So" の空白を挟んだ "s" と "S" は別の語として残る。
         while end < njd_features.len()
+            && !protected.contains_key(&spans[end].start)
             && njd_features[end]
                 .string
                 .chars()

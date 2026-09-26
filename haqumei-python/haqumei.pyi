@@ -274,15 +274,27 @@ class WordPhonemeProsody:
 
     def __eq__(self, other: object) -> bool: ...
 
+class SpecialPhone:
+    """音素の種類や後続音による専用ラベル。標準 IPA の記号とは区別する。"""
+
+    symbol: str
+    """`{N:s}` などの波括弧付きのラベル。"""
+
+    def __str__(self) -> str: ...
+    def __eq__(self, other: object) -> bool: ...
+
 class IpaToken:
     """IPA 変換後の一要素。値を持つフィールドは `kind` によって決まる。"""
 
-    kind: Literal["phone", "unknown", "unresolved"]
+    kind: Literal["phone", "special", "unknown"]
     phone: IpaPhone | None
     """`kind == "phone"` の場合に限り、IPA phone を保持する。"""
-    phoneme: Phoneme | None
-    """`kind == "unresolved"` の場合に限り、変換できなかった音素を保持する。"""
+    special: SpecialPhone | None
+    """`kind == "special"` の場合に限り、専用ラベルを保持する。"""
+    symbol: str
+    """IPA 記号、波括弧付きの専用ラベル、または未知音の `{unk}`。"""
 
+    def __str__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
 
 class IpaTokenProsody:
@@ -1205,7 +1217,9 @@ class Haqumei:
     def g2ipa(self, text: str) -> list[WordIpaMap]:
         """テキストを単語ごとの IPA の広い音声表記へ変換します。
 
-        phone、未知音、未解決音素を `IpaToken.kind` で区別します。
+        IPA phone、専用ラベル、未知音を `IpaToken.kind` で区別します。
+        /s/・/j/・/ç/ の前の撥音などは、後続音ごとの専用ラベルを返します。
+        `str(token)` または `token.symbol` で文字列を取得できます。
         促音と後続子音は一つの長子音へまとめられます。
         異音ラベルを選ぶオプションは IPA token に影響しません。
 

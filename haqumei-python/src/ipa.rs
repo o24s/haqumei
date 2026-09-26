@@ -1,5 +1,6 @@
 use ::haqumei::{
-    IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, WordIpaMap, WordIpaProsody,
+    IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, SpecialPhone, WordIpaMap,
+    WordIpaProsody,
 };
 use pyo3::prelude::*;
 
@@ -34,6 +35,40 @@ impl PyIpaPhone {
     }
 }
 
+#[pyclass(
+    name = "SpecialPhone",
+    module = "haqumei",
+    get_all,
+    skip_from_py_object
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PySpecialPhone {
+    pub symbol: &'static str,
+}
+
+impl From<SpecialPhone> for PySpecialPhone {
+    fn from(label: SpecialPhone) -> Self {
+        Self {
+            symbol: label.as_str(),
+        }
+    }
+}
+
+#[pymethods]
+impl PySpecialPhone {
+    fn __str__(&self) -> &'static str {
+        self.symbol
+    }
+
+    fn __repr__(&self) -> String {
+        format!("SpecialPhone(symbol={:?})", self.symbol)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
 #[pyclass(name = "IpaBoundary", module = "haqumei", eq, eq_int, from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PyIpaBoundary {
@@ -60,26 +95,31 @@ impl From<IpaBoundary> for PyIpaBoundary {
 pub struct PyIpaToken {
     pub kind: &'static str,
     pub phone: Option<PyIpaPhone>,
-    pub phoneme: Option<&'static str>,
+    pub special: Option<PySpecialPhone>,
+    pub symbol: &'static str,
 }
 
 impl From<IpaToken> for PyIpaToken {
     fn from(token: IpaToken) -> Self {
+        let symbol = token.as_str();
         match token {
             IpaToken::Phone(phone) => Self {
                 kind: "phone",
                 phone: Some(phone.into()),
-                phoneme: None,
+                special: None,
+                symbol,
             },
             IpaToken::Unknown => Self {
                 kind: "unknown",
                 phone: None,
-                phoneme: None,
+                special: None,
+                symbol,
             },
-            IpaToken::Unresolved(phoneme) => Self {
-                kind: "unresolved",
+            IpaToken::Special(label) => Self {
+                kind: "special",
                 phone: None,
-                phoneme: Some(phoneme.as_str()),
+                special: Some(label.into()),
+                symbol,
             },
             _ => unreachable!("すべての IpaToken variant を Python 側へ公開する"),
         }
@@ -88,10 +128,14 @@ impl From<IpaToken> for PyIpaToken {
 
 #[pymethods]
 impl PyIpaToken {
+    fn __str__(&self) -> &'static str {
+        self.symbol
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "IpaToken(kind={:?}, phone={:?}, phoneme={:?})",
-            self.kind, self.phone, self.phoneme,
+            "IpaToken(kind={:?}, phone={:?}, special={:?}, symbol={:?})",
+            self.kind, self.phone, self.special, self.symbol,
         )
     }
 

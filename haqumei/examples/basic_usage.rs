@@ -1,4 +1,4 @@
-use haqumei::Haqumei;
+use haqumei::{Haqumei, IpaToken};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut haqumei = Haqumei::new()?;
@@ -24,6 +24,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kana = haqumei.g2k(text)?;
     println!("Katakana: {}", kana);
     assert_eq!(kana, "コンニチワ、セカイ！");
+
+    // IPA 記号と専用ラベルを連結して表示する
+    for text in ["学校", "検査", "関与", "新票"] {
+        let mapping = haqumei.g2ipa(text)?;
+        let ipa: String = mapping
+            .iter()
+            .flat_map(|word| word.tokens.iter())
+            .map(IpaToken::as_str)
+            .collect();
+        println!("{text}: {ipa}");
+    }
 
     // 異音解決を有効にする
     haqumei.options.use_allophones = true;

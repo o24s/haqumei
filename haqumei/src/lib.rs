@@ -32,7 +32,8 @@ pub use candidates::{
 };
 pub use features::NjdFeature;
 pub use ipa::{
-    IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, WordIpaMap, WordIpaProsody,
+    IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, SpecialPhone, WordIpaMap,
+    WordIpaProsody,
 };
 pub use open_jtalk::{
     LatticeNode, MecabDictIndexCompiler, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk,
@@ -863,12 +864,8 @@ impl Haqumei {
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let options = self.options;
 
-        // ユーザー辞書が与えた読みを、位置とともに控えつつ、読みを決める補正が
-        // 終わったところで書き戻す。補正の 1 つ 1 つに条件を書かないので、
-        // 補正が増えても手を入れずに済む。
-        //
-        // また、添字ではなく位置で持つのは、補正が形態素を足したり消したりするため。
-        // `njd_char_spans` を前後で 2 回使えば、そのずれに影響されない。
+        // 補正で形態素の添字が変わるため、ユーザー辞書の読みを文字位置で控える。
+        // 英語の読み推定は保護対象を結合せず、英数字の結合は読みの復元後に行う。
         let saved: HashMap<usize, (String, String, i32)> = protected
             .iter()
             .filter_map(|(&start, &idx)| {
@@ -885,9 +882,8 @@ impl Haqumei {
             self.predict_nani_reading(&mut njd_features);
         }
         if options.predict_kana_english {
-            predict_kana_english(&mut njd_features, morphs);
+            predict_kana_english(&mut njd_features, morphs, protected);
             modify_english_words(text, &mut njd_features);
-            merge_english_alphanumeric_words(&mut njd_features, morphs);
             suppress_english_hyphen_pause(&mut njd_features, morphs);
         }
 
@@ -935,6 +931,11 @@ impl Haqumei {
                     f.mora_size = *mora_size;
                 }
             }
+        }
+
+        // 読みの復元より前に結合すると、GNU2 の 2 など、保護対象に続く読みが消える。
+        if options.predict_kana_english {
+            merge_english_alphanumeric_words(&mut njd_features, morphs);
         }
 
         if options.split_prefix_accent_phrase {
