@@ -25,7 +25,7 @@ Unihan の `kJapanese` は、カタカナで書かれた読み (音読み) と�
 
 ## 使い方
 
-    curl -sSL -o Unihan.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
+    curl -sSL -o Unihan.zip https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip
     unzip -o Unihan.zip Unihan_Readings.txt
     uv run scripts/build_unihan_readings.py --input Unihan_Readings.txt
 
@@ -39,6 +39,9 @@ from pathlib import Path
 
 KATAKANA = re.compile(r"[ァ-ヴー]+$")
 HIRAGANA = re.compile(r"[ぁ-ゖー]+$")
+
+# 「㓝」は「刑」の異体字で、Unicode 17.0.0 の「ケィ」は「ケイ」の誤記。
+READING_CORRECTIONS = {"㓝": "ケイ"}
 
 
 def to_katakana(s):
@@ -58,7 +61,7 @@ def main():
         codepoint, field, value = line.split("\t", 2)
         if field != "kJapanese":
             continue
-        entries[chr(int(codepoint, 0))] = value.split()
+        entries[chr(int(codepoint.removeprefix("U+"), 16))] = value.split()
 
     rows = []
     for ch, values in sorted(entries.items()):
@@ -66,7 +69,7 @@ def main():
         kun = [v for v in values if HIRAGANA.fullmatch(v)]
         reading = on[0] if on else (to_katakana(kun[0]) if kun else None)
         if reading:
-            rows.append((ch, reading))
+            rows.append((ch, READING_CORRECTIONS.get(ch, reading)))
 
     body = ",\n".join(f"    '{ch}' => \"{reading}\"" for ch, reading in rows)
     args.out.parent.mkdir(parents=True, exist_ok=True)

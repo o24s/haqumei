@@ -224,7 +224,11 @@ fn is_special_mora(mora: &str) -> bool {
 }
 
 /// MeCab の特徴量から、発音・数詞・アクセントを順に求める。
-pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError> {
+pub(crate) fn run_frontend(
+    raw: &[&str],
+    modify_numeral_reading: bool,
+    protected_raw: &[bool],
+) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
         NJD, NJDNode, accent_phrase, accent_type, digit, digit_sequence, pronunciation,
@@ -232,7 +236,8 @@ pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError
     };
 
     let mut nodes = Vec::with_capacity(raw.len());
-    for feature in raw {
+    let mut protected_nodes = Vec::new();
+    for (i, feature) in raw.iter().enumerate() {
         let mut fields = ["*"; 13];
         for (field, value) in fields.iter_mut().zip(feature.split(',')) {
             *field = value;
@@ -245,6 +250,12 @@ pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError
             }
             entry @ WordEntry::Multiple(_) => nodes.extend(NJDNode::load(fields[0], &entry)),
         }
+        if modify_numeral_reading {
+            protected_nodes.resize(nodes.len(), protected_raw.get(i).copied().unwrap_or(false));
+        }
+    }
+    if modify_numeral_reading {
+        modify_placeholder_maru(&mut nodes, &protected_nodes);
     }
     let mut njd = NJD { nodes };
     pronunciation::njd_set_pronunciation(&mut njd);
@@ -262,6 +273,43 @@ pub(crate) fn run_frontend(raw: &[&str]) -> Result<Vec<NjdFeature>, HaqumeiError
     accent_type::njd_set_accent_type(&mut njd);
     unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
     Ok(rust_njd_to_features(&njd))
+}
+
+fn modify_placeholder_maru(nodes: &mut [haqumei_jpreprocess_njd::NJDNode], protected: &[bool]) {
+    use haqumei_jpreprocess_core::{
+        pos::{Meishi, POS},
+        pronunciation::Pronunciation,
+    };
+
+    let mut i = 0;
+    while i < nodes.len() {
+        let start = i;
+        if nodes[i].get_string() != "〇" {
+            i += 1;
+            continue;
+        }
+        while i < nodes.len() && nodes[i].get_string() == "〇" {
+            i += 1;
+        }
+        // 「二〇〇〇年」「一〇〇周年」は数値として展開するため、先行する数詞が
+        // ある連続した〇を伏字にしない。
+        if i - start < 2
+            || (start > 0 && nodes[start - 1].get_details().pos == POS::Meishi(Meishi::Kazu))
+        {
+            continue;
+        }
+        for (node, &is_protected) in nodes[start..i].iter_mut().zip(&protected[start..i]) {
+            if is_protected {
+                continue;
+            }
+            // 記号のままではカナ出力に表層形が残り、句も結合されない。
+            // 数詞処理より前に名詞へ変え、句の核はアクセント結合で決める。
+            node.get_details_mut().pos = POS::Meishi(Meishi::General);
+            node.get_details_mut().pos_original = None;
+            node.set_read("マル");
+            node.set_pron(Pronunciation::parse("マル", 0).unwrap());
+        }
+    }
 }
 
 /// 公開特徴量から、補正後の値を持つ Rust の NJD を作る。
@@ -399,7 +447,7 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw).unwrap();
+        let features = super::run_frontend(&raw, false, &[]).unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();

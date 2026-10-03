@@ -10,6 +10,60 @@
 //! `Haqumei::new()` は埋め込み辞書を使うので、ここが落ちたときは
 //! `build.rs` の `DICTIONARY_URL` が指すリリース資産が古い可能性もある。
 
+#[test]
+fn corrected_entries_record_the_pronounced_mora_count() {
+    use haqumei_jpreprocess_core::pronunciation::Pronunciation;
+
+    let dictionary = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("dictionary");
+    let targets = [
+        "登坂車線",
+        "英文法",
+        "ウォーミング",
+        "ウィ〜ン",
+        "ウェストモーランド",
+        "ウォ〜ン",
+        "ウフィッツィ",
+        "エトキシフェニル",
+        "チオホスフェイト",
+        "テトラエチルピロホスフェイト",
+        "ネブカドネツァル",
+        "ヒンドゥ",
+        "プレグナジェン",
+        "体じゅう",
+        "七五三参り",
+        "茸狩り",
+        "ｉＰｈｏｎｅ",
+    ];
+    let mut seen = std::collections::HashSet::new();
+    for name in [
+        "rare_syllables.csv",
+        "naist-jdic.csv",
+        "unidic-csj.csv",
+        "heteronyms.csv",
+    ] {
+        let csv = std::fs::read_to_string(dictionary.join(name)).unwrap();
+        for line in csv.lines() {
+            let fields: Vec<_> = line.split(',').collect();
+            if name != "rare_syllables.csv" && !targets.contains(&fields[0]) {
+                continue;
+            }
+            let (accent, count) = fields[13].split_once('/').unwrap();
+            let pronunciation = Pronunciation::parse(fields[12], 0).unwrap();
+            assert_eq!(
+                pronunciation.moras().len(),
+                count.parse::<usize>().unwrap(),
+                "{name}: {line}"
+            );
+            assert!(
+                accent.parse::<usize>().unwrap() <= pronunciation.moras().len(),
+                "{name}: {line}"
+            );
+            seen.insert(fields[0].to_owned());
+        }
+    }
+    assert!(targets.iter().all(|word| seen.contains(*word)));
+}
+
 #[cfg(test)]
 mod tests {
     use haqumei::Haqumei;

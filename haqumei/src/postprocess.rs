@@ -2,6 +2,7 @@ mod context_reading;
 mod english;
 mod loanword_kana;
 mod numeral;
+mod pron_restore;
 #[cfg(test)]
 mod tests;
 mod unknown_kanji;
@@ -27,7 +28,7 @@ use crate::{
 };
 pub(crate) use context_reading::modify_context_reading;
 pub(crate) use loanword_kana::restore_loanword_kana;
-pub(crate) use numeral::{modify_fraction_denominator, modify_placeholder_maru};
+pub(crate) use numeral::modify_fraction_denominator;
 pub(crate) use unknown_kanji::read_unknown_kanji;
 use utils::{TO_DAKUON, TO_SEION, TO_SEION_CHAR};
 
@@ -60,16 +61,22 @@ impl Haqumei {
         );
 
         for feature in njd_features.iter_mut() {
-            let should_revert_to_read = options.use_read_as_pron
-                || (options.revert_long_vowels
-                    && feature.pron.contains('ー')
-                    && !feature.orig.contains('ー'))
-                || (options.revert_yotsugana
-                    && (feature.read.contains('ヅ') || feature.read.contains('ヂ')));
-
-            if should_revert_to_read {
+            if options.use_read_as_pron {
                 feature.pron = feature.read.clone();
+                continue;
             }
+            if !(options.revert_long_vowels && feature.pron.contains('ー'))
+                && !(options.revert_yotsugana
+                    && (feature.read.contains('ヅ') || feature.read.contains('ヂ')))
+            {
+                continue;
+            }
+            feature.pron = pron_restore::restore(
+                &feature.read,
+                &feature.pron,
+                options.revert_long_vowels && !feature.orig.contains('ー'),
+                options.revert_yotsugana,
+            );
         }
     }
 

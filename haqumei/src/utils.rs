@@ -153,12 +153,15 @@ pub(crate) fn read_to_pron(read: &str) -> String {
     out
 }
 
-/// 文字列のモーラ数を数える。
+/// 無声化記号 `’` を除いてモーラ数を数える。
 #[inline]
 pub(crate) fn count_mora(text: &str) -> usize {
     let mut count = 0;
     let mut chars = text.chars().peekable();
-    while chars.next().is_some() {
+    while let Some(c) = chars.next() {
+        if c == '’' {
+            continue;
+        }
         if chars.peek().is_some_and(|&next| is_small_kana(next)) {
             chars.next();
         }

@@ -183,10 +183,10 @@ pub fn utterance_to_phoneme_vec(utterance: &Utterance) -> Vec<(String, FeatureBu
                 }
                 let builder_w = builder_ap.with_bcd(b, c, d);
 
-                for mora in word.moras.moras() {
+                for (mora_index, mora) in word.moras.moras().iter().enumerate() {
                     let a = &mora_a[mora_index_in_accent_phrase];
                     let mut builder = builder_w.with_a(a.to_owned());
-                    builder.source_index = word.source_index;
+                    builder.source_index = word.mora_source(mora_index);
 
                     let previous = phonemes.last().map(|(phoneme, _)| phoneme.as_str());
                     for phoneme in mora_phonemes(mora, previous).into_iter().flatten() {
@@ -230,12 +230,12 @@ pub fn utterance_to_phonemes_with_sources(utterance: &Utterance) -> Vec<PhonemeW
                         source_index: None,
                     });
                 }
-                for mora in word.moras.moras() {
+                for (mora_index, mora) in word.moras.moras().iter().enumerate() {
                     let previous = phonemes.last().map(|feature| feature.phoneme.as_str());
                     for phoneme in mora_phonemes(mora, previous).into_iter().flatten() {
                         phonemes.push(PhonemeWithSource {
                             phoneme,
-                            source_index: word.source_index,
+                            source_index: word.mora_source(mora_index),
                         });
                     }
                 }

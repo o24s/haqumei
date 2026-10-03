@@ -57,28 +57,3 @@ pub(crate) fn modify_fraction_denominator(njd_features: &mut [NjdFeature]) {
         }
     }
 }
-
-/// 2 つ以上続く「〇」を伏字として `マル` と読む。
-///
-/// NJD は「〇」を数詞として扱うので、既定では `ゼロ` になる。しかし 2 つ以上
-/// 続く「〇」は数値ではなく伏字なので `マル` が正しい (〇〇株式会社 =
-/// マルマルカブシキガイシャ)。
-///
-/// 負の対照: 単独の「〇円」は数詞のままにして、従来の読みを保つ。
-pub(crate) fn modify_placeholder_maru(njd_features: &mut [NjdFeature]) {
-    const MARU: &str = "マル";
-
-    for i in 0..njd_features.len().saturating_sub(1) {
-        if njd_features[i].string != "〇" || njd_features[i + 1].string != "〇" {
-            continue;
-        }
-        for feature in &mut njd_features[i..=i + 1] {
-            // 数詞のままだと後段の数値処理に巻き込まれる
-            feature.pos_group1 = "一般".to_string();
-            feature.read = MARU.to_string();
-            feature.pron = MARU.to_string();
-            feature.acc = 1;
-            feature.mora_size = count_mora(MARU) as i32;
-        }
-    }
-}

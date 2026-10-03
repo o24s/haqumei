@@ -12,11 +12,20 @@ pub struct Word {
     pub moras: Pronunciation,
     /// 単語を作った入力 NJD ノードの添字。
     pub source_index: Option<usize>,
+    pub(crate) source_overrides: Vec<(std::ops::Range<usize>, usize)>,
     /// アクセント句の途中で、語の直前にポーズが入るか。
     pub pause_before: bool,
 }
 
 impl Word {
+    pub(crate) fn mora_source(&self, index: usize) -> Option<usize> {
+        self.source_overrides
+            .iter()
+            .find(|(range, _)| range.contains(&index))
+            .map(|(_, source)| *source)
+            .or(self.source_index)
+    }
+
     pub fn count_mora(&self) -> usize {
         self.moras.moras().len()
     }
@@ -30,6 +39,7 @@ impl From<&NJDNode> for Word {
             cform: cform_to_id(njdnode.get_cform()),
             moras: njdnode.get_pron().clone(),
             source_index: None,
+            source_overrides: Vec::new(),
             pause_before: false,
         }
     }

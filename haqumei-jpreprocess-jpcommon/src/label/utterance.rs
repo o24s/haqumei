@@ -77,6 +77,14 @@ impl From<&[NJDNode]> for Utterance {
                     })
                     .flatten()
                 {
+                    if leading_long < word.count_mora() {
+                        // 長音の後にも発音が続く形態素は、長音だけ前の語へ渡すと
+                        // 読みと音素の対応がずれる。句構造とは別に元の添字を保つ。
+                        let start = previous.count_mora();
+                        previous
+                            .source_overrides
+                            .push((start..start + leading_long, source_index));
+                    }
                     previous.moras.moras.to_mut().extend(
                         word.moras.moras()[..leading_long]
                             .iter()

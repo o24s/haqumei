@@ -51,9 +51,9 @@ use crate::{
     postprocess::{
         merge_english_alphanumeric_words, modify_acc_after_chaining, modify_context_reading,
         modify_english_words, modify_filler_accent, modify_fraction_denominator,
-        modify_old_province_yomi, modify_placeholder_maru, predict_kana_english,
-        process_odori_features, read_unknown_kanji, restore_loanword_kana, retreat_acc_nuc,
-        split_prefix_accent_phrase, suppress_english_hyphen_pause,
+        modify_old_province_yomi, predict_kana_english, process_odori_features, read_unknown_kanji,
+        restore_loanword_kana, retreat_acc_nuc, split_prefix_accent_phrase,
+        suppress_english_hyphen_pause,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -734,7 +734,12 @@ impl Haqumei {
                 .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
 
         if self.options.protect_user_dict_readings || needs_english_positions {
-            let (njd_features, morphs) = self.open_jtalk.run_frontend_detailed(text)?;
+            let (njd_features, morphs) =
+                self.open_jtalk.run_frontend_detailed_with_numeral_reading(
+                    text,
+                    self.options.modify_numeral_reading,
+                    self.options.protect_user_dict_readings,
+                )?;
             let protected = if self.options.protect_user_dict_readings {
                 protected_indices(&njd_features, &morphs)
             } else {
@@ -743,7 +748,9 @@ impl Haqumei {
             return self.apply_postprocessing(text, njd_features, &protected, &morphs);
         }
 
-        let njd_features = self.open_jtalk.run_frontend(text)?;
+        let njd_features = self
+            .open_jtalk
+            .run_frontend_with_numeral_reading(text, self.options.modify_numeral_reading)?;
         self.apply_postprocessing(text, njd_features, &HashMap::new(), &[])
     }
 
@@ -770,15 +777,18 @@ impl Haqumei {
             let normalized = self.open_jtalk.text2mecab_string(text)?;
             let nodes = self.open_jtalk.analyze_lattice(text)?;
             filter(&normalized, &nodes, &mut morphs);
-            let features = self.open_jtalk.run_njd_from_mecab(
-                morphs
-                    .iter()
-                    .filter(|m| !m.is_ignored)
-                    .map(|m| m.feature.as_str()),
+            let features = self.open_jtalk.run_njd_from_morphs(
+                &morphs,
+                self.options.modify_numeral_reading,
+                self.options.protect_user_dict_readings,
             )?;
             (features, morphs)
         } else {
-            self.open_jtalk.run_frontend_detailed(text)?
+            self.open_jtalk.run_frontend_detailed_with_numeral_reading(
+                text,
+                self.options.modify_numeral_reading,
+                self.options.protect_user_dict_readings,
+            )?
         };
 
         let protected = if self.options.protect_user_dict_readings {
@@ -897,7 +907,6 @@ impl Haqumei {
         }
         if options.modify_numeral_reading {
             modify_fraction_denominator(&mut njd_features);
-            modify_placeholder_maru(&mut njd_features);
         }
         // 辞書に無い漢字への読みの付与は、他の補正がすべて読みを決めたあとに行う。
         // ここまでで読みが付かなかったものだけが対象になる

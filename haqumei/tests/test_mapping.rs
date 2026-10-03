@@ -22,6 +22,57 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 ";
 
     #[test]
+    fn leading_long_vowels_stay_with_their_morph() {
+        let mut engine = Haqumei::new().unwrap();
+        for (text, expected) in [
+            (
+                "だってえぇぇぇーーッッ",
+                vec![
+                    ("だって", vec!["d", "a", "cl", "t", "e"]),
+                    ("えぇぇぇ", vec!["e", "e", "e", "e"]),
+                    ("ーーッッ", vec!["e", "e", "cl", "cl"]),
+                ],
+            ),
+            (
+                "あーーッ！",
+                vec![
+                    ("あー", vec!["a", "a"]),
+                    ("ーッ", vec!["a", "cl"]),
+                    ("！", vec!["pau"]),
+                ],
+            ),
+        ] {
+            let mapping = engine.g2p_mapping(text).unwrap();
+            let actual: Vec<_> = mapping
+                .iter()
+                .map(|w| {
+                    (
+                        w.word.as_str(),
+                        w.phonemes.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
+            assert_eq!(actual, expected);
+            let prosody = engine.g2p_mapping_prosody(text).unwrap();
+            for (word, (surface, expected_phonemes)) in prosody.iter().zip(&expected) {
+                assert_eq!(&word.word, surface);
+                if expected_phonemes == &["pau"] {
+                    continue;
+                }
+                let actual: Vec<&str> = word
+                    .phonemes
+                    .iter()
+                    .filter_map(|p| match p {
+                        haqumei::ProsodicPhoneme::Phoneme { phoneme, .. } => Some(phoneme.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(&actual, expected_phonemes);
+            }
+        }
+    }
+
+    #[test]
     fn test_mapping_nightmare_case() {
         let mut haqumei = Haqumei::new().unwrap();
         haqumei.options.use_allophones = true;

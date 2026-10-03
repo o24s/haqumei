@@ -460,6 +460,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `Haqumei::with_options` を使用することで、`Haqumei` の出力をカスタマイズできます。
 デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) を参照してください。
 
+`revert_long_vowels` と `revert_yotsugana` は指定した表記の違いだけを戻し、同じ語に含まれる助詞の発音・連濁・無声化を保ちます。
+
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。
 
 ```rust

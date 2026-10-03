@@ -241,10 +241,18 @@ fn test_restore_loanword_kana() {
         ("アイシュヴァルヤ", "アイシュバルヤ", "アイシュヴァルヤ"),
         ("テュルク", "チュルク", "テュルク"),
         ("アクスィス", "アクシス", "アクスィス"),
+        ("ウェイヴ", "ウェーブ", "ウェーヴ"),
     ] {
         let mut v = [f(surface, pron, pron)];
         restore_loanword_kana(&mut v);
         assert_eq!(v[0].pron, want, "入力: {surface}");
+        let parsed =
+            haqumei_jpreprocess_core::pronunciation::Pronunciation::parse(want, 0).unwrap();
+        assert_eq!(
+            v[0].mora_size,
+            parsed.moras().len() as i32,
+            "入力: {surface}"
+        );
     }
 
     // 置き換えた形のほうが定着している語は触らない。
@@ -267,6 +275,35 @@ fn test_restore_loanword_kana() {
     let mut v = [f("エヌ・エイチ・ヴィ", "エヌエイチブイ", "エヌエイチブイ")];
     restore_loanword_kana(&mut v);
     assert_eq!(v[0].pron, "エヌエイチブイ");
+
+    // 復元区間の前・中・後と平板を区別し、複数区間の短縮も数える。
+    for (surface, pron, accent, expected) in [
+        ("イェテボリ", "イエテボリ", 3, 2),
+        ("アイェテボリ", "アイエテボリ", 1, 1),
+        ("イェテボリ", "イエテボリ", 1, 1),
+        ("イェテボリ", "イエテボリ", 2, 1),
+        ("イェテボリ", "イエテボリ", 0, 0),
+        ("イェニェテ", "イエニエテ", 5, 3),
+        ("イェキテ", "イエキ’テ", 4, 3),
+    ] {
+        let mut features = [f(surface, pron, pron)];
+        features[0].acc = accent;
+        restore_loanword_kana(&mut features);
+        assert_eq!(features[0].acc, expected, "{surface}, {accent}");
+        assert_eq!(features[0].mora_size, count_mora(&features[0].pron) as i32);
+    }
+
+    // 核が別の形態素に記録されていても、句内の位置を保つ。
+    for (accent, expected) in [(1, 1), (4, 3), (7, 6)] {
+        let mut features = [
+            f("新", "シン", "シン"),
+            f("イェテボリ", "イエテボリ", "イエテボリ"),
+        ];
+        features[0].acc = accent;
+        features[1].chain_flag = 1;
+        restore_loanword_kana(&mut features);
+        assert_eq!(features[0].acc, expected);
+    }
 }
 
 /// 「等」は直前の品詞細分類 1 で ラ / トー / ナド に分かれる。

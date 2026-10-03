@@ -198,6 +198,14 @@ impl OpenJTalk {
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
+        self.run_frontend_with_numeral_reading(text, false)
+    }
+
+    pub(crate) fn run_frontend_with_numeral_reading(
+        &mut self,
+        text: &str,
+        modify_numeral_reading: bool,
+    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
@@ -205,7 +213,7 @@ impl OpenJTalk {
         }
 
         let mecab_features = self.run_mecab(text)?;
-        self.run_njd_from_mecab(&mecab_features)
+        self.run_njd_from_mecab_with_numeral_reading(&mecab_features, modify_numeral_reading)
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -215,6 +223,15 @@ impl OpenJTalk {
         &mut self,
         text: &str,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        self.run_frontend_detailed_with_numeral_reading(text, false, false)
+    }
+
+    pub(crate) fn run_frontend_detailed_with_numeral_reading(
+        &mut self,
+        text: &str,
+        modify_numeral_reading: bool,
+        protect_user_dict_readings: bool,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
@@ -223,11 +240,10 @@ impl OpenJTalk {
 
         let mecab_morphs = self.run_mecab_detailed(text)?;
         Ok((
-            self.run_njd_from_mecab(
-                mecab_morphs
-                    .iter()
-                    .filter(|morph| !morph.is_ignored)
-                    .map(|morph| &morph.feature),
+            self.run_njd_from_morphs(
+                &mecab_morphs,
+                modify_numeral_reading,
+                protect_user_dict_readings,
             )?,
             mecab_morphs,
         ))
@@ -877,9 +893,40 @@ impl OpenJTalk {
         I: IntoIterator,
         I::Item: AsRef<str> + 'a,
     {
+        self.run_njd_from_mecab_with_numeral_reading(mecab_features, false)
+    }
+
+    pub(crate) fn run_njd_from_mecab_with_numeral_reading<'a, I>(
+        &mut self,
+        mecab_features: I,
+        modify_numeral_reading: bool,
+    ) -> Result<Vec<NjdFeature>, HaqumeiError>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str> + 'a,
+    {
         let raw: Vec<_> = mecab_features.into_iter().collect();
         let borrowed: Vec<&str> = raw.iter().map(AsRef::as_ref).collect();
-        njd::run_frontend(&borrowed)
+        njd::run_frontend(&borrowed, modify_numeral_reading, &[])
+    }
+
+    pub(crate) fn run_njd_from_morphs(
+        &mut self,
+        morphs: &[MecabMorph],
+        modify_numeral_reading: bool,
+        protect_user_dict_readings: bool,
+    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
+        let (raw, protected): (Vec<_>, Vec<_>) = morphs
+            .iter()
+            .filter(|m| !m.is_ignored)
+            .map(|m| {
+                (
+                    m.feature.as_str(),
+                    protect_user_dict_readings && m.is_from_user_dictionary(),
+                )
+            })
+            .unzip();
+        njd::run_frontend(&raw, modify_numeral_reading, &protected)
     }
 
     /// NJD の特徴からフルコンテキストラベル文字列を生成します。

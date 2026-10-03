@@ -296,6 +296,28 @@ mod tests {
     }
 
     #[test]
+    fn selective_restoration_keeps_particles_rendaku_and_devoicing() {
+        let mut engine = Haqumei::with_options(HaqumeiOptions {
+            revert_long_vowels: true,
+            ..Default::default()
+        })
+        .unwrap();
+        for (text, expected) in [
+            ("本当は百票です。", "ホントウワヒャッピョウデス。"),
+            ("ゲリラ豪雨", "ゲリラゴウウ"),
+            ("ウェイヴ", "ウェイヴ"),
+            ("ニャーと鳴く", "ニャートナク"),
+        ] {
+            assert_eq!(engine.g2k(text).unwrap(), expected);
+        }
+        let features = engine.run_frontend("ありがとうございました").unwrap();
+        assert_eq!(
+            features.iter().map(|f| f.pron.as_str()).collect::<Vec<_>>(),
+            ["アリガトウ", "ゴザイマシ’タ"]
+        );
+    }
+
+    #[test]
     fn test_g2k_use_read_as_pron() {
         let text = "こんにちは、人生。";
 
@@ -891,6 +913,78 @@ mod tests {
 
         haqumei.options.modify_numeral_reading = false;
         assert_eq!(haqumei.g2k("三分の一").unwrap(), "サンブノイチ");
+    }
+
+    #[test]
+    fn placeholder_circles_are_joined_before_accent_assignment() {
+        let mut engine = Haqumei::new().unwrap();
+        for (text, kana, accent, moras) in [
+            ("〇〇", "マルマル", 0, 4),
+            ("〇〇です。", "マルマルデス。", 2, 6),
+            ("〇〇町です。", "マルマルマチデス。", 4, 8),
+            ("〇〇〇です。", "マルマルマルデス。", 4, 8),
+        ] {
+            assert_eq!(engine.g2k(text).unwrap(), kana);
+            let features = engine.run_frontend(text).unwrap();
+            assert_eq!(features, engine.run_frontend_detailed(text).unwrap().0);
+            assert_eq!(features[0].pos, "名詞");
+            assert_eq!(features[0].acc, accent);
+            assert_eq!(features[1].chain_flag, 1);
+            let labels = engine.extract_fullcontext(text).unwrap();
+            let phrase = labels
+                .iter()
+                .find(|l| l.phoneme.c.as_deref() == Some("m"))
+                .unwrap()
+                .accent_phrase_curr
+                .as_ref()
+                .unwrap();
+            assert_eq!(phrase.mora_count, moras);
+            assert_eq!(
+                phrase.accent_position,
+                if accent == 0 { moras } else { accent as u8 }
+            );
+            engine.set_morph_filter(|_, _, _| {});
+            assert_eq!(engine.run_frontend(text).unwrap(), features);
+            engine.clear_morph_filter();
+        }
+        assert_eq!(engine.g2k("二〇〇〇年").unwrap(), "ニセンネン");
+        assert_eq!(engine.g2k("一〇〇周年").unwrap(), "ヒャクシューネン");
+        assert_eq!(engine.g2k("〇〇一").unwrap(), "マルマルイチ");
+        engine.options.modify_numeral_reading = false;
+        let mut low_level = haqumei::OpenJTalk::new().unwrap();
+        assert_eq!(
+            engine.run_frontend("〇〇").unwrap(),
+            low_level.run_frontend("〇〇").unwrap()
+        );
+
+        engine.options.modify_numeral_reading = true;
+        engine.options.protect_user_dict_readings = true;
+        engine.set_morph_filter(|_, _, morphs| {
+            for morph in morphs.iter_mut().filter(|m| m.surface == "〇") {
+                morph.feature = "〇,名詞,一般,*,*,*,*,〇,ワ,ワ,0/1,*,0".to_owned();
+                morph.dictionary_index = 1;
+            }
+        });
+        assert_eq!(engine.g2k("〇〇").unwrap(), "ワワ");
+        engine.options.protect_user_dict_readings = false;
+        assert_eq!(engine.g2k("〇〇").unwrap(), "マルマル");
+    }
+
+    #[test]
+    fn restored_loanword_keeps_the_accent_on_the_same_mora() {
+        let mut engine = Haqumei::new().unwrap();
+        let features = engine.run_frontend("イェテボリ").unwrap();
+        assert_eq!(features.len(), 1);
+        assert_eq!(
+            (&*features[0].pron, features[0].acc, features[0].mora_size),
+            ("イェテボリ", 2, 4)
+        );
+        engine.options.restore_loanword_kana = false;
+        let features = engine.run_frontend("イェテボリ").unwrap();
+        assert_eq!(
+            (&*features[0].pron, features[0].acc, features[0].mora_size),
+            ("イエテボリ", 3, 5)
+        );
     }
 
     /// 辞書に無い漢字へのフォールバック読み

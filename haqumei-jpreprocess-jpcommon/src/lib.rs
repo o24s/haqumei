@@ -21,7 +21,7 @@ pub fn njdnodes_to_features(njd_nodes: &[NJDNode]) -> Vec<Label> {
 pub struct LabelWithSource {
     pub label: Label,
     /// `sil` と `pau` は `None`、発音を持つ音素は元のノードの添字です。
-    /// 語頭の長音が直前の語に結合された場合は、直前の語の添字を返します。
+    /// 長音だけのノードが直前の語に結合された場合は、直前の語の添字を返します。
     pub source_index: Option<usize>,
 }
 
@@ -36,7 +36,7 @@ pub fn njdnodes_to_features_with_sources(njd_nodes: &[NJDNode]) -> Vec<LabelWith
 pub struct PhonemeWithSource {
     pub phoneme: String,
     /// `sil` と `pau` は `None`、発音を持つ音素は元のノードの添字です。
-    /// 語頭の長音が直前の語に結合された場合は、直前の語の添字を返します。
+    /// 長音だけのノードが直前の語に結合された場合は、直前の語の添字を返します。
     pub source_index: Option<usize>,
 }
 
@@ -122,16 +122,26 @@ mod tests {
     }
 
     #[test]
-    fn leading_long_vowels_belong_to_previous_word_and_phrase() {
-        let features =
-            njdnodes_to_features_with_sources(&[node("キ", 1, false), node("ーーア", 1, false)]);
+    fn leading_long_vowels_keep_their_source_inside_the_previous_phrase() {
+        let nodes = [node("キ", 1, false), node("ーーア", 1, false)];
+        let features = njdnodes_to_features_with_sources(&nodes);
         let sources: Vec<_> = features
             .iter()
             .map(|feature| feature.source_index)
             .collect();
         assert_eq!(
             sources,
-            [None, Some(0), Some(0), Some(0), Some(0), Some(1), None]
+            [None, Some(0), Some(0), Some(1), Some(1), Some(1), None]
+        );
+        assert_eq!(
+            njdnodes_to_phonemes_with_sources(&nodes),
+            features
+                .iter()
+                .map(|f| PhonemeWithSource {
+                    phoneme: f.label.phoneme.c.clone().unwrap(),
+                    source_index: f.source_index,
+                })
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             features[1]
@@ -161,6 +171,31 @@ mod tests {
             .map(|feature| feature.phoneme.c.as_deref().unwrap())
             .collect();
         assert_eq!(phonemes, ["sil", "ts", "o", "O", "sil"]);
+    }
+
+    #[test]
+    fn leading_long_vowels_do_not_take_phonemes_across_a_pause() {
+        let nodes = [
+            node("キ", 1, false),
+            node("、", 0, false),
+            node("ーーア", 1, false),
+        ];
+        let phonemes = njdnodes_to_phonemes_with_sources(&nodes);
+        let actual: Vec<_> = phonemes
+            .iter()
+            .map(|p| (p.phoneme.as_str(), p.source_index))
+            .collect();
+        assert_eq!(
+            actual,
+            [
+                ("sil", None),
+                ("k", Some(0)),
+                ("i", Some(0)),
+                ("pau", None),
+                ("a", Some(2)),
+                ("sil", None)
+            ]
+        );
     }
 
     #[test]
