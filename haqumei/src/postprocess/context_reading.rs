@@ -88,6 +88,12 @@ enum Cue {
     /// 名詞に限りたいときは [`Cue::All`] で [`Cue::PrevPosIn`] と組み合わせる。
     PrevPosGroup1In(&'static [&'static str]),
 
+    /// 直前の形態素の表層形が、指定した文字数以上である。
+    PrevMinChars(usize),
+
+    /// 指定した条件を満たさない。
+    Not(&'static Cue),
+
     /// 並べた条件をすべて満たす。品詞と品詞細分類のように、片方だけでは
     /// 絞りきれない手がかりを組み合わせるのに使う。
     All(&'static [Cue]),
@@ -492,21 +498,29 @@ const RULES: &[Rule] = &[
         cue: Cue::PrevPosGroup1In(&["形容動詞語幹"]),
         reading: "ブツ",
     },
-    // 名詞 + 「尼」は接尾辞の ニ と読む。(修道尼・比丘尼)
+    // 名詞 + 「尼」は接尾辞の ニ と読む。(修道尼・恵信尼)
+    // 「翌日尼に会う」のような副詞的な名詞の後では、独立した アマ を残す。
     // [10 / 0]
     Rule {
         surface: "尼",
         pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        cue: Cue::All(&[
+            Cue::PrevPosIn(&["名詞"]),
+            Cue::Not(&Cue::PrevPosGroup1In(&["副詞可能", "非自立"])),
+        ]),
         reading: "ニ",
     },
     // 活用語 + 「者」は モノ と読む。(成り上がり者・若い者・働く者)
     // 医者・記者 は 1 形態素なので 者 が単独で現れない。
+    // 「受者」の「受」が動詞の連用形になるため、1 文字の語幹は除く。
     // [8 / 407]
     Rule {
         surface: "者",
         pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["自立"]),
+        cue: Cue::All(&[
+            Cue::PrevPosGroup1In(&["自立"]),
+            Cue::PrevMinChars(2),
+        ]),
         reading: "モノ",
     },
     // 活用語 + 「処」は トコロ と読む。(たべる処・住む処)
@@ -653,11 +667,15 @@ const RULES: &[Rule] = &[
     },
 
     // 「金型」の 金 は カナ と読む。
+    // 「返戻金型」は「返戻金」+「型」なので キン を残す。
     // [10 / 0]
     Rule {
         surface: "金",
         pos_group1: None,
-        cue: Cue::NextIn(&["型"]),
+        cue: Cue::All(&[
+            Cue::NextIn(&["型"]),
+            Cue::Not(&Cue::PrevIn(&["返戻"])),
+        ]),
         reading: "カナ",
     },
     // 「一目で」の 一目 は ヒトメ と読む。
@@ -717,11 +735,15 @@ const RULES: &[Rule] = &[
         reading: "シ",
     },
     // 名詞 + 「翁」は オー と読む。(芭蕉翁・計算翁)
+    // 「明日翁が来る」のような副詞的な名詞の後では、独立した オキナ を残す。
     // [8 / 8]
     Rule {
         surface: "翁",
         pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        cue: Cue::All(&[
+            Cue::PrevPosIn(&["名詞"]),
+            Cue::Not(&Cue::PrevPosGroup1In(&["副詞可能", "非自立"])),
+        ]),
         reading: "オー",
     },
     // 「仰しゃる」は オッシャル と読む。
@@ -905,6 +927,8 @@ fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
         Cue::PrevPosGroup1In(candidates) => {
             i > 0 && candidates.contains(&njd_features[i - 1].pos_group1.as_str())
         }
+        Cue::PrevMinChars(min) => i > 0 && njd_features[i - 1].string.chars().count() >= *min,
+        Cue::Not(cue) => !cue_matches(cue, njd_features, i),
         Cue::NextPosIn(candidates) => njd_features
             .get(i + 1)
             .is_some_and(|next| candidates.contains(&next.pos.as_str())),
