@@ -967,7 +967,17 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
         };
 
         let node = &mut njd_features[i];
+        // 同じ発音を書き直すと、NJD が付けた無声化の記号が消える。
+        // read には無声化を含めず、pron が変わらない場合はそのまま残す。
         node.read = rule.reading.to_string();
+        if node
+            .pron
+            .chars()
+            .filter(|&c| c != '’')
+            .eq(rule.reading.chars())
+        {
+            continue;
+        }
         node.pron = rule.reading.to_string();
         // 読みが変わるとモーラ数も変わりうるため数え直す
         let old_mora = node.mora_size;
