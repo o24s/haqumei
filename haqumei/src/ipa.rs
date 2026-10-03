@@ -1,15 +1,14 @@
 //! IPA の広い音声表記への変換。
 //!
-//! 促音と後続子音のように、複数の音素から一つの phone が作られることがある。
-//! そのため、変換は [`Phoneme`] ごとの置換ではなく、
-//! [`Haqumei::g2p_mapping_prosody`] が返した列全体に対して行う。
+//! [`Haqumei::g2ipa`] は、日本語テキストから単語ごとの音声表記を返します。
+//! 各要素の文字列は [`IpaToken::as_str`] で取得できます。
+//! [`Haqumei::g2ipa_prosody`] はピッチアクセントと韻律境界も返します。
 //!
 //! 出力は規則で決められる範囲の broad phonetic transcription であり、
 //! 音声を観測した narrow transcription ではない。とくに発話末撥音の `[ɴ]` と
 //! 日本語 `/w/` の `[β̞]` は、連続変異を一つの記号へ畳んだ広表記上の約束である。
 //! 既存の異音解決オプションは音響モデルへ渡す音素ラベルを選ぶための設定なので、
-//! IPA の判断には使わない。撥音と促音は未解決の形へ戻し、本モジュールの文脈規則で
-//! 変換する。閉鎖の有無を選べない撥音などは、後続音によって分類し、
+//! IPA 出力には影響しない。閉鎖の有無を選べない撥音などは、後続音によって分類し、
 //! [`IpaToken::Special`] で専用ラベルを返す。専用ラベルは `{N:s}` のように
 //! 波括弧で囲み、IPA 記号と区別する。閉鎖位置や閉鎖の有無までは指定しない。
 //! r・ch・j の前の撥音を `[n]`、発話末促音を `[ʔ]` とするのも、広表記上の約束である。
@@ -371,11 +370,11 @@ enum LocatedInput {
 }
 
 impl Haqumei {
-    /// 入力テキストを単語ごとの IPA の広い音声表記へ変換する。
+    /// 日本語テキストを IPA の広い音声表記へ変換し、単語ごとに返します。
     ///
-    /// 返り値は IPA phone、専用ラベル、未知音を区別する。促音と後続子音は一つの
-    /// 長子音へまとめられるため、単純な `Phoneme` ごとの置換ではない。
-    /// [`HaqumeiOptions`](crate::HaqumeiOptions) の異音解決オプションには影響されない。
+    /// [`WordIpaMap`] は単語の表層形、文字位置、音声表記を持ちます。
+    /// 各要素の文字列は [`IpaToken::as_str`] で取得できます。
+    /// [`HaqumeiOptions`](crate::HaqumeiOptions) の異音解決オプションは出力に影響しません。
     pub fn g2ipa(&mut self, text: &str) -> Result<Vec<WordIpaMap>, HaqumeiError> {
         let words = self.g2p_mapping_prosody(text)?;
         let tokens = transcribe(&flatten(&words));

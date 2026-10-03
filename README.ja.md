@@ -335,20 +335,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### IPA 変換 (`g2ipa`)
 
-`g2ipa` は `Phoneme` を一つずつ置換せず、音素列全体を変換します。促音と後続子音を
-一つの phone として扱うため、`cl + k` は `kːk` ではなく `kː` になります。撥音も、
-前後の音から実現を決められる環境では文脈に応じて変換されます。
-
-出力は規則による広い音声表記であり、録音を観測した狭い音声表記ではありません。
-`g2ipa` は単語ごとの `WordIpaMap` を返します。`IpaToken` は IPA phone (`Phone`)、
-専用ラベル (`Special`)、未知音 (`Unknown`) を区別します。
-`IpaToken::as_str()` が IPA 記号、専用ラベル、または未知音の `{unk}` を文字列で返します。
-異音ラベルを選ぶオプションは IPA token に影響しません。`g2ipa` は撥音と促音に対し、
-文脈による規則を常に適用し直します。口腔閉鎖の有無を決められない撥音は、
-後続音によって分類します。たとえば `{N:s}` は `/s/` の前の撥音を表し、
-閉鎖位置や閉鎖の有無は指定しません。専用ラベルの定義は
-[`SpecialPhone`](haqumei/src/ipa.rs) にあり、波括弧で標準 IPA の記号と区別します。
-破擦音の促音は閉鎖を含めて表し、たとえば「グッズ」では `[dːz]` を返します。
+`g2ipa` は日本語テキストを IPA による広い音声表記へ変換します。
+返り値の `WordIpaMap` には、単語ごとの表層形、文字位置、音声表記が含まれます。
+各要素の文字列は `IpaToken::as_str()` で取得できます。
 
 ```rust
 use haqumei::{Haqumei, IpaToken};
@@ -374,16 +363,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 新票: ɕi{N:hy}çoː
 ```
 
-未知音は `{unk}` と表示します。専用ラベルとは token の種類を分けています。
-Python でも `token.kind` で区別でき、`str(token)` または `token.symbol` で
-文字列を取得できます。
+「学校」の促音と長母音は `kː` と `oː` で表します。破擦音の促音は閉鎖の長さを表し、
+たとえば「グッズ」の「ッズ」は `dːz` になります。
 
-`g2ipa_prosody` は `WordIpaProsody` を返します。各 IPA token の
-`IpaTokenProsody` は、token を構成する音素の `PitchAccent` と途中の境界を
-入力順に保持します。`g2ipa_batch` と
-`g2ipa_prosody_batch` は複数の入力を並行して処理します。Python の `Haqumei`
-クラスにも同じ四つのメソッドと構造化された返り値があります。CLI では通常の mapping を
-`--mode ipa`、ピッチと境界を `--mode ipa-prosody` で利用できます。
+`{N:s}` などは、発音を一つの IPA 記号に決められない場合の専用ラベルです。
+`{N:s}` は `/s/` の前の撥音を表し、口腔閉鎖の位置や有無は指定しません。
+専用ラベルは波括弧で IPA 記号と区別します。定義は
+[`SpecialPhone`](haqumei/src/ipa.rs) にあります。
+`IpaToken` は IPA の音を `Phone`、専用ラベルを `Special`、未知音を `Unknown` で返します。
+未知音の文字列表記は `{unk}` です。
+
+出力はテキストから規則に従って求めた広い音声表記です。
+話者ごとの発音の細かな違いまでは表しません。
+`use_allophones` などの異音解決オプションによって出力が変わることはありません。
+
+`g2ipa_prosody` は、ピッチアクセントと韻律境界を含む `WordIpaProsody` を返します。
+長母音の途中でのピッチの変化も `IpaTokenProsody` で取得できます。
+複数のテキストをまとめて変換するには、`g2ipa_batch` と `g2ipa_prosody_batch` を使えます。
+
+Python の `Haqumei` クラスにも同じ四つのメソッドがあります。
+各要素の種類は `token.kind`、文字列は `str(token)` または `token.symbol` で取得できます。
+CLI では `--mode ipa` で音声表記を、`--mode ipa-prosody` でピッチと境界を含む表記を
+出力できます。
 
 ### 読みの候補を得る (`g2p_candidates`)
 

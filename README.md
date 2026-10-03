@@ -327,22 +327,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### IPA Transcription (`g2ipa`)
 
-`g2ipa` converts the complete phoneme sequence instead of replacing each `Phoneme`
-independently. This lets a geminate and its following consonant become one phone—for
-example, `cl + k` becomes `kː` rather than `kːk`. Moraic nasals are resolved from their
-surrounding phones where the context determines the realization.
-
-The result is a rule-based broad phonetic transcription, not a narrow transcription of a
-recording. `g2ipa` returns a `WordIpaMap` for each word. Its `IpaToken` values distinguish
-IPA phones (`Phone`), dedicated labels (`Special`), and unknown input (`Unknown`).
-`IpaToken::as_str()` returns the IPA symbol, dedicated label, or `{unk}` as a string.
-Allophone-label options do not change the IPA tokens: `g2ipa` always reapplies its
-context rules to moraic nasals and geminates. Where the context does not determine
-whether a moraic nasal has oral closure, `g2ipa` classifies it by the following sound.
-For example, `{N:s}` identifies a moraic nasal before /s/ without specifying its closure.
-These labels are defined by [`SpecialPhone`](haqumei/src/ipa.rs); braces distinguish
-them from standard IPA symbols.
-Geminate affricates retain their closure: for example, “グッズ” contains `[dːz]`.
+`g2ipa` converts Japanese text to broad IPA transcription. It returns a `WordIpaMap`
+for each word, containing its surface text, character span, and transcription.
+Use `IpaToken::as_str()` to get the string representation of each token.
 
 ```rust
 use haqumei::{Haqumei, IpaToken};
@@ -368,16 +355,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 新票: ɕi{N:hy}çoː
 ```
 
-Unknown input is displayed as `{unk}`. Dedicated labels and unknown input are separate
-token types. Python exposes the same distinction through `token.kind`, with string
-output available as `str(token)` or `token.symbol`.
+In "学校", `kː` and `oː` represent the geminate consonant and long vowel.
+For geminate affricates, the length mark applies to the closure: "ッズ" in "グッズ"
+is transcribed as `dːz`.
 
-`g2ipa_prosody` returns `WordIpaProsody`. Each token has an ordered list of
-`IpaTokenProsody` values retaining the `PitchAccent` of every source phoneme and any
-boundary inside a compound phone. The corresponding `g2ipa_batch` and
-`g2ipa_prosody_batch` methods process multiple inputs
-concurrently. Python exposes the same four methods and structured result types. The CLI
-uses `--mode ipa` for the plain mapping and `--mode ipa-prosody` for pitch and boundaries.
+Labels such as `{N:s}` identify sounds whose realization cannot be assigned a single
+IPA symbol. `{N:s}` denotes a moraic nasal before /s/ without specifying the location
+or presence of oral closure. Braces distinguish these labels from IPA symbols;
+their definitions are in [`SpecialPhone`](haqumei/src/ipa.rs).
+`IpaToken` represents IPA phones as `Phone`, dedicated labels as `Special`, and
+unknown input as `Unknown`. The string representation of unknown input is `{unk}`.
+
+The output is a broad transcription derived from text using pronunciation rules.
+It does not describe fine differences in individual speakers' pronunciation.
+Allophone options such as `use_allophones` do not change the output.
+
+`g2ipa_prosody` returns `WordIpaProsody` with pitch accent and prosodic boundaries.
+`IpaTokenProsody` also records pitch changes within a long vowel.
+Use `g2ipa_batch` and `g2ipa_prosody_batch` to convert multiple texts at once.
+
+Python's `Haqumei` class provides the same four methods. Each token's type is available
+through `token.kind`, and its string representation through `str(token)` or `token.symbol`.
+The CLI outputs transcription with `--mode ipa`, or transcription with pitch and
+boundaries with `--mode ipa-prosody`.
 
 ### Getting Reading Candidates (`g2p_candidates`)
 
