@@ -900,7 +900,15 @@ impl Haqumei {
         // 読みを確定させた後、アクセント関連の補正より前に文脈依存の読みを解決する
         // (いずれも mora_size が変わるため)
         if options.modify_context_reading {
-            modify_context_reading(&mut njd_features);
+            let protected_nodes: Vec<bool> = if saved.is_empty() {
+                Vec::new()
+            } else {
+                njd_char_spans(&njd_features, morphs)
+                    .into_iter()
+                    .map(|span| !span.is_empty() && saved.contains_key(&span.start))
+                    .collect()
+            };
+            modify_context_reading(&mut njd_features, &protected_nodes);
         }
         if options.modify_old_province_yomi {
             modify_old_province_yomi(&mut njd_features);

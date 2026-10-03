@@ -948,9 +948,13 @@ static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static Rule>>> =
     });
 
 /// 隣接する形態素で読みが決まる語を補正する。
-pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature]) {
+pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected: &[bool]) {
     let by_surface = &*RULES_BY_SURFACE;
     for i in 0..njd_features.len() {
+        // 後から読みだけを復元すると、モーラ数に合わせて動かした句の核が戻らない。
+        if protected.get(i) == Some(&true) {
+            continue;
+        }
         let Some(rules) = by_surface.get(njd_features[i].string.as_str()) else {
             continue;
         };

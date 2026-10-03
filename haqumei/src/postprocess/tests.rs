@@ -353,7 +353,7 @@ fn test_modify_context_reading_nado() {
             f("前", pos, pos_group1, "マエ"),
             f("等", "名詞", "一般", "ナド"),
         ];
-        modify_context_reading(&mut features);
+        modify_context_reading(&mut features, &[]);
 
         let label = format!("{pos}-{pos_group1}");
         assert_eq!(features[1].pron, expected, "直前が {label}");
@@ -368,7 +368,7 @@ fn test_modify_context_reading_nado() {
 
     // 文頭の「等」は直前が無いので触らない
     let mut features = [f("等", "名詞", "一般", "ナド")];
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].pron, "ナド");
 
     // 辞書の版によっては「等」が 名詞-接尾 として現れる。規則の対象を
@@ -377,7 +377,7 @@ fn test_modify_context_reading_nado() {
         f("これ", "名詞", "代名詞", "コレ"),
         f("等", "名詞", "接尾", "トー"),
     ];
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[1].pron, "ラ");
 }
 
@@ -390,12 +390,12 @@ fn test_modify_context_reading_preserves_unvoicing() {
     let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[]).unwrap();
     assert!(features[0].pron.contains('’'));
     let before = features.clone();
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features, before);
 
     // read の表記だけを直す場合も、pron に付いた無声化は残す。
     features[0].read = "ハカセ".into();
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features, before);
 
     // 文全体の無声化を消して再計算すると、辞書が指定したフィラーの無声化も消える。
@@ -405,7 +405,7 @@ fn test_modify_context_reading_preserves_unvoicing() {
         "課程,名詞,一般,*,*,*,*,課程,カテイ,カテー,0/3,*,1",
     ];
     let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[]).unwrap();
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].pron, "ソーデス’ネ");
     assert_eq!(features[1].read, "ハクシ");
 }
@@ -439,7 +439,12 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
         f("余", "接尾", "アマリ", 1, 1),
         f("師", "接尾", "シ", 1, 1),
     ];
-    modify_context_reading(&mut features);
+    // 保護された読みは書き換えないので、句頭の核も動かない。
+    let mut protected = features.clone();
+    modify_context_reading(&mut protected, &[false, false, true, false]);
+    assert_eq!(protected, features);
+
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[2].pron, "ヨ");
     assert_eq!(features[2].mora_size, 1);
     assert_eq!(features[0].acc, 6);
@@ -451,7 +456,7 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
         f("余", "接尾", "アマリ", 1, 1),
         f("師", "接尾", "シ", 1, 1),
     ];
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].acc, 2);
 
     // 核が書き換えた形態素の中にあって、読みが短くなって位置が無くなるときは
@@ -463,6 +468,6 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
         f("余", "接尾", "アマリ", 1, 1),
         f("師", "接尾", "シ", 1, 1),
     ];
-    modify_context_reading(&mut features);
+    modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].acc, 6);
 }
