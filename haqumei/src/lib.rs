@@ -914,15 +914,17 @@ impl Haqumei {
 
         // 読みを確定させた後、アクセント関連の補正より前に文脈依存の読みを解決する
         // (いずれも mora_size が変わるため)
+        let protected_nodes: Vec<bool> = if saved.is_empty()
+            || !(options.modify_context_reading || options.modify_numeral_reading)
+        {
+            Vec::new()
+        } else {
+            njd_char_spans(&njd_features, morphs)
+                .into_iter()
+                .map(|span| !span.is_empty() && saved.contains_key(&span.start))
+                .collect()
+        };
         if options.modify_context_reading {
-            let protected_nodes: Vec<bool> = if saved.is_empty() {
-                Vec::new()
-            } else {
-                njd_char_spans(&njd_features, morphs)
-                    .into_iter()
-                    .map(|span| !span.is_empty() && saved.contains_key(&span.start))
-                    .collect()
-            };
             modify_context_reading(&mut njd_features, &protected_nodes);
         }
         if options.modify_old_province_yomi {
@@ -930,6 +932,7 @@ impl Haqumei {
         }
         if options.modify_numeral_reading {
             modify_fraction_denominator(&mut njd_features);
+            postprocess::modify_group_reading(&mut njd_features, &protected_nodes);
         }
         // 辞書に無い漢字への読みの付与は、他の補正がすべて読みを決めたあとに行う。
         // ここまでで読みが付かなかったものだけが対象になる

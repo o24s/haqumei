@@ -8,6 +8,82 @@
 use crate::NjdFeature;
 use crate::utils::count_mora;
 
+/// 数量の一組・二組をヒトクミ・フタクミと読みます。
+/// 「数詞 + 年」と「第」の直後では、組番号の読みを維持します。
+pub(crate) fn modify_group_reading(features: &mut [NjdFeature], protected: &[bool]) {
+    for i in 0..features.len() {
+        let combined = features[i].string == "一組"
+            && features[i].read == "イチクミ"
+            && features[i].pos == "名詞"
+            && features[i].pos_group1 == "一般";
+        let separate = features[i].pos_group1 == "数"
+            && matches!(features[i].string.as_str(), "一" | "二")
+            && features.get(i + 1).is_some_and(|next| {
+                next.string == "組" && next.read == "クミ" && next.pos_group2 == "助数詞"
+            });
+        if !(combined || separate)
+            || protected.get(i).copied().unwrap_or(false)
+            || (separate && protected.get(i + 1).copied().unwrap_or(false))
+        {
+            continue;
+        }
+        let previous = i.checked_sub(1).map(|p| &features[p]);
+        if previous.is_some_and(|p| {
+            p.pos_group1 == "数"
+                || p.string == "第"
+                || (matches!(p.string.as_str(), "．" | "・" | "点" | "一点")
+                    && p.read.ends_with("テン"))
+        }) || follows_school_year(features, i)
+        {
+            continue;
+        }
+        let (before, after) = if combined {
+            ("イチクミ", "ヒトクミ")
+        } else if features[i].string == "一" {
+            ("イチ", "ヒト")
+        } else {
+            ("ニ", "フタ")
+        };
+        if features[i].pron != before {
+            continue;
+        }
+        let old_moras = features[i].mora_size;
+        features[i].read = after.into();
+        features[i].pron = after.into();
+        features[i].mora_size = count_mora(after) as i32;
+        let delta = features[i].mora_size - old_moras;
+        if delta != 0 {
+            // 二組のニをフタにすると、C3 が置いた数詞末尾の核も 1 モーラ後ろへ動く。
+            let mut head = i;
+            while head > 0 && features[head].chain_flag == 1 {
+                head -= 1;
+            }
+            let end = features[head..i].iter().map(|f| f.mora_size).sum::<i32>() + old_moras;
+            if features[head].acc > 0 && features[head].acc >= end {
+                features[head].acc += delta;
+            }
+        }
+    }
+}
+
+fn follows_school_year(features: &[NjdFeature], i: usize) -> bool {
+    let Some(previous) = i.checked_sub(1) else {
+        return false;
+    };
+    let year = &features[previous];
+    if year.string == "年" && year.read == "ネン" {
+        return previous > 0 && features[previous - 1].pos_group1 == "数";
+    }
+    // 辞書が「一年」を一語として返す場合も、学年・組番号の並びを維持する。
+    year.string.strip_suffix('年').is_some_and(|number| {
+        !number.is_empty()
+            && number.chars().all(|c| {
+                matches!(c, '0'..='9' | '０'..='９' | '〇' | '零' | '一' | '二' | '三' | '四'
+                | '五' | '六' | '七' | '八' | '九' | '十' | '百' | '千')
+            })
+    })
+}
+
 /// 分数の分母に来る「分」を `ブン` と読む。
 ///
 /// 「分」は時間量の `フン`/`プン`、割合の `ブ`、部分の `ブン` を持つ。

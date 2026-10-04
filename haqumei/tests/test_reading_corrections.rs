@@ -93,3 +93,70 @@ fn room_counter_is_not_changed_back_to_beya() {
         without_context.g2k("三部屋").unwrap()
     );
 }
+
+#[test]
+fn group_quantities_and_class_numbers() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, kana) in [
+        ("一組", "ヒトクミ"),
+        ("1組", "ヒトクミ"),
+        ("二組", "フタクミ"),
+        ("2組", "フタクミ"),
+        ("一年一組", "イチネンイチクミ"),
+        ("1年1組", "イチネンイチクミ"),
+        ("三年二組", "サンネンニクミ"),
+        ("３年２組", "サンネンニクミ"),
+        ("第一組", "ダイイチクミ"),
+        ("第1組", "ダイイチクミ"),
+        ("第2組", "ダイニクミ"),
+        ("二年に一組", "ニネンニヒトクミ"),
+        ("11組", "ジューイチクミ"),
+        ("12組", "ジューニクミ"),
+        ("1.1組", "イッテンイチクミ"),
+        ("1.2組", "イッテンニクミ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), kana, "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0
+        );
+    }
+    for text in ["一組", "1組", "二組", "2組"] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(features[0].acc, 2, "{text}");
+        assert_eq!(
+            features.iter().map(|f| f.mora_size).sum::<i32>(),
+            4,
+            "{text}"
+        );
+        assert_eq!(
+            engine.g2p_mapping(text).unwrap(),
+            engine.g2p_candidates(text).unwrap().candidates[0].words
+        );
+    }
+    let texts = ["1組", "二組", "三年一組", "第2組"];
+    let sequential: Vec<_> = texts
+        .iter()
+        .map(|s| engine.run_frontend(s).unwrap())
+        .collect();
+    assert_eq!(engine.run_frontend_batch(&texts).unwrap(), sequential);
+    engine.options.modify_numeral_reading = false;
+    assert_eq!(engine.g2k("一組").unwrap(), "イチクミ");
+    assert_eq!(engine.g2k("2組").unwrap(), "ニクミ");
+}
+
+#[test]
+fn registered_group_reading_is_preserved() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.surface == "一組") {
+            morph.dictionary_index = 1;
+        }
+    });
+    engine.options.protect_user_dict_readings = true;
+    assert_eq!(engine.g2k("一組").unwrap(), "イチクミ");
+    engine.options.modify_context_reading = false;
+    assert_eq!(engine.g2k("一組").unwrap(), "イチクミ");
+    engine.options.protect_user_dict_readings = false;
+    assert_eq!(engine.g2k("一組").unwrap(), "ヒトクミ");
+}
