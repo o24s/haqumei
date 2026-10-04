@@ -638,12 +638,8 @@ impl OpenJTalk {
         let morphs = self.run_mecab_detailed(text)?;
 
         // 本来の Open JTalk パイプラインと同じ状態にして渡す
-        let njd_features = self.run_njd_from_mecab(
-            morphs
-                .iter()
-                .filter(|m| !m.is_ignored)
-                .map(|morph| morph.feature.as_str()),
-        )?;
+        let njd_features =
+            self.run_njd_from_mecab(morphs.iter().map(|morph| morph.feature.as_str()))?;
 
         if njd_features.is_empty() {
             return Ok(Vec::new());
@@ -810,6 +806,7 @@ impl OpenJTalk {
     }
 
     /// MeCab解析を実行し、feature のリストを返します。
+    /// 数字の区切りになる空白は残し、それ以外の空白は除きます。
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
@@ -818,12 +815,28 @@ impl OpenJTalk {
             .mecab
             .analyze(&normalized, self.resolve_kanji_variants)?;
         let mut features = Vec::with_capacity(analysis.best_path.len());
+        let mut previous_numeric = false;
+        let mut pending_space = None;
         for &index in &analysis.best_path {
             let node = &analysis.nodes[index];
             if node.feature.contains("記号,空白") {
+                pending_space.get_or_insert(index);
                 continue;
             }
             let surface = &normalized[node.byte_span.clone()];
+            let numeric = node.feature.starts_with("名詞,数,") || njd::is_numeric_surface(surface);
+            if let Some(index) = pending_space.take()
+                && previous_numeric
+                && numeric
+            {
+                let space = &analysis.nodes[index];
+                features.push(format!(
+                    "{},{}",
+                    &normalized[space.byte_span.clone()],
+                    space.feature
+                ));
+            }
+            previous_numeric = numeric;
             // 未知記号と一語にまとめられた「！」「？」は、NJDで読点に変わる。
             // 詳細解析と同じ記号の素性に分け、疑問・感嘆の区別を保つ。
             if node.is_unknown
@@ -981,7 +994,6 @@ impl OpenJTalk {
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         let (raw, protected): (Vec<_>, Vec<_>) = morphs
             .iter()
-            .filter(|m| !m.is_ignored)
             .map(|m| {
                 (
                     m.feature.as_str(),

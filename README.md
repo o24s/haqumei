@@ -82,6 +82,9 @@
 
 Examples can be found in [haqumei/examples](https://github.com/o24s/haqumei/tree/main/haqumei/examples).
 
+Numbers support spaces before counters, such as `2024 年` and `3 人`, and comma-separated groups of three digits, such as `1,050円`.
+Spaces between numbers, as in `65 1032`, keep the numbers separate without adding a pause. Postal codes such as `〒1048011` and three-digit call destinations such as `119に電話する` are read digit by digit.
+
 ## Install
 
 ### Rust

@@ -163,6 +163,12 @@ impl DigitSequence {
     }
 
     pub fn estimate_numerical_reading(&mut self, njd: &NJD) {
+        if let Some(reading) = njd.nodes[self.start..=self.end]
+            .iter()
+            .find_map(NJDNode::digit_sequence_reading)
+        {
+            self.is_numerical_reading = Some(reading);
+        }
         if self.is_numerical_reading.is_none() {
             self.is_numerical_reading = Some(score::score(njd, self.start, self.end) >= 0);
         }
@@ -210,6 +216,10 @@ impl DigitSequence {
     }
 
     fn convert_for_numerical_reading(&self, njd: &mut NJD) -> i64 {
+        // 位の表を超える数は、カンマを含むノード列も変更しない。
+        if self.digits.len() > NUMERAL_LIST3.len() * 4 {
+            return 0;
+        }
         /* first remove commas */
         let mut offset_comma = 0;
         let mut idx = 0;
@@ -227,11 +237,6 @@ impl DigitSequence {
                 true
             }
         });
-
-        if self.digits.len() > NUMERAL_LIST3.len() * 4 {
-            /* the number is too large */
-            return offset_comma;
-        }
 
         /* whether any digit is in the block. e.g. 1[0000]->false,1[1000]->true */
         let mut have_digit_in_block = false;

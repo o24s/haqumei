@@ -12,6 +12,7 @@ use haqumei_jpreprocess_core::accent_rule::ChainRules;
 pub struct NJDNode {
     string: String, //*は空文字列として扱う
     details: WordDetails,
+    digit_sequence_reading: Option<bool>,
 }
 
 impl Display for NJDNode {
@@ -40,6 +41,7 @@ impl NJDNode {
         if replacement.details.chain_flag.is_none() {
             replacement.details.chain_flag = self.details.chain_flag;
         }
+        replacement.digit_sequence_reading = self.digit_sequence_reading;
         *self = replacement;
     }
 
@@ -59,7 +61,7 @@ impl NJDNode {
         entry
             .get_with_string(string)
             .into_iter()
-            .map(|(string, details)| Self { string, details })
+            .map(|(string, details)| Self::from_details(string, details))
             .collect()
     }
 
@@ -81,6 +83,7 @@ impl NJDNode {
     pub fn reset(&mut self) {
         self.string.clear();
         self.details = WordDetails::default();
+        self.digit_sequence_reading = None;
     }
 }
 
@@ -142,7 +145,21 @@ impl NJDNode {
     }
     /// 表層形と語の特徴量からノードを作ります。
     pub fn from_details(string: String, details: WordDetails) -> Self {
-        Self { string, details }
+        Self {
+            string,
+            details,
+            digit_sequence_reading: None,
+        }
+    }
+
+    /// 数字列を位取りで読む指定なら `Some(true)`、桁読みなら `Some(false)` を返します。
+    pub fn digit_sequence_reading(&self) -> Option<bool> {
+        self.digit_sequence_reading
+    }
+
+    /// 数字列の読み方を指定します。`None` は前後の語による判定を使います。
+    pub fn set_digit_sequence_reading(&mut self, reading: Option<bool>) {
+        self.digit_sequence_reading = reading;
     }
 
     pub fn get_read(&self) -> Option<&str> {

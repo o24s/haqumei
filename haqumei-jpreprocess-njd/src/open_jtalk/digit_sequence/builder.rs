@@ -15,11 +15,16 @@ pub fn from_njd(njd: &NJD) -> Vec<DigitSequence> {
             digits.clear();
         }
 
-        let digit = node
-            .get_pos()
-            .is_kazu()
-            .then(|| Digit::from_str(node.get_string()))
-            .flatten();
+        // カンマは発音設定後も記号のため、数詞だけを集めると桁区切りを判定できない。
+        // https://github.com/tsukumijima/open_jtalk/commit/27b278fe4304945e9d4ca8d8f5141787a7410f07
+        let digit = if node.get_string() == "，" && node.get_pron().is_touten() {
+            Some(Digit::Comma)
+        } else {
+            node.get_pos()
+                .is_kazu()
+                .then(|| Digit::from_str(node.get_string()))
+                .flatten()
+        };
         let Some(digit) = digit else {
             is_in_seq = false;
             continue;

@@ -3,6 +3,10 @@ use rustc_hash::FxHashMap;
 use crate::utils::{is_katakana_word, split_kana_mora};
 use crate::{errors::HaqumeiError, features::NjdFeature};
 
+mod counter;
+mod number;
+pub(super) use number::{is_numeric_identifier_surface, is_numeric_surface};
+
 /// pyopenjtalk-plus の独自結合ルールなどを適用する
 pub(crate) fn apply_plus_rules(features: &mut [haqumei_jpreprocess_njd::NJDNode]) {
     use haqumei_jpreprocess_core::{
@@ -270,6 +274,17 @@ pub(crate) fn run_frontend(
         for (field, value) in fields.iter_mut().zip(feature.split(',')) {
             *field = value;
         }
+        let is_protected = protected_raw.get(i).copied().unwrap_or(false);
+        if !is_protected
+            && number::expand_unknown_digits(
+                &fields,
+                &mut nodes,
+                raw.get(i + 1).and_then(|f| f.split(',').next()),
+            )
+        {
+            protected_nodes.resize(nodes.len(), false);
+            continue;
+        }
         let entry = WordEntry::load(&fields[1..13])
             .map_err(|error| HaqumeiError::MecabError(format!("NJD: {feature}: {error}")))?;
         match entry {
@@ -278,13 +293,15 @@ pub(crate) fn run_frontend(
             }
             entry @ WordEntry::Multiple(_) => nodes.extend(NJDNode::load(fields[0], &entry)),
         }
-        if modify_numeral_reading {
-            protected_nodes.resize(nodes.len(), protected_raw.get(i).copied().unwrap_or(false));
-        }
+        protected_nodes.resize(nodes.len(), is_protected);
     }
+    number::retain_number_spaces(&mut nodes, &mut protected_nodes);
+    number::restore_numeric_zeros(&mut nodes, &protected_nodes);
     if modify_numeral_reading {
         modify_placeholder_maru(&mut nodes, &protected_nodes);
     }
+    counter::restore_counter_features(&mut nodes, &protected_nodes);
+    number::mark_identifiers(&mut nodes, &protected_nodes);
     let mut njd = NJD { nodes };
     pronunciation::njd_set_pronunciation(&mut njd);
     for node in &mut njd.nodes {
@@ -298,6 +315,7 @@ pub(crate) fn run_frontend(
     modify_lake_chain_rules(&mut njd.nodes);
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
+    number::remove_number_spaces(&mut njd.nodes);
     accent_phrase::njd_set_accent_phrase(&mut njd);
     if split_prefixes {
         split_prefix_accent_phrase(&mut njd.nodes);
@@ -328,6 +346,7 @@ fn modify_placeholder_maru(nodes: &mut [haqumei_jpreprocess_njd::NJDNode], prote
         // 「二〇〇〇年」「一〇〇周年」は数値として展開するため、先行する数詞が
         // ある連続した〇を伏字にしない。
         if i - start < 2
+            || (nodes[start].get_pos().is_kazu() && nodes[start].get_read() == Some("ゼロ"))
             || (start > 0 && nodes[start - 1].get_details().pos == POS::Meishi(Meishi::Kazu))
         {
             continue;

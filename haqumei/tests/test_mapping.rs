@@ -678,23 +678,33 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     /// 数字ブロックの内側にある空白は、外側にあるとき (「２0　ｉｔ」) と違って
     /// ループ先頭の ignored 回収に拾われないため、取りこぼしていた。
     #[test]
-    fn test_mapping_digit_contraction_keeps_inner_space() {
+    fn test_mapping_digit_spaces_keep_separate_numbers() {
         let mut haqumei = Haqumei::new().unwrap();
 
         for (text, expected) in [
             (
                 "1　0",
-                vec![("十", vec!["j", "u", "u"]), ("\u{3000}", vec!["sp"])],
+                vec![
+                    ("一", vec!["i", "ch", "i"]),
+                    ("\u{3000}", vec!["sp"]),
+                    ("０", vec!["z", "e", "r", "o"]),
+                ],
             ),
             (
                 "1　00",
-                vec![("百", vec!["hy", "a", "k", "u"]), ("\u{3000}", vec!["sp"])],
+                vec![
+                    ("一", vec!["i", "ch", "i"]),
+                    ("\u{3000}", vec!["sp"]),
+                    ("０", vec!["z", "e", "r", "o"]),
+                    ("０", vec!["z", "e", "r", "o"]),
+                ],
             ),
             (
                 "1　0円",
                 vec![
-                    ("十", vec!["j", "u", "u"]),
+                    ("一", vec!["i", "ch", "i"]),
                     ("\u{3000}", vec!["sp"]),
+                    ("０", vec!["z", "e", "r", "o"]),
                     ("円", vec!["e", "N"]),
                 ],
             ),

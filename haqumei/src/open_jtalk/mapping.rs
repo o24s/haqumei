@@ -640,6 +640,45 @@ fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usi
 /// 対応が取れなかった形態素には空の区間 (`n..n`) を与える。位取りとして
 /// 差し込まれた形態素 (`２０` の `十`) がこれにあたる。
 pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Range<usize>> {
+    // 未知語「〇七〇−〇〇二四」は NJD で桁ごとに分かれる。
+    // 元の形態素全体を最初の桁へ割り当てないよう、照合用の区間も1文字ずつに分ける。
+    let split_number = |m: &MecabMorph| {
+        m.is_unknown
+            && m.char_span.len() > 1
+            && super::njd::is_numeric_identifier_surface(&m.surface)
+            && m.surface.chars().count() == m.char_span.len()
+    };
+    let expanded;
+    let morphs = if morphs.iter().any(split_number) {
+        expanded = morphs
+            .iter()
+            .flat_map(|m| {
+                if !split_number(m) {
+                    return vec![m.clone()];
+                }
+                m.surface
+                    .chars()
+                    .enumerate()
+                    .map(|(offset, c)| MecabMorph {
+                        surface: c.to_string(),
+                        // 区間照合に使う仮の形態素なので、未知語の特徴量は複製しない。
+                        feature: String::new(),
+                        char_span: m.char_span.start + offset..m.char_span.start + offset + 1,
+                        left_id: m.left_id,
+                        right_id: m.right_id,
+                        pos_id: m.pos_id,
+                        word_cost: m.word_cost,
+                        dictionary_index: m.dictionary_index,
+                        is_unknown: m.is_unknown,
+                        is_ignored: m.is_ignored,
+                    })
+                    .collect()
+            })
+            .collect::<Vec<_>>();
+        &expanded
+    } else {
+        morphs
+    };
     let mut spans: Vec<Range<usize>> = vec![0..0; features.len()];
     let mut morph_idx = 0;
     let mut idx = 0;

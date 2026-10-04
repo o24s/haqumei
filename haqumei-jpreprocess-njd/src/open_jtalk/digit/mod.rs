@@ -54,6 +54,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
             if !node.get_string().is_empty()
                 && !prev.get_string().is_empty()
                 && is_period(node.get_string())
+                && node.digit_sequence_reading() != Some(false)
                 && prev.get_pos().is_kazu()
                 && next.get_pos().is_kazu()
             {

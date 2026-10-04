@@ -949,7 +949,8 @@ mod tests {
         }
         assert_eq!(engine.g2k("二〇〇〇年").unwrap(), "ニセンネン");
         assert_eq!(engine.g2k("一〇〇周年").unwrap(), "ヒャクシューネン");
-        assert_eq!(engine.g2k("〇〇一").unwrap(), "マルマルイチ");
+        // 他の数字を含む列の〇は、番号のゼロとして読む。
+        assert_eq!(engine.g2k("〇〇一").unwrap(), "ゼロゼロイチ");
         engine.options.modify_numeral_reading = false;
         let mut low_level = haqumei::OpenJTalk::new().unwrap();
         assert_eq!(

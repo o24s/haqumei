@@ -577,12 +577,11 @@ impl Haqumei {
             // 列を使い回すと、`make_phoneme_mapping` が読む `feature` と `is_unknown`
             // が 1-best のエントリのままになる
             let cand_morphs = build_morphs(&morphs, &branches, &choices);
-            let features: Vec<&str> = cand_morphs
-                .iter()
-                .filter(|m| !m.is_ignored)
-                .map(|m| m.feature.as_str())
-                .collect();
-            let njd_features = self.open_jtalk.run_njd_from_mecab(&features)?;
+            let njd_features = self.open_jtalk.run_njd_from_morphs(
+                &cand_morphs,
+                self.options.modify_numeral_reading,
+                self.options.protect_user_dict_readings,
+            )?;
             if njd_features.is_empty() {
                 continue;
             }
@@ -905,4 +904,51 @@ fn build_morphs(morphs: &[MecabMorph], branches: &Branches, choices: &[usize]) -
 /// feature 文字列の `n` 番目の列を返す。列の数が足りなければ `*`。
 fn column(feature: &str, n: usize) -> &str {
     feature.split(',').nth(n).unwrap_or("*")
+}
+
+#[cfg(test)]
+mod counter_protection_tests {
+    use crate::{Haqumei, HaqumeiOptions, MecabDictIndexCompiler, open_jtalk::Dictionary};
+
+    #[test]
+    fn candidates_keep_registered_noun_before_counter_conversion() {
+        let dictionary = Dictionary::from_embedded().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let csv = temp.path().join("user.csv");
+        let dic = temp.path().join("user.dic");
+        std::fs::write(
+            &csv,
+            "人,1345,1345,-10000,名詞,一般,*,*,*,*,人,ヒト,ヒト,0/2,C3\n",
+        )
+        .unwrap();
+        MecabDictIndexCompiler::new()
+            .dict_dir(&dictionary.dict_dir)
+            .userdict_out_path(&dic)
+            .add_input_file(&csv)
+            .run()
+            .unwrap();
+        let mut engine = Haqumei::from_path_with_userdict(
+            &dictionary.dict_dir,
+            &dic,
+            HaqumeiOptions {
+                protect_user_dict_readings: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        for numeral in [true, false] {
+            engine.options.modify_numeral_reading = numeral;
+            assert_eq!(engine.g2k("2 人").unwrap(), "ニヒト");
+            assert_eq!(
+                engine.g2p_mapping("2 人").unwrap(),
+                engine.g2p_candidates("2 人").unwrap().candidates[0].words
+            );
+        }
+        engine.options.protect_user_dict_readings = false;
+        assert_eq!(engine.g2k("2 人").unwrap(), "フタリ");
+        assert_eq!(
+            engine.g2p_mapping("2 人").unwrap(),
+            engine.g2p_candidates("2 人").unwrap().candidates[0].words
+        );
+    }
 }
