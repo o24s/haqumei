@@ -46,6 +46,8 @@ use crate::utils::count_mora;
 
 /// 規則が発火する条件。
 enum Cue {
+    /// 「何にも」に続く述語が、ナンニモと読む打ち消しの用法である。
+    NegativeNannimo,
     /// 直後の形態素の表層形が、いずれかに一致する。
     NextIn(&'static [&'static str]),
 
@@ -117,6 +119,15 @@ struct Rule {
 /// 各規則の根拠と、確認した負の対照をコメントに残す。
 #[rustfmt::skip]
 const RULES: &[Rule] = &[
+    // 「何にも知らない」はナンニモ、「何にも似ていない」はナニニモと読む。
+    // 辞書で副詞を優先すると格助詞の用法も変わるため、述語と打ち消しを確認する。
+    // https://github.com/tsukumijima/pyopenjtalk-plus/commit/17aa989573807971094af00fad6a22227ba90c82
+    Rule {
+        surface: "何",
+        pos_group1: None,
+        cue: Cue::NegativeNannimo,
+        reading: "ナン",
+    },
     // 「一見さん」の 一見 は イチゲン と読む。(初めての客のこと)
     // 負の対照: 「一見して分かる」は直後が「し」なので発火しない。
     // [0 / 0]
@@ -902,9 +913,93 @@ const RULES: &[Rule] = &[
 /// [`Cue::Negated`] が探す打ち消しの語の原形。
 const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
 
+fn negative_nannimo(features: &[NjdFeature], i: usize) -> bool {
+    if features[i].pos != "名詞"
+        || !features
+            .get(i + 1)
+            .is_some_and(|f| f.string == "に" && f.pos_group1 == "格助詞")
+        || !features
+            .get(i + 2)
+            .is_some_and(|f| f.string == "も" && f.pos_group1 == "係助詞")
+    {
+        return false;
+    }
+    let start = i + 3;
+    let mut index = start;
+    let mut predicate_found = false;
+    while let Some(feature) = features.get(index) {
+        if !predicate_found {
+            if index == start && feature.string == "しない" && feature.pos == "名詞" {
+                return true;
+            }
+            if feature.pos == "副詞" {
+                index += 1;
+                continue;
+            }
+            // 「返事がない」は打ち消しの用法だが、名詞全般を飛ばすと別の主語へ進む。
+            if index == start
+                && feature.string == "返事"
+                && features.get(index + 1).is_some_and(|f| f.string == "が")
+            {
+                index += 2;
+                continue;
+            }
+            if !matches!(feature.pos.as_str(), "動詞" | "形容詞" | "助動詞")
+                || !matches!(
+                    feature.orig.as_str(),
+                    "知る"
+                        | "わかる"
+                        | "分かる"
+                        | "分る"
+                        | "する"
+                        | "出来る"
+                        | "できる"
+                        | "なる"
+                        | "言う"
+                        | "やる"
+                        | "食べる"
+                        | "聞く"
+                        | "答える"
+                        | "ある"
+                        | "ない"
+                        | "無い"
+                        | "面白い"
+                )
+            {
+                return false;
+            }
+            predicate_found = true;
+        } else if matches!(feature.string.as_str(), "こと" | "事")
+            && feature.pos_group1 == "非自立"
+            && features.get(index + 1).is_some_and(|f| f.string == "が")
+            && features
+                .get(index + 2)
+                .is_some_and(|f| matches!(f.string.as_str(), "でき" | "出来"))
+        {
+            predicate_found = false;
+            index += 2;
+            continue;
+        } else if !(feature.pos == "助動詞"
+            || (feature.pos == "動詞" && feature.pos_group1 == "非自立")
+            || (feature.pos == "助詞"
+                && matches!(feature.string.as_str(), "て" | "で" | "は" | "も")))
+        {
+            return false;
+        }
+        if matches!(feature.pos.as_str(), "助動詞" | "形容詞")
+            && NEGATIVE_ORIGS.contains(&feature.orig.as_str())
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
 /// [`Cue::All`] が手がかりを入れ子にできるので、判定は再帰で書く。
 fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
     match cue {
+        Cue::NegativeNannimo => negative_nannimo(njd_features, i),
         Cue::NextIn(candidates) => njd_features
             .get(i + 1)
             .is_some_and(|next| candidates.contains(&next.string.as_str())),

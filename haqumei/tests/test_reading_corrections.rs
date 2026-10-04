@@ -115,6 +115,79 @@ fn numeric_boundaries_and_limited_identifiers() {
 }
 
 #[test]
+fn number_and_nannimo_corrections_respect_registered_readings() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs
+            .iter_mut()
+            .filter(|m| matches!(m.surface.as_str(), "何" | "〇"))
+        {
+            morph.dictionary_index = 1;
+        }
+    });
+    engine.options.protect_user_dict_readings = true;
+    assert!(
+        engine
+            .g2k("何にも知らない")
+            .unwrap()
+            .starts_with("ナニニモ")
+    );
+    assert!(
+        engine
+            .run_frontend("〇七〇")
+            .unwrap()
+            .iter()
+            .filter(|f| f.string == "〇")
+            .all(|f| f.read != "ゼロ")
+    );
+}
+
+#[test]
+fn negative_nannimo_keeps_case_particle_uses() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading) in [
+        ("何にも知らない", "ナン"),
+        ("何にも知りません", "ナン"),
+        ("何にも知らず", "ナン"),
+        ("何にも知らん", "ナン"),
+        ("何にも知らぬ", "ナン"),
+        ("何にも分からなかった", "ナン"),
+        ("何にも知らなければ", "ナン"),
+        ("何にも答えてもらっていない", "ナン"),
+        ("何にも返事がなく", "ナン"),
+        ("何にもありません", "ナン"),
+        ("何にもすることができず", "ナン"),
+        ("何にも面白くない", "ナン"),
+        ("何にもしないで宣伝ばかり", "ナン"),
+        ("何にも似ていない", "ナニ"),
+        ("何にも全然似ていない", "ナニ"),
+        ("何にも代えがたい", "ナニ"),
+        ("何にも依存していない", "ナニ"),
+        ("何にも属さない", "ナニ"),
+        ("何にも頼らない", "ナニ"),
+        ("何にも答えたが教えない", "ナニ"),
+        ("何にも。知らない", "ナニ"),
+        ("「何にも」という語を知らない", "ナニ"),
+        ("何にも似ることができない", "ナニ"),
+        ("何にもとづいて決めた", "ナニ"),
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(
+            features.iter().find(|f| f.string == "何").unwrap().read,
+            reading,
+            "{text}"
+        );
+    }
+    engine.options.modify_context_reading = false;
+    assert!(
+        engine
+            .g2k("何にも知らない")
+            .unwrap()
+            .starts_with("ナニニモ")
+    );
+}
+
+#[test]
 fn unvoicing_uses_corrected_readings_in_each_api() {
     let texts = [
         "博士課程",
