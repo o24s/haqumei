@@ -186,4 +186,21 @@ mod tests {
             assert_eq!(engine.run_frontend(text).unwrap()[0].acc, accent, "{text}");
         }
     }
+
+    #[test]
+    fn split_name_retains_each_original_form() {
+        let mut engine = Haqumei::new().unwrap();
+        let nodes = engine.run_frontend("山本五十六").unwrap();
+        let words: Vec<_> = nodes
+            .iter()
+            .map(|n| (&*n.string, &*n.orig, &*n.pron))
+            .collect();
+        assert_eq!(
+            words,
+            [
+                ("山本", "山本", "ヤマモト"),
+                ("五十六", "五十六", "イソロク")
+            ]
+        );
+    }
 }
