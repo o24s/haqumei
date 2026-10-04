@@ -789,15 +789,33 @@ impl OpenJTalk {
 
         let normalized = self.text2mecab_string(text)?;
         let analysis = self.mecab.analyze(&normalized)?;
-        Ok(analysis
-            .best_path
-            .iter()
-            .filter_map(|&index| {
-                let node = &analysis.nodes[index];
-                (!node.feature.contains("記号,空白"))
-                    .then(|| format!("{},{}", &normalized[node.byte_span.clone()], node.feature))
-            })
-            .collect())
+        let mut features = Vec::with_capacity(analysis.best_path.len());
+        for &index in &analysis.best_path {
+            let node = &analysis.nodes[index];
+            if node.feature.contains("記号,空白") {
+                continue;
+            }
+            let surface = &normalized[node.byte_span.clone()];
+            // 未知記号と一語にまとめられた「！」「？」は、NJDで読点に変わる。
+            // 詳細解析と同じ記号の素性に分け、疑問・感嘆の区別を保つ。
+            if node.is_unknown
+                && surface.contains(['！', '？'])
+                && surface.chars().all(|c| !c.is_alphanumeric())
+                && surface.chars().count() > 1
+            {
+                for ch in surface.chars() {
+                    let symbol = ch.to_string();
+                    let known = get_known_symbol_feature(&symbol);
+                    if known.is_some() && ch.is_whitespace() {
+                        continue;
+                    }
+                    features.push(format!("{},{}", symbol, known.unwrap_or(&node.feature)));
+                }
+            } else {
+                features.push(format!("{},{}", surface, node.feature));
+            }
+        }
+        Ok(features)
     }
 
     /// MeCab解析を実行し、詳細な形態素情報を返します。

@@ -376,6 +376,41 @@ mod tests {
     }
 
     #[test]
+    fn test_unknown_symbols_preserve_question_and_exclamation_labels() {
+        let mut haqumei = Haqumei::new().unwrap();
+        let mut open_jtalk = haqumei::OpenJTalk::new().unwrap();
+        for symbol in ["≧", "≦", "∩", "⊂", "⊃", "～"] {
+            for marks in ["！？", "！！！！"] {
+                let text = format!("笑{symbol}{marks}");
+                let features = haqumei.run_frontend(&text).unwrap();
+                let detailed = haqumei.run_frontend_detailed(&text).unwrap().0;
+                assert_eq!(features, detailed, "{text}");
+                let punctuation: String = features
+                    .iter()
+                    .filter(|f| matches!(f.pron.as_str(), "！" | "？"))
+                    .map(|f| f.pron.as_str())
+                    .collect();
+                assert_eq!(punctuation, marks, "{text}");
+                assert_eq!(
+                    haqumei.extract_fullcontext_string(&text).unwrap(),
+                    open_jtalk.make_label(&detailed).unwrap(),
+                    "{text}"
+                );
+                assert_eq!(
+                    open_jtalk.run_frontend(&text).unwrap(),
+                    open_jtalk.run_frontend_detailed(&text).unwrap().0,
+                    "{text}"
+                );
+            }
+        }
+
+        // 疑問符・感嘆符を含まない未知記号の並びは、一語のままNJDへ渡す。
+        let faces = open_jtalk.run_mecab("笑ヾ(≧▽≦)").unwrap();
+        let surfaces: Vec<_> = faces.iter().map(|f| f.split(',').next().unwrap()).collect();
+        assert_eq!(surfaces, ["笑", "ヾ", "（≧▽≦）"]);
+    }
+
+    #[test]
     fn test_merged_symbols_decomposition_to_prosody() {
         let mut haqumei = Haqumei::new().unwrap();
 

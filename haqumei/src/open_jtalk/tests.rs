@@ -52,7 +52,11 @@ fn test_userdict() {
 
     let mut ojt = OpenJTalk::new().unwrap();
 
-    let tests = vec![("nnmn", "n a n a m i N"), ("GNU", "g u n u u")];
+    let tests = vec![
+        ("nnmn", "n a n a m i N"),
+        ("GNU", "g u n u u"),
+        ("∩！？", "a i z u"),
+    ];
 
     for (text, expected) in &tests {
         let p = ojt.g2p(text).unwrap().join(" ");
@@ -68,6 +72,11 @@ fn test_userdict() {
     writeln!(
         user_csv.as_file_mut(),
         "ＧＮＵ,,,1,名詞,一般,*,*,*,*,ＧＮＵ,グヌー,グヌー,2/3,*"
+    )
+    .unwrap();
+    writeln!(
+        user_csv.as_file_mut(),
+        "∩！？,1345,1345,-5000,名詞,一般,*,*,*,*,∩！？,アイズ,アイズ,1/3,C1"
     )
     .unwrap();
     let user_csv_path = user_csv.into_temp_path();
