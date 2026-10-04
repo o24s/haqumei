@@ -98,3 +98,32 @@ fn enabling_accent_protection_preserves_unknown_symbol_segmentation() {
         assert_eq!(expected, engine.run_frontend(text).unwrap(), "{text}");
     }
 }
+
+#[test]
+fn prefix_split_calculates_each_phrase_nucleus() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.surface == "本") {
+            morph.feature = "本,接頭詞,名詞接続,*,*,*,*,本,ホン,ホン,1/2,P1".into();
+            morph.dictionary_index = 1;
+        }
+    });
+    for protect in [false, true] {
+        engine.options.protect_user_dict_accents = protect;
+        engine.options.split_prefix_accent_phrase = true;
+        let features = engine.run_frontend("本商品を購入する").unwrap();
+        assert_eq!((features[0].acc, features[0].mora_size), (1, 2));
+        assert_eq!((features[1].acc, features[1].chain_flag), (1, 0));
+        assert_eq!(
+            features,
+            engine.run_frontend_detailed("本商品を購入する").unwrap().0
+        );
+        let labels = engine.extract_fullcontext("本商品を購入する").unwrap();
+        let prefix = labels[1].accent_phrase_curr.as_ref().unwrap();
+        assert_eq!((prefix.accent_position, prefix.mora_count), (1, 2));
+
+        engine.options.split_prefix_accent_phrase = false;
+        let features = engine.run_frontend("本商品を購入する").unwrap();
+        assert_eq!((features[0].acc, features[1].chain_flag), (3, 1));
+    }
+}

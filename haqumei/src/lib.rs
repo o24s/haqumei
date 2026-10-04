@@ -55,8 +55,7 @@ use crate::{
         merge_english_alphanumeric_words, modify_acc_after_chaining, modify_context_reading,
         modify_english_words, modify_filler_accent, modify_fraction_denominator,
         modify_old_province_yomi, predict_kana_english, process_odori_features, read_unknown_kanji,
-        restore_loanword_kana, retreat_acc_nuc, split_prefix_accent_phrase,
-        suppress_english_hyphen_pause,
+        restore_loanword_kana, retreat_acc_nuc, suppress_english_hyphen_pause,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -124,6 +123,7 @@ impl Haqumei {
         self.open_jtalk.ensure_dictionary_is_latest()?;
         self.open_jtalk.resolve_kanji_variants = self.options.resolve_kanji_variants;
         self.open_jtalk.defer_unvoicing = true;
+        self.open_jtalk.split_prefix_accent_phrase = self.options.split_prefix_accent_phrase;
         Ok(())
     }
 
@@ -970,9 +970,6 @@ impl Haqumei {
             merge_english_alphanumeric_words(&mut njd_features, morphs);
         }
 
-        if options.split_prefix_accent_phrase {
-            split_prefix_accent_phrase(&mut njd_features);
-        }
         // 読みを変更した語とその隣の無声化を判定する。辞書にある無声化の指定は残す。
         // 核の後退は無声化を参照するため、retreat_acc_nuc より前に判定する。
         postprocess::apply_unvoicing(&mut njd_features);

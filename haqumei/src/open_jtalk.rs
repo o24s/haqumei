@@ -89,6 +89,7 @@ pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
     pub(crate) resolve_kanji_variants: bool,
     pub(crate) defer_unvoicing: bool,
+    pub(crate) split_prefix_accent_phrase: bool,
     pub(crate) dict: Option<Arc<Dictionary>>,
     /// グローバル辞書の更新に追従するかどうか。
     ///
@@ -119,6 +120,7 @@ impl OpenJTalk {
             follows_global: true,
             resolve_kanji_variants: false,
             defer_unvoicing: false,
+            split_prefix_accent_phrase: false,
         })
     }
 
@@ -151,6 +153,7 @@ impl OpenJTalk {
             follows_global: false,
             resolve_kanji_variants: false,
             defer_unvoicing: false,
+            split_prefix_accent_phrase: false,
         })
     }
 
@@ -164,6 +167,7 @@ impl OpenJTalk {
             follows_global: false,
             resolve_kanji_variants: false,
             defer_unvoicing: false,
+            split_prefix_accent_phrase: false,
         })
     }
 
@@ -965,6 +969,7 @@ impl OpenJTalk {
             modify_numeral_reading,
             &[],
             !self.defer_unvoicing,
+            self.split_prefix_accent_phrase,
         )
     }
 
@@ -989,6 +994,7 @@ impl OpenJTalk {
             modify_numeral_reading,
             &protected,
             !self.defer_unvoicing,
+            self.split_prefix_accent_phrase,
         )
     }
 

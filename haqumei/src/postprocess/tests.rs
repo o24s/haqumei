@@ -387,7 +387,7 @@ fn test_modify_context_reading_preserves_unvoicing() {
         "博士,名詞,一般,*,*,*,*,博士,ハクシ,ハクシ,1/3,*,0",
         "課程,名詞,一般,*,*,*,*,課程,カテイ,カテー,0/3,*,1",
     ];
-    let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[], true).unwrap();
+    let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[], true, false).unwrap();
     assert!(features[0].pron.contains('’'));
     let before = features.clone();
     modify_context_reading(&mut features, &[]);
@@ -404,7 +404,7 @@ fn test_modify_context_reading_preserves_unvoicing() {
         "博士,名詞,一般,*,*,*,*,博士,ハカセ,ハカセ,1/3,*,0",
         "課程,名詞,一般,*,*,*,*,課程,カテイ,カテー,0/3,*,1",
     ];
-    let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[], true).unwrap();
+    let mut features = crate::open_jtalk::njd::run_frontend(&raw, false, &[], true, false).unwrap();
     modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].pron, "ソーデス’ネ");
     assert_eq!(features[1].read, "ハクシ");
@@ -418,7 +418,7 @@ fn test_unvoicing_after_reading_correction() {
         "課程,名詞,一般,*,*,*,*,課程,カテイ,カテー,0/3,*,1",
     ];
     let mut features =
-        crate::open_jtalk::njd::run_frontend(&raw, false, &[], false).unwrap();
+        crate::open_jtalk::njd::run_frontend(&raw, false, &[], false, false).unwrap();
     modify_context_reading(&mut features, &[]);
     super::apply_unvoicing(&mut features);
     assert_eq!(features[0].pron, "ソーデス’ネ");
@@ -430,7 +430,7 @@ fn test_unvoicing_after_reading_correction() {
         "橋,名詞,接尾,一般,*,*,*,橋,ハシ,ハシ,2/2,C3,1",
     ];
     let mut features =
-        crate::open_jtalk::njd::run_frontend(&raw, false, &[], false).unwrap();
+        crate::open_jtalk::njd::run_frontend(&raw, false, &[], false, false).unwrap();
     features[1].read = "バシ".into();
     features[1].pron = "バシ".into();
     super::apply_unvoicing(&mut features);

@@ -255,6 +255,7 @@ pub(crate) fn run_frontend(
     modify_numeral_reading: bool,
     protected_raw: &[bool],
     apply_unvoicing: bool,
+    split_prefixes: bool,
 ) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
@@ -298,6 +299,9 @@ pub(crate) fn run_frontend(
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
     accent_phrase::njd_set_accent_phrase(&mut njd);
+    if split_prefixes {
+        split_prefix_accent_phrase(&mut njd.nodes);
+    }
     accent_type::njd_set_accent_type(&mut njd);
     if apply_unvoicing {
         unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
@@ -482,7 +486,7 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw, false, &[], true).unwrap();
+        let features = super::run_frontend(&raw, false, &[], true, false).unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();
@@ -590,6 +594,22 @@ mod typed_rule_tests {
             if njd.pos == "形容詞" && matches!(next_njd.orig.as_str(), "なる" | "する") {
                 next_njd.chain_flag = 1;
             }
+        }
+    }
+}
+
+// 核の計算後に句を分けると、P1 指定の「本商品」では「本」の 2 モーラに核 3 が残る。
+// 接頭辞と後続語を別の句として計算するため、njd_set_accent_type より前に分ける。
+// 後続語と融合する「新製品」などもあるため、収集データで句の独立を確認した 4 語に限る。
+fn split_prefix_accent_phrase(nodes: &mut [haqumei_jpreprocess_njd::NJDNode]) {
+    use haqumei_jpreprocess_core::pos::POS;
+    for i in 1..nodes.len() {
+        let prev = &nodes[i - 1];
+        if nodes[i].get_chain_flag() == Some(true)
+            && matches!(prev.get_pos(), POS::Settoushi(_))
+            && matches!(prev.get_string(), "本" | "当" | "同" | "全")
+        {
+            nodes[i].set_chain_flag(false);
         }
     }
 }
