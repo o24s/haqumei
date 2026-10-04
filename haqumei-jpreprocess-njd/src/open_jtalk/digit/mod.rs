@@ -21,6 +21,7 @@ pub fn is_period(s: &str) -> bool {
 }
 
 pub fn njd_set_digit(njd: &mut NJD) {
+    let mut decimal_points = Vec::new();
     {
         enum SkipState {
             Disabled,
@@ -28,8 +29,10 @@ pub fn njd_set_digit(njd: &mut NJD) {
             Skipping,
         }
         let mut skip_state = SkipState::Disabled;
+        let node_count = njd.nodes.len();
         let mut iter = njd.iter_quint_mut();
-        while let Some(quint) = iter.next() {
+        for index in 0..node_count {
+            let Some(quint) = iter.next() else { break };
             let (prev, node, next) = match Triple::from(quint) {
                 Triple::Full(prev, node, next) => (prev, node, next),
                 _ => continue,
@@ -54,6 +57,10 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 && prev.get_pos().is_kazu()
                 && next.get_pos().is_kazu()
             {
+                // 中黒は数の列挙にも使うため、小数の助数詞補正には含めない。
+                if node.get_string() == "．" {
+                    decimal_points.push(index);
+                }
                 node.replace_from_csv(rule::TEN_FEATURE);
                 node.set_chain_flag(true);
                 match prev.get_string() {
@@ -76,7 +83,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
         }
     }
 
-    counter::convert_counters(njd);
+    counter::convert_counters(njd, &decimal_points);
 
     {
         let mut iter = njd.iter_quint_mut();
@@ -127,7 +134,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
         }
     }
 
-    counter::convert_native(njd);
+    counter::convert_native(njd, &decimal_points);
 
     if njd.nodes.len() > 2 {
         let mut iter = njd.iter_quint_mut();

@@ -3,16 +3,34 @@ use haqumei_jpreprocess_core::{pos::*, pron};
 
 use super::{is_period, lut::*, rule};
 
-fn is_decimal_digit(nodes: &[NJDNode], mut i: usize) -> bool {
+fn is_decimal_digit(
+    nodes: &[NJDNode],
+    mut i: usize,
+    decimal_points: &[usize],
+    spelled_point: bool,
+) -> bool {
     while nodes[i].get_pos().is_kazu() {
+        // 「2.1万本」の万は整数として本と結合する。一桁の数字だけを遡る。
+        if !matches!(
+            nodes[i].get_string(),
+            "〇" | "０" | "零" | "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" | "九"
+        ) {
+            return false;
+        }
         let Some(prev) = i.checked_sub(1) else {
             return false;
         };
         i = prev;
     }
-    if is_period(nodes[i].get_string())
-        || (nodes[i].get_string() == "一点" && nodes[i].get_read() == Some("イッテン"))
-    {
+    // 数字に挟まれた小数点は njd_set_digit がテンに変換済み。
+    // 「米・一貫目」の中黒まで小数点と扱うと、イッカンメがイチカンメになる。
+    if is_period(nodes[i].get_string()) && nodes[i].get_read() == Some("テン") {
+        return spelled_point || decimal_points.binary_search(&i).is_ok();
+    }
+    if !spelled_point {
+        return false;
+    }
+    if nodes[i].get_string() == "一点" && nodes[i].get_read() == Some("イッテン") {
         return true;
     }
     if nodes[i].get_string() != "点" || i == 0 {
@@ -28,16 +46,22 @@ fn is_decimal_digit(nodes: &[NJDNode], mut i: usize) -> bool {
     nodes[i].get_pos().is_kazu()
 }
 
-fn is_counter(nodes: &[NJDNode], i: usize) -> bool {
-    matches!(
+fn is_counter(nodes: &[NJDNode], i: usize, decimal_points: &[usize]) -> bool {
+    if matches!(
         nodes[i].get_pos(),
         POS::Meishi(Meishi::FukushiKanou | Meishi::Setsubi(Setsubi::Josuushi))
-    ) || (class1::COUNTER_WORDS.contains(nodes[i].get_string()) && !is_decimal_digit(nodes, i - 1))
+    ) {
+        !is_decimal_digit(nodes, i - 1, decimal_points, false)
+    } else {
+        // 「点」は得点も表すため、漢字表記の小数判定は既存の追加語だけに限る。
+        class1::COUNTER_WORDS.contains(nodes[i].get_string())
+            && !is_decimal_digit(nodes, i - 1, decimal_points, true)
+    }
 }
 
-pub(super) fn convert_counters(njd: &mut NJD) {
+pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
     for i in 1..njd.nodes.len() {
-        if !njd.nodes[i - 1].get_pos().is_kazu() || !is_counter(&njd.nodes, i) {
+        if !njd.nodes[i - 1].get_pos().is_kazu() || !is_counter(&njd.nodes, i, decimal_points) {
             continue;
         }
         let (before, after) = njd.nodes.split_at_mut(i);
@@ -143,12 +167,12 @@ pub(super) fn convert_counters(njd: &mut NJD) {
     }
 }
 
-pub(super) fn convert_native(njd: &mut NJD) {
+pub(super) fn convert_native(njd: &mut NJD, decimal_points: &[usize]) {
     for i in 0..njd.nodes.len().saturating_sub(1) {
         if !njd.nodes[i].get_pos().is_kazu()
             || (i > 0 && njd.nodes[i - 1].get_pos().is_kazu())
             || njd.nodes[i + 1].get_string().is_empty()
-            || !is_counter(&njd.nodes, i + 1)
+            || !is_counter(&njd.nodes, i + 1, decimal_points)
         {
             continue;
         }

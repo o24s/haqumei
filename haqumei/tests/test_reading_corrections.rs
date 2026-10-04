@@ -43,3 +43,30 @@ fn unvoicing_uses_corrected_readings_in_each_api() {
     let mut raw = OpenJTalk::new().unwrap();
     assert!(raw.run_frontend("です！").unwrap()[0].pron.contains('’'));
 }
+
+#[test]
+fn decimal_digits_do_not_take_integer_counter_readings() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("1.1本", "イッテンイチホン"),
+        ("1.3本", "イッテンサンホン"),
+        ("1.6本", "イッテンロクホン"),
+        ("1.8個", "イッテンハチコ"),
+        ("1.1人", "イッテンイチニン"),
+        ("1.4日", "イッテンヨンニチ"),
+        ("2.11本", "ニーテンイチイチホン"),
+        ("2.1万本", "ニーテンイチマンボン"),
+        ("1本", "イッポン"),
+        ("3本", "サンボン"),
+        ("6本", "ロッポン"),
+        ("8個", "ハッコ"),
+        ("4日", "ヨッカ"),
+        ("米・一貫目", "コメ・イッカンメ"),
+        ("5分待ち・10分待ち", "ゴフンマチ・ジュップンマチ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+    let enumeration = engine.run_frontend("四・六級").unwrap();
+    let six = enumeration.iter().find(|f| f.string == "六").unwrap();
+    assert_eq!(six.pron, "ロッ");
+}
