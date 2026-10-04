@@ -1135,6 +1135,7 @@ class Haqumei:
         modify_old_province_yomi: bool = True,
         restore_loanword_kana: bool = True,
         protect_user_dict_readings: bool = False,
+        protect_user_dict_accents: bool = False,
         read_unknown_kanji: bool = True,
         modify_numeral_reading: bool = True,
         split_prefix_accent_phrase: bool = True,
@@ -1148,7 +1149,12 @@ class Haqumei:
         split_q_allophones: bool = False,
         enable_final_glottal_stop: bool = False,
     ) -> None:
-        """新しい Haqumei インスタンスを初期化します。"""
+        """新しい Haqumei インスタンスを初期化します。
+
+        protect_user_dict_accents は、登録した発音・モーラ数・語の区切りと
+        核の位置が一致する場合だけ、アクセント核の後退を抑えます。
+        語の結合や読みの変更で移った核は復元しません。
+        """
 
     @staticmethod
     def from_dictionary(dict: Dictionary) -> Haqumei:

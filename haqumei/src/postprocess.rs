@@ -734,7 +734,7 @@ pub(crate) fn split_prefix_accent_phrase(njd_features: &mut [NjdFeature]) {
 }
 
 /// 長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールを適用します。
-pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
+pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature], registered: &[Option<i32>]) {
     if njd_features.is_empty() {
         return;
     }
@@ -766,11 +766,14 @@ pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature]) {
 
         if acc > 0 {
             if acc <= njd_features[i].mora_size {
-                if pron_ref
-                    .chars()
-                    .nth((acc - 1) as usize)
-                    .or(pron_ref.chars().next())
-                    .is_some_and(|nuc_pron| INAPPROPRIATE_FOR_NUCLEAR_CHARS.contains(&nuc_pron))
+                // 複合語の核が登録核と同じモーラにある場合だけ、後退を止める。
+                // 結合で移った核や、読み変更に合わせて動かした句の核は復元しない。
+                if registered.get(i).copied().flatten() != Some(acc)
+                    && pron_ref
+                        .chars()
+                        .nth((acc - 1) as usize)
+                        .or(pron_ref.chars().next())
+                        .is_some_and(|nuc_pron| INAPPROPRIATE_FOR_NUCLEAR_CHARS.contains(&nuc_pron))
                 {
                     njd_features[head_index].acc = njd_features[head_index].acc.saturating_sub(1);
                 }

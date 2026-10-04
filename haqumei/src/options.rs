@@ -143,6 +143,17 @@ pub struct HaqumeiOptions {
     /// デフォルトでは無効です。
     pub protect_user_dict_readings: bool,
 
+    /// ユーザー辞書に登録した核のアクセント後退を抑える。
+    ///
+    /// 発音・モーラ数・語の区切りが登録時と一致し、現在の核が登録核と同じ
+    /// モーラにある場合だけ、[`Self::retreat_acc_nuc`] による後退を抑えます。
+    /// 例えば「ローン」を核2で登録すると、長音上の核を1へ動かさず2に保ちます。
+    ///
+    /// 語の結合や読みの変更で移った核は復元しません。
+    /// [`Self::protect_user_dict_readings`] とは独立した指定です。
+    /// デフォルトでは無効です。
+    pub protect_user_dict_accents: bool,
+
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
     /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
@@ -505,6 +516,7 @@ impl Default for HaqumeiOptions {
             modify_numeral_reading: true,
             restore_loanword_kana: true,
             protect_user_dict_readings: false,
+            protect_user_dict_accents: false,
             read_unknown_kanji: true,
             split_prefix_accent_phrase: true,
             retreat_acc_nuc: true,

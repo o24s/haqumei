@@ -460,6 +460,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `Haqumei::with_options` を使用することで、`Haqumei` の出力をカスタマイズできます。
 デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) を参照してください。
 
+`protect_user_dict_accents` は、発音・モーラ数・語の区切り・核の位置が登録時と
+一致する場合に、ユーザー辞書の登録核の後退を抑えます。
+既定では無効で、読みの保護とは独立した指定です。
+
 `revert_long_vowels` と `revert_yotsugana` は指定した表記の違いだけを戻し、同じ語に含まれる助詞の発音・連濁・無声化を保ちます。
 
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。

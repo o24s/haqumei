@@ -47,7 +47,10 @@ pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody};
 use crate::{
     errors::HaqumeiError,
     nani_predict::NaniPredictor,
-    open_jtalk::{Dictionary, GLOBAL_MECAB_DICTIONARY, reading_protection::protected_indices},
+    open_jtalk::{
+        Dictionary, GLOBAL_MECAB_DICTIONARY,
+        reading_protection::{protected_indices, registered_accent_nuclei},
+    },
     postprocess::{
         merge_english_alphanumeric_words, modify_acc_after_chaining, modify_context_reading,
         modify_english_words, modify_filler_accent, modify_fraction_denominator,
@@ -733,13 +736,17 @@ impl Haqumei {
                 .chars()
                 .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
 
-        if self.options.protect_user_dict_readings || needs_english_positions {
-            let (njd_features, morphs) =
-                self.open_jtalk.run_frontend_detailed_with_numeral_reading(
-                    text,
-                    self.options.modify_numeral_reading,
-                    self.options.protect_user_dict_readings,
-                )?;
+        if self.options.protect_user_dict_readings
+            || (self.options.protect_user_dict_accents && self.options.retreat_acc_nuc)
+            || needs_english_positions
+        {
+            // 核の保護のために辞書由来を調べても、記号の区切りは変えない。
+            let (njd_features, morphs) = self.open_jtalk.run_frontend_with_morphs(
+                text,
+                self.options.modify_numeral_reading,
+                self.options.protect_user_dict_readings,
+                self.options.protect_user_dict_readings || needs_english_positions,
+            )?;
             let protected = if self.options.protect_user_dict_readings {
                 protected_indices(&njd_features, &morphs)
             } else {
@@ -959,7 +966,12 @@ impl Haqumei {
             split_prefix_accent_phrase(&mut njd_features);
         }
         if options.retreat_acc_nuc {
-            retreat_acc_nuc(&mut njd_features);
+            let registered = if options.protect_user_dict_accents {
+                registered_accent_nuclei(&njd_features, morphs)
+            } else {
+                Vec::new()
+            };
+            retreat_acc_nuc(&mut njd_features, &registered);
         }
         if options.modify_acc_after_chaining {
             modify_acc_after_chaining(&mut njd_features);

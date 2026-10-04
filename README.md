@@ -458,6 +458,10 @@ so **the value cannot serve as an arc weight**.
 You can customize the behavior of `Haqumei` by using `Haqumei::with_options`.
 For details on the default behavior and available options, please refer to [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
 
+`protect_user_dict_accents` prevents accent retreat at a user dictionary's registered
+nucleus when the pronunciation, mora count, word boundaries, and nucleus position
+still match the entry. It is disabled by default and independent of reading protection.
+
 `revert_long_vowels` and `revert_yotsugana` restore only the requested spelling differences; particles, rendaku, and devoicing are preserved within the same word.
 
 In the following example, `normalize_unicode` (which is disabled by default) is enabled to apply Unicode NFC normalization to the input text.

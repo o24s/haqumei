@@ -232,13 +232,28 @@ impl OpenJTalk {
         modify_numeral_reading: bool,
         protect_user_dict_readings: bool,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        self.run_frontend_with_morphs(
+            text,
+            modify_numeral_reading,
+            protect_user_dict_readings,
+            true,
+        )
+    }
+
+    pub(crate) fn run_frontend_with_morphs(
+        &mut self,
+        text: &str,
+        modify_numeral_reading: bool,
+        protect_user_dict_readings: bool,
+        split_symbols: bool,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         if text.is_empty() {
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let mecab_morphs = self.run_mecab_detailed(text)?;
+        let mecab_morphs = self.run_mecab_with_symbol_split(text, split_symbols)?;
         Ok((
             self.run_njd_from_morphs(
                 &mecab_morphs,
@@ -836,6 +851,14 @@ impl OpenJTalk {
     }
 
     pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
+        self.run_mecab_with_symbol_split(text, true)
+    }
+
+    fn run_mecab_with_symbol_split(
+        &mut self,
+        text: &str,
+        split_symbols: bool,
+    ) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
         let normalized = self.text2mecab_string(text)?;
         let analysis = self.mecab.analyze(&normalized)?;
@@ -860,6 +883,7 @@ impl OpenJTalk {
                 is_ignored,
             };
             if node.is_unknown
+                && (split_symbols || surface.contains(['！', '？']))
                 && surface.chars().all(|c| !c.is_alphanumeric())
                 && surface.chars().count() > 1
             {

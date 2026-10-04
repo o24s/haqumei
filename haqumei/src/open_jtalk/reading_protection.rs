@@ -29,3 +29,71 @@ pub(crate) fn protected_indices(
         .map(|(idx, span)| (span.start, idx))
         .collect()
 }
+
+/// 表層形・文字区間・発音・モーラ数が登録時と一致する語の登録核を返す。
+/// 読みや語の区切りが変わると登録核の位置を使えないため、保護対象から外す。
+pub(crate) fn registered_accent_nuclei(
+    features: &[NjdFeature],
+    morphs: &[MecabMorph],
+) -> Vec<Option<i32>> {
+    if !morphs.iter().any(MecabMorph::is_from_user_dictionary) {
+        return Vec::new();
+    }
+    let spans = njd_char_spans(features, morphs);
+    let mut nuclei = vec![None; features.len()];
+    let mut cursor = 0;
+    for morph in morphs.iter().filter(|m| m.is_from_user_dictionary()) {
+        let mut fields = morph.feature.split(',').skip(7);
+        let Some(orig) = fields.next() else { continue };
+        let Some(_) = fields.next() else { continue };
+        let Some(pron) = fields.next() else { continue };
+        let Some(accent) = fields.next() else {
+            continue;
+        };
+
+        // 連語は原形の各要素に分割される。数字の展開や英数字の結合でできた語は
+        // 登録時の区切りと一致しないので、核を保護しない。
+        let words = if orig.contains(':') {
+            orig
+        } else {
+            &morph.surface
+        };
+        if words
+            .chars()
+            .filter(|&c| c != ':')
+            .ne(morph.surface.chars())
+        {
+            continue;
+        }
+        let count = words.split(':').count();
+        if pron.split(':').count() != count || accent.split(':').count() != count {
+            continue;
+        }
+        let mut start = morph.char_span.start;
+        for ((word, pron), accent) in words.split(':').zip(pron.split(':')).zip(accent.split(':')) {
+            let end = start + word.chars().count();
+            while cursor < spans.len() && (spans[cursor].is_empty() || spans[cursor].end <= start) {
+                cursor += 1;
+            }
+            if let Some(feature) = features.get(cursor)
+                && spans[cursor] == (start..end)
+                && end <= morph.char_span.end
+                && feature.string == word
+                && feature
+                    .pron
+                    .chars()
+                    .filter(|&c| c != '’')
+                    .eq(pron.chars().filter(|&c| c != '’'))
+                && let Some((acc, mora)) = accent.split_once('/')
+                && let (Ok(acc), Ok(mora)) = (acc.parse::<i32>(), mora.parse::<i32>())
+                && acc > 0
+                && acc <= mora
+                && feature.mora_size == mora
+            {
+                nuclei[cursor] = Some(acc);
+            }
+            start = end;
+        }
+    }
+    nuclei
+}
