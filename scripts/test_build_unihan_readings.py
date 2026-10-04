@@ -20,7 +20,7 @@ class UnihanGenerationTests(unittest.TestCase):
 
     def test_official_codepoints_and_reading_selection(self):
         output = self.generate(
-            "# Unicode 17.0.0\n"
+            "# Unicode 18.0.0\n"
             "U+3400\tkJapanese\tキュウ おか\n"
             "U+34DD\tkJapanese\tケィ のり\n"
             "U+20000\tkJapanese\tはじめ\n"

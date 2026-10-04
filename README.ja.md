@@ -808,7 +808,7 @@ Haqumei には、以下のプロジェクトから移植した Rust コードと
 
 - バンドルされた漢字読みフォールバックデータ
   - 由来: `haqumei/data/unihan` のデータは、[Unihan Database](https://www.unicode.org/charts/unihan.html) の
-    `kJapanese` フィールドから生成しています。辞書に無い漢字がカナ列に表層形のまま
+    Unicode 18.0.0 の `kJapanese` フィールドから生成しています。辞書に無い漢字がカナ列に表層形のまま
     混入するのを防ぐための、1 文字ごとの読みのフォールバックのために使用しています。
   - ライセンス: UNICODE LICENSE V3。このライセンスは `haqumei/data/unihan` にあるデータにのみ
     適用され、このプロジェクトの他の部分には適用されません。再配布要件に従い、全文は

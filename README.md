@@ -791,7 +791,7 @@ Haqumei includes Rust ports and dictionary data derived from the following proje
 
 - Bundled Kanji Reading Fallback Data
   - Origin: The data in `haqumei/data/unihan` is generated from the `kJapanese` field of the
-    [Unihan Database](https://www.unicode.org/charts/unihan.html). It provides a per-character
+    [Unihan Database](https://www.unicode.org/charts/unihan.html) (Unicode 18.0.0). It provides a per-character
     reading fallback, used to keep kanji missing from the dictionary from appearing verbatim in the
     kana output (see `HaqumeiOptions::read_unknown_kanji`).
   - License: UNICODE LICENSE V3. This license applies only to the data located in

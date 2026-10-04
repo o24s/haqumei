@@ -1000,6 +1000,12 @@ mod tests {
             ("嗅神経", "キューシンケー"),
             // 長音は `ー` で書くのが辞書の流儀なので、フォールバックも揃える
             ("痘", "トー"),
+            ("㯉", "ゲ"),
+            ("簗", "ヤナ"),
+            ("𡲲", "カ"),
+            ("𤟱", "ワ"),
+            ("𫞿", "ヤナ"),
+            ("𮃰", "カ"),
         ] {
             assert_eq!(haqumei.g2k(text).unwrap(), expected, "input: {}", text);
         }
@@ -1013,6 +1019,7 @@ mod tests {
         // 入力段階で新字体に直すと壊れるので触っていない
         assert_eq!(haqumei.g2k("醫學部に進む").unwrap(), "イガクブニススム");
         assert_eq!(haqumei.g2k("医学部に進む").unwrap(), "イガクブニススム");
+        assert_eq!(haqumei.g2k("簗瀬").unwrap(), "ヤナセ");
 
         // 無効にすると pyopenjtalk と同じく表層形がそのまま出ること
         haqumei.options.read_unknown_kanji = false;

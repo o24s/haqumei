@@ -25,7 +25,7 @@ Unihan の `kJapanese` は、カタカナで書かれた読み (音読み) と�
 
 ## 使い方
 
-    curl -sSL -o Unihan.zip https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip
+    curl -sSL -o Unihan.zip https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip
     unzip -o Unihan.zip Unihan_Readings.txt
     uv run scripts/build_unihan_readings.py --input Unihan_Readings.txt
 
@@ -40,7 +40,7 @@ from pathlib import Path
 KATAKANA = re.compile(r"[ァ-ヴー]+$")
 HIRAGANA = re.compile(r"[ぁ-ゖー]+$")
 
-# 「㓝」は「刑」の異体字で、Unicode 17.0.0 の「ケィ」は「ケイ」の誤記。
+# 「㓝」は「刑」の異体字で、Unicode 18.0.0 の「ケィ」は「ケイ」の誤記。
 READING_CORRECTIONS = {"㓝": "ケイ"}
 
 

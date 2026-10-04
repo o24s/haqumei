@@ -5,7 +5,7 @@
 
 ## 出典とライセンス
 
-- 出典: [Unihan Database](https://www.unicode.org/charts/unihan.html)、Unicode 17.0.0
+- 出典: [Unihan Database](https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip)、Unicode 18.0.0
   (`Unihan_Readings.txt` の `kJapanese` フィールド)
 - ライセンス: `LICENSE` に収めた UNICODE LICENSE V3
 
