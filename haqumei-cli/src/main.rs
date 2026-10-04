@@ -174,6 +174,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_restore_loanword_kana: bool,
 
+    /// CJKVI の字体対応による未知語の再解析を無効にする (デフォルトは有効)
+    #[arg(long)]
+    no_resolve_kanji_variants: bool,
+
     /// 辞書に無い漢字へのフォールバック読みを無効にする (デフォルトは有効)
     #[arg(long)]
     no_read_unknown_kanji: bool,
@@ -288,6 +292,7 @@ fn main() -> Result<()> {
         restore_loanword_kana: !cli.options.no_restore_loanword_kana,
         protect_user_dict_readings: cli.options.protect_user_dict_readings,
         protect_user_dict_accents: cli.options.protect_user_dict_accents,
+        resolve_kanji_variants: !cli.options.no_resolve_kanji_variants,
         read_unknown_kanji: !cli.options.no_read_unknown_kanji,
         modify_numeral_reading: !cli.options.no_modify_numeral_reading,
         split_prefix_accent_phrase: !cli.options.no_split_prefix_accent_phrase,

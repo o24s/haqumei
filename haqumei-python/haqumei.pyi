@@ -1136,6 +1136,7 @@ class Haqumei:
         restore_loanword_kana: bool = True,
         protect_user_dict_readings: bool = False,
         protect_user_dict_accents: bool = False,
+        resolve_kanji_variants: bool = True,
         read_unknown_kanji: bool = True,
         modify_numeral_reading: bool = True,
         split_prefix_accent_phrase: bool = True,
@@ -1150,6 +1151,10 @@ class Haqumei:
         enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。
+
+        resolve_kanji_variants は、未知の異体字を含む語を CJKVI の字体対応で
+        再解析します。2 字以上のシステム辞書の語として読めた場合だけ採用し、
+        元の表層形と文字位置を返します。
 
         protect_user_dict_accents は、登録した発音・モーラ数・語の区切りと
         核の位置が一致する場合だけ、アクセント核の後退を抑えます。

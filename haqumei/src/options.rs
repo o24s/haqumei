@@ -154,6 +154,18 @@ pub struct HaqumeiOptions {
     /// デフォルトでは無効です。
     pub protect_user_dict_accents: bool,
 
+    /// 未知の異体字を含む語を、CJKVI の字体対応で再解析する。
+    ///
+    /// 「𠮷野家」を「吉野家」の辞書エントリで読み、表層形と文字位置は元のまま返します。
+    /// 元の解析で未知語になった字だけを置換し、2 字以上のシステム辞書の語として
+    /// 読めた場合に限って採用します。ユーザー登録語は置換・再分割しません。
+    /// 元から既知だった語は、回復した語に含まれる場合を除いて解析を保ちます。
+    /// 単漢字の読みだけが変わる再解析は採用しません。
+    ///
+    /// 再解析を採用した場合、ラティスの候補とコストは置換後の文に基づきます。
+    /// デフォルトで有効です。読みが決まらない字は [`Self::read_unknown_kanji`] が扱います。
+    pub resolve_kanji_variants: bool,
+
     /// 辞書に無い漢字に、フォールバックの読みを与えるかどうか
     ///
     /// Open JTalk は読みを決められなかった語を「記号-読点」に格下げするため、
@@ -517,6 +529,7 @@ impl Default for HaqumeiOptions {
             restore_loanword_kana: true,
             protect_user_dict_readings: false,
             protect_user_dict_accents: false,
+            resolve_kanji_variants: true,
             read_unknown_kanji: true,
             split_prefix_accent_phrase: true,
             retreat_acc_nuc: true,

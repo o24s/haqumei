@@ -14,6 +14,7 @@ macro_rules! impl_batch_method_haqumei {
         where
             S: AsRef<str> + Sync,
         {
+                self.prepare_analysis()?;
                 // インスタンスが辞書を持っている場合はそれを使う。
                 // グローバル辞書を無条件に使うと、`from_path` や `from_dictionary` で
                 // 指定した辞書が黙って無視されてしまう。
@@ -63,6 +64,7 @@ macro_rules! impl_batch_method_openjtalk {
         where
             S: AsRef<str> + Sync,
         {
+            self.ensure_dictionary_is_latest()?;
             // インスタンスが辞書を持っている場合はそれを使う。
             // グローバル辞書を無条件に使うと、`from_path` や `from_dictionary` で
             // 指定した辞書が黙って無視されてしまう。

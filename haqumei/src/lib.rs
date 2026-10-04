@@ -119,6 +119,13 @@ impl Haqumei {
         })
     }
 
+    /// 解析に使う辞書とオプションを現在の設定に同期します。
+    fn prepare_analysis(&mut self) -> Result<(), HaqumeiError> {
+        self.open_jtalk.ensure_dictionary_is_latest()?;
+        self.open_jtalk.resolve_kanji_variants = self.options.resolve_kanji_variants;
+        Ok(())
+    }
+
     /// [open_jtalk::Dictionary] から [Haqumei] を作ります。
     pub fn from_dictionary(
         dict: Dictionary,
@@ -178,7 +185,7 @@ impl Haqumei {
     /// ```
     pub fn g2p(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -212,7 +219,7 @@ impl Haqumei {
     /// ```
     pub fn g2p_detailed(&mut self, text: &str) -> Result<Vec<Phoneme>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -232,7 +239,7 @@ impl Haqumei {
     /// pyopenjtalk と同様に、記号や未知語などの文字は、元の表記が使用されます。
     pub fn g2k(&mut self, text: &str) -> Result<String, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(String::new());
         }
 
@@ -256,7 +263,7 @@ impl Haqumei {
     /// 入力テキストを単語 (形態素) ごとのカタカナリストに変換します。
     pub fn g2k_per_word(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -400,7 +407,7 @@ impl Haqumei {
     /// (e.g., [["k", "o", "N", "n", "i", "ch", "i", "w", "a"], ["pau"], ["s", "e", "k", "a", "i"]])
     pub fn g2p_per_word(&mut self, text: &str) -> Result<Vec<Vec<Phoneme>>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -490,7 +497,7 @@ impl Haqumei {
     /// // ```
     pub fn g2p_mapping(&mut self, text: &str) -> Result<Vec<WordPhonemeMap>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -579,7 +586,7 @@ impl Haqumei {
         text: &str,
     ) -> Result<Vec<WordPhonemeDetail>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -672,7 +679,7 @@ impl Haqumei {
         text: &str,
     ) -> Result<Vec<WordPhonemeProsody>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -713,16 +720,16 @@ impl Haqumei {
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
     pub fn run_frontend(&mut self, text: &str) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
-            return Ok(Vec::new());
-        }
-
         // 書き換えは MeCab の解析結果を要するので、形態素を返さない経路でも
         // detailed 側を通す。ここを分けたままにすると `g2k` や `extract_fullcontext`
         // でだけ手続きが無視され、同じ入力で API ごとに読みが変わる
         if self.morph_filter.is_some() {
             return Ok(self.run_frontend_detailed(text)?.0);
+        }
+
+        self.prepare_analysis()?;
+        if text.is_empty() {
+            return Ok(Vec::new());
         }
 
         let text = self.normalize_unicode_if_needed(text);
@@ -768,8 +775,8 @@ impl Haqumei {
         &mut self,
         text: &str,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        self.prepare_analysis()?;
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
             return Ok((Vec::new(), Vec::new()));
         }
 
@@ -816,7 +823,7 @@ impl Haqumei {
     /// [`Haqumei::analyze_lattice`] が返す [`LatticeNode::char_span`] は、同じ文字列の
     /// 位置になります。
     pub fn run_mecab_detailed(&mut self, text: &str) -> Result<Vec<MecabMorph>, HaqumeiError> {
-        self.open_jtalk.ensure_dictionary_is_latest()?;
+        self.prepare_analysis()?;
         if text.is_empty() {
             return Ok(Vec::new());
         }
@@ -834,7 +841,7 @@ impl Haqumei {
     ///
     /// ラティスから読みの候補を作るなら [`Haqumei::g2p_candidates`] があります。
     pub fn analyze_lattice(&mut self, text: &str) -> Result<Vec<LatticeNode>, HaqumeiError> {
-        self.open_jtalk.ensure_dictionary_is_latest()?;
+        self.prepare_analysis()?;
         if text.is_empty() {
             return Ok(Vec::new());
         }
@@ -848,7 +855,7 @@ impl Haqumei {
     /// 欲しい場合は、 `extract_fullcontext_string` を使用してください。
     pub fn extract_fullcontext(&mut self, text: &str) -> Result<Vec<Label>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 
@@ -862,7 +869,7 @@ impl Haqumei {
     /// 構造化された [haqumei_jlabel::Label] が欲しい場合は、 `extract_fullcontext` を使用してください。
     pub fn extract_fullcontext_string(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
         if text.is_empty() {
-            self.open_jtalk.ensure_dictionary_is_latest()?;
+            self.prepare_analysis()?;
             return Ok(Vec::new());
         }
 

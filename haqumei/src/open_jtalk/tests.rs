@@ -18,12 +18,77 @@ fn test_mecab_model_is_shared() {
     let model = Dictionary::from_embedded().unwrap().model;
     let mut first = Mecab::from_model(&model).unwrap();
     let mut second = Mecab::from_model(&model).unwrap();
-    let expected = first.analyze("こんにちは").unwrap();
+    let expected = first.analyze("こんにちは", false).unwrap();
     drop(first);
     drop(model);
-    let actual = second.analyze("こんにちは").unwrap();
+    let actual = second.analyze("こんにちは", false).unwrap();
     assert_eq!(actual.nodes, expected.nodes);
     assert_eq!(actual.best_path, expected.best_path);
+}
+
+#[test]
+#[cfg(feature = "embed-dictionary")]
+fn test_analysis_preparation_refreshes_dictionary_and_options() {
+    use crate::{Haqumei, HaqumeiOptions};
+
+    let latest = GLOBAL_MECAB_DICTIONARY.load_full();
+    let mut user_csv = NamedTempFile::new().unwrap();
+    writeln!(
+        user_csv,
+        "𠮷野家,1345,1345,-10000,名詞,一般,*,*,*,*,𠮷野家,テスト,テスト,1/3,C1"
+    )
+    .unwrap();
+    let user_dict = NamedTempFile::new().unwrap();
+    MecabDictIndexCompiler::new()
+        .dict_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("dictionary"))
+        .add_input_file(user_csv.path())
+        .userdict_out_path(user_dict.path())
+        .run()
+        .unwrap();
+    let previous = Arc::new(Dictionary::from_paths(&latest.dict_dir, &[user_dict.path()]).unwrap());
+
+    for resolve_kanji_variants in [false, true] {
+        let options = HaqumeiOptions {
+            resolve_kanji_variants,
+            ..Default::default()
+        };
+        let expected = Haqumei::from_shared_dictionary(latest.clone(), options)
+            .unwrap()
+            .g2k("𠮷野家")
+            .unwrap();
+        assert_ne!(expected, "テスト");
+
+        for batch in [false, true] {
+            let mut engine = Haqumei::from_shared_dictionary(previous.clone(), options).unwrap();
+            assert_eq!(engine.g2k("𠮷野家").unwrap(), "テスト");
+            assert_eq!(engine.g2k_batch(&["𠮷野家"]).unwrap(), ["テスト"]);
+
+            // グローバル辞書を書き換えると並行実行中のテストにも影響するため、
+            // 古い辞書を保持したインスタンスだけを更新追従の対象にする。
+            engine.open_jtalk.follows_global = true;
+            engine.open_jtalk.resolve_kanji_variants = !resolve_kanji_variants;
+            let actual = if batch {
+                engine.g2k_batch(&["𠮷野家"]).unwrap().remove(0)
+            } else {
+                engine.g2k("𠮷野家").unwrap()
+            };
+            assert_eq!(actual, expected);
+            assert!(Arc::ptr_eq(
+                engine.open_jtalk.dict.as_ref().unwrap(),
+                &latest
+            ));
+        }
+    }
+
+    let mut ojt = OpenJTalk::from_shared_dictionary(previous).unwrap();
+    assert_eq!(ojt.g2k_batch(&["𠮷野家"]).unwrap(), ["テスト"]);
+    ojt.follows_global = true;
+    let expected = OpenJTalk::from_shared_dictionary(latest.clone())
+        .unwrap()
+        .g2k("𠮷野家")
+        .unwrap();
+    assert_eq!(ojt.g2k_batch(&["𠮷野家"]).unwrap(), [expected]);
+    assert!(Arc::ptr_eq(ojt.dict.as_ref().unwrap(), &latest));
 }
 
 #[test]

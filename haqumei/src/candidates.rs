@@ -545,7 +545,7 @@ impl Haqumei {
         text: &str,
         options: CandidateOptions,
     ) -> Result<Candidates<T>, HaqumeiError> {
-        self.open_jtalk.ensure_dictionary_is_latest()?;
+        self.prepare_analysis()?;
 
         if text.is_empty() {
             return Ok(Candidates {

@@ -462,6 +462,11 @@ For details on the default behavior and available options, please refer to [Haqu
 nucleus when the pronunciation, mora count, word boundaries, and nucleus position
 still match the entry. It is disabled by default and independent of reading protection.
 
+`resolve_kanji_variants` uses CJKVI to recover dictionary words containing unknown
+kanji variants, such as `𠮷野家` → ヨシノヤ. It is enabled by default; returned surfaces
+and character positions retain the original spelling. See
+[the bundled data's origin and license](haqumei/data/cjkvi/README.md).
+
 `revert_long_vowels` and `revert_yotsugana` restore only the requested spelling differences; particles, rendaku, and devoicing are preserved within the same word.
 
 In the following example, `normalize_unicode` (which is disabled by default) is enabled to apply Unicode NFC normalization to the input text.
@@ -801,6 +806,13 @@ Haqumei includes Rust ports and dictionary data derived from the following proje
   - License: UNICODE LICENSE V3. This license applies only to the data located in
     `haqumei/data/unihan`, and does not apply to the rest of this project. In accordance with
     redistribution requirements, the full text is included in `haqumei/data/unihan/LICENSE`.
+
+- Bundled Kanji Variant Data
+  - Origin: `haqumei/data/cjkvi` is generated from the Japanese character-form tables
+    in the [CJKVI Variants Database](https://kanji-database.sourceforge.net/variants/variants.html).
+    The pinned revision and extraction rules are recorded in its [README](haqumei/data/cjkvi/README.md).
+  - License: MIT. The copyright notice and full license text are included in
+    [haqumei/data/cjkvi/LICENSE](haqumei/data/cjkvi/LICENSE).
 
 - Bundled model for predicting the reading of 「何」
   - Origin: the ONNX models in `haqumei/yomi_model` are a conversion, by

@@ -1,4 +1,5 @@
 pub mod dictionary;
+mod kanji_variants;
 mod lattice;
 pub(crate) mod mapping;
 mod mecab;
@@ -86,6 +87,7 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 #[derive(Debug)]
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
+    pub(crate) resolve_kanji_variants: bool,
     pub(crate) dict: Option<Arc<Dictionary>>,
     /// グローバル辞書の更新に追従するかどうか。
     ///
@@ -114,6 +116,7 @@ impl OpenJTalk {
             mecab,
             dict: Some(initial_dict),
             follows_global: true,
+            resolve_kanji_variants: false,
         })
     }
 
@@ -144,6 +147,7 @@ impl OpenJTalk {
             mecab,
             dict: Some(Arc::new(dict)),
             follows_global: false,
+            resolve_kanji_variants: false,
         })
     }
 
@@ -155,6 +159,7 @@ impl OpenJTalk {
             mecab,
             dict: Some(dict),
             follows_global: false,
+            resolve_kanji_variants: false,
         })
     }
 
@@ -206,9 +211,8 @@ impl OpenJTalk {
         text: &str,
         modify_numeral_reading: bool,
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
-        self.ensure_dictionary_is_latest()?;
-
         if text.is_empty() {
+            self.ensure_dictionary_is_latest()?;
             return Ok(Vec::new());
         }
 
@@ -247,9 +251,8 @@ impl OpenJTalk {
         protect_user_dict_readings: bool,
         split_symbols: bool,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
-        self.ensure_dictionary_is_latest()?;
-
         if text.is_empty() {
+            self.ensure_dictionary_is_latest()?;
             return Ok((Vec::new(), Vec::new()));
         }
 
@@ -803,7 +806,9 @@ impl OpenJTalk {
         self.ensure_dictionary_is_latest()?;
 
         let normalized = self.text2mecab_string(text)?;
-        let analysis = self.mecab.analyze(&normalized)?;
+        let analysis = self
+            .mecab
+            .analyze(&normalized, self.resolve_kanji_variants)?;
         let mut features = Vec::with_capacity(analysis.best_path.len());
         for &index in &analysis.best_path {
             let node = &analysis.nodes[index];
@@ -861,7 +866,9 @@ impl OpenJTalk {
     ) -> Result<Vec<MecabMorph>, HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
         let normalized = self.text2mecab_string(text)?;
-        let analysis = self.mecab.analyze(&normalized)?;
+        let analysis = self
+            .mecab
+            .analyze(&normalized, self.resolve_kanji_variants)?;
         let mut cursor = CharCursor::new(normalized.as_bytes());
         let mut results = Vec::new();
         for &index in &analysis.best_path {

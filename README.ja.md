@@ -464,6 +464,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 一致する場合に、ユーザー辞書の登録核の後退を抑えます。
 既定では無効で、読みの保護とは独立した指定です。
 
+`resolve_kanji_variants` は、未知の異体字を含む語を CJKVI の字体対応で辞書の語として
+読みます（`𠮷野家` → ヨシノヤ）。既定で有効で、返す表層形と文字位置は元の表記を
+保ちます。[同梱データの出典とライセンス](haqumei/data/cjkvi/README.md)を記載しています。
+
 `revert_long_vowels` と `revert_yotsugana` は指定した表記の違いだけを戻し、同じ語に含まれる助詞の発音・連濁・無声化を保ちます。
 
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。
@@ -817,6 +821,13 @@ Haqumei には、以下のプロジェクトから移植した Rust コードと
   - ライセンス: UNICODE LICENSE V3。このライセンスは `haqumei/data/unihan` にあるデータにのみ
     適用され、このプロジェクトの他の部分には適用されません。再配布要件に従い、全文は
     `haqumei/data/unihan/LICENSE` に含まれています。
+
+- バンドルされた異体字データ
+  - 由来: `haqumei/data/cjkvi` は、[CJKVI 異体字データベース](https://kanji-database.sourceforge.net/variants/variants.html)
+    の日本語の字体表から生成しています。使用した版と抽出規則は
+    [README](haqumei/data/cjkvi/README.md) に記載しています。
+  - ライセンス: MIT。著作権表示とライセンス全文を
+    [haqumei/data/cjkvi/LICENSE](haqumei/data/cjkvi/LICENSE) に同梱しています。
 
 - バンドルされた「何」の読み推定モデル
   - 由来: `haqumei/yomi_model` の ONNX モデルは、
