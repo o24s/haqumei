@@ -52,7 +52,9 @@ pub fn njd_set_accent_type(njd: &mut NJD) {
                 original_top_accent = current.get_pron().accent();
                 original_top_mora_size = current.get_pron().mora_size();
 
-                if current.get_string() == JYUU && next.map(|n| n.get_pos().is_kazu()) == Some(true)
+                if current.get_string() == JYUU
+                    && next
+                        .is_some_and(|n| n.get_pos().is_kazu() && n.get_chain_flag() == Some(true))
                 {
                     current_acc = Some(0);
                 }

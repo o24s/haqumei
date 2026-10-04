@@ -5,6 +5,8 @@
 //! - 日付を正しく読む
 //!   - 例えば「1日」は「いちにち」ではなく「ついたち」，「24日」は「にじゅうよんにち」ではなく「にじゅうよっか」．
 
+mod accent;
+mod counter;
 mod lut;
 
 use crate::NJD;
@@ -12,9 +14,7 @@ use crate::NJD;
 use haqumei_jpreprocess_core::{pos::*, pron};
 use haqumei_jpreprocess_window::*;
 
-use self::lut::{
-    DigitType, class1, class2, class3, find_pron_conv_map, find_pron_conv_set, numeral, others,
-};
+use self::lut::{DigitType, find_pron_conv_set, numeral};
 
 pub fn is_period(s: &str) -> bool {
     s == "．" || s == "・"
@@ -76,51 +76,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
         }
     }
 
-    {
-        let mut iter = njd.iter_quint_mut();
-        while let Some(quint) = iter.next() {
-            let (prev, node) = match Double::from(quint) {
-                Double::Full(prev, node) => (prev, node),
-                _ => continue,
-            };
-            if !prev.get_pos().is_kazu() {
-                continue;
-            }
-            match node.get_pos() {
-                POS::Meishi(Meishi::FukushiKanou) => (),
-                POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi)) => (),
-                _ => continue,
-            }
-            /* convert digit pron */
-            if let Some(lut1_conversion) = find_pron_conv_set(
-                &class1::CONVERSION_TABLE,
-                node.get_string(),
-                prev.get_string(),
-            ) {
-                prev.set_pron(lut1_conversion.clone());
-            }
-            /* convert numerative pron */
-            match find_pron_conv_set(
-                &class2::CONVERSION_TABLE,
-                node.get_string(),
-                prev.get_string(),
-            ) {
-                Some(DigitType::Voiced) => node
-                    .get_pron_mut()
-                    .moras_mut()
-                    .first_mut()
-                    .map(|mora| mora.convert_to_voiced_sound()),
-                Some(DigitType::SemiVoiced) => node
-                    .get_pron_mut()
-                    .moras_mut()
-                    .first_mut()
-                    .map(|mora| mora.convert_to_semivoiced_sound()),
-                _ => None,
-            };
-            prev.set_chain_flag(false);
-            node.set_chain_flag(true);
-        }
-    }
+    counter::convert_counters(njd);
 
     {
         let mut iter = njd.iter_quint_mut();
@@ -171,62 +127,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
         }
     }
 
-    {
-        let mut iter = njd.iter_quint_mut();
-        while let Some(quint) = iter.next() {
-            let (prev, node, next) = match Triple::from(quint) {
-                Triple::First(node, next) => (None, node, next),
-                Triple::Full(prev, node, next) => (Some(prev), node, next),
-                _ => continue,
-            };
-            if next.get_string().is_empty() {
-                continue;
-            }
-            if !node.get_pos().is_kazu() {
-                continue;
-            }
-            match prev.as_ref().map(|p| p.get_pos()) {
-                None => (),
-                Some(POS::Kigou(_)) => (),
-                Some(pos) if pos.is_kazu() => continue,
-                _ => (),
-            };
-            match next.get_pos() {
-                POS::Meishi(Meishi::FukushiKanou) => (),
-                POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi)) => (),
-                _ => continue,
-            };
-
-            /* convert class3 */
-            if let Some(conversion) = find_pron_conv_map(
-                &class3::CONVERSION_TABLE,
-                next.get_string(),
-                next.get_read().unwrap_or("*"),
-                node.get_string(),
-            ) {
-                node.set_read(&conversion.to_pure_string());
-                node.set_pron(conversion.clone());
-            }
-
-            /* person and the day of month */
-            if let Some(new_node_s) = find_pron_conv_set(
-                &others::CONVERSION_TABLE,
-                next.get_string(),
-                node.get_string(),
-            ) {
-                if matches!(prev, Some(p) if p.get_string().contains(rule::GATSU))
-                    && node.get_string() == rule::ONE
-                    && next.get_string() == rule::NICHI
-                {
-                    node.replace_from_csv(rule::TSUITACHI);
-                } else {
-                    node.replace_from_csv(new_node_s);
-                }
-
-                next.reset();
-            }
-        }
-    }
+    counter::convert_native(njd);
 
     if njd.nodes.len() > 2 {
         let mut iter = njd.iter_quint_mut();
@@ -248,6 +149,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
             enum UnsetPattern {
                 None,
                 Nx1Nx2,
+                Nx2,
                 Nx2Nx3,
             }
 
@@ -257,8 +159,13 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 nx2.get_string(),
                 nx3.as_ref().map(|n| n.get_string()),
             ) {
-                (rule::TEN, rule::FOUR, rule::NICHI, _) => {
+                (rule::TEN, rule::FOUR, rule::NICHI, Some("目")) => {
+                    nx3.as_mut().unwrap().get_details_mut().chain_rule =
+                        haqumei_jpreprocess_core::accent_rule::ChainRules::new("F4@1");
                     (Some(rule::JUYOKKA), None, UnsetPattern::Nx1Nx2)
+                }
+                (rule::TEN, rule::FOUR, rule::NICHI, _) => {
+                    (None, Some(rule::YOKKA), UnsetPattern::Nx2)
                 }
                 (rule::TEN, rule::FOUR, rule::NICHIKAN, _) => {
                     (Some(rule::JUYOKKAKAN), None, UnsetPattern::Nx1Nx2)
@@ -285,6 +192,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
             }
             match unset {
                 UnsetPattern::None => (),
+                UnsetPattern::Nx2 => nx2.reset(),
                 UnsetPattern::Nx1Nx2 => {
                     nx1.reset();
                     nx2.reset();
@@ -298,6 +206,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
     }
 
     njd.remove_silent_node();
+    accent::join_teens(njd);
 }
 
 mod rule {

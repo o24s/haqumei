@@ -10,10 +10,9 @@ pub const CONVERSION_TABLE: [(Keys, NumerativeLUT); 5] = [
 ];
 
 const NUMERATIVE_CLASS2B: Keys = phf_set! {
-    /* from paper */
-    "分", "版", "敗", "発", "拍", "鉢", /* from dictionary */
-    "波", "派", "泊", "犯", "班", "品", "分間", "分目", "片", "篇", "編", "辺", "遍", "歩", "報",
-    "方",
+    "分", "版", "敗", "発", "拍", "鉢", "波", "派",
+    "泊", "犯", "班", "品", "分間", "片", "篇", "編",
+    "辺", "遍", "歩", "報", "方",
 };
 
 const CONV_TABLE2B: NumerativeLUT = phf_map! {
@@ -30,18 +29,8 @@ const CONV_TABLE2B: NumerativeLUT = phf_map! {
 };
 
 const NUMERATIVE_CLASS2C: Keys = phf_set! {
-    /* from paper */
-    "本",
-    "匹",
-    "疋",
-    "票",
-    "俵",
-    "箱",
-    /* from dictionary */
-    "本立て",
-    "杯",
+    "本", "匹", "疋", "票", "俵", "箱", "本立て", "杯",
     "針",
-    "柱",
 };
 
 const CONV_TABLE2C: NumerativeLUT = phf_map! {
@@ -56,10 +45,7 @@ const CONV_TABLE2C: NumerativeLUT = phf_map! {
    "何"=> DigitType::Voiced,
 };
 
-const NUMERATIVE_CLASS2D: Keys = phf_set! {
-   /* from paper */
-   /* "羽", "把", *//* modified */
-};
+const NUMERATIVE_CLASS2D: Keys = phf_set! {};
 
 const CONV_TABLE2D: NumerativeLUT = phf_map! {
    "三"=>DigitType::Voiced,
@@ -73,10 +59,7 @@ const CONV_TABLE2D: NumerativeLUT = phf_map! {
 };
 
 const NUMERATIVE_CLASS2E: Keys = phf_set! {
-   /* from paper */
-   "軒", "石", "足", "尺",
-   /* from dictionary */
-   "かけ", "重ね", "件", "勺",
+    "軒", "石", "足", "尺", "かけ", "重ね", "勺",
 };
 
 const CONV_TABLE2E: NumerativeLUT = phf_map! {
@@ -85,7 +68,9 @@ const CONV_TABLE2E: NumerativeLUT = phf_map! {
    "万"=>DigitType::Voiced,
 };
 
-const NUMERATIVE_CLASS2F: Keys = phf_set! {/* from paper */ "階"};
+const NUMERATIVE_CLASS2F: Keys = phf_set! {
+    "階",
+};
 
 const CONV_TABLE2F: NumerativeLUT = phf_map! {
    "三"=> DigitType::Voiced,
