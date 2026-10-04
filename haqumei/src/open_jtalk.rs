@@ -88,6 +88,7 @@ pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
 pub struct OpenJTalk {
     pub(crate) mecab: Mecab,
     pub(crate) resolve_kanji_variants: bool,
+    pub(crate) defer_unvoicing: bool,
     pub(crate) dict: Option<Arc<Dictionary>>,
     /// グローバル辞書の更新に追従するかどうか。
     ///
@@ -117,6 +118,7 @@ impl OpenJTalk {
             dict: Some(initial_dict),
             follows_global: true,
             resolve_kanji_variants: false,
+            defer_unvoicing: false,
         })
     }
 
@@ -148,6 +150,7 @@ impl OpenJTalk {
             dict: Some(Arc::new(dict)),
             follows_global: false,
             resolve_kanji_variants: false,
+            defer_unvoicing: false,
         })
     }
 
@@ -160,6 +163,7 @@ impl OpenJTalk {
             dict: Some(dict),
             follows_global: false,
             resolve_kanji_variants: false,
+            defer_unvoicing: false,
         })
     }
 
@@ -956,7 +960,12 @@ impl OpenJTalk {
     {
         let raw: Vec<_> = mecab_features.into_iter().collect();
         let borrowed: Vec<&str> = raw.iter().map(AsRef::as_ref).collect();
-        njd::run_frontend(&borrowed, modify_numeral_reading, &[])
+        njd::run_frontend(
+            &borrowed,
+            modify_numeral_reading,
+            &[],
+            !self.defer_unvoicing,
+        )
     }
 
     pub(crate) fn run_njd_from_morphs(
@@ -975,7 +984,12 @@ impl OpenJTalk {
                 )
             })
             .unzip();
-        njd::run_frontend(&raw, modify_numeral_reading, &protected)
+        njd::run_frontend(
+            &raw,
+            modify_numeral_reading,
+            &protected,
+            !self.defer_unvoicing,
+        )
     }
 
     /// NJD の特徴からフルコンテキストラベル文字列を生成します。

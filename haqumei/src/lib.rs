@@ -123,6 +123,7 @@ impl Haqumei {
     fn prepare_analysis(&mut self) -> Result<(), HaqumeiError> {
         self.open_jtalk.ensure_dictionary_is_latest()?;
         self.open_jtalk.resolve_kanji_variants = self.options.resolve_kanji_variants;
+        self.open_jtalk.defer_unvoicing = true;
         Ok(())
     }
 
@@ -972,6 +973,9 @@ impl Haqumei {
         if options.split_prefix_accent_phrase {
             split_prefix_accent_phrase(&mut njd_features);
         }
+        // 読みを変更した語とその隣の無声化を判定する。辞書にある無声化の指定は残す。
+        // 核の後退は無声化を参照するため、retreat_acc_nuc より前に判定する。
+        postprocess::apply_unvoicing(&mut njd_features);
         if options.retreat_acc_nuc {
             let registered = if options.protect_user_dict_accents {
                 registered_accent_nuclei(&njd_features, morphs)

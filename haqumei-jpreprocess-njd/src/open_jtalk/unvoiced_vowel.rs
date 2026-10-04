@@ -18,7 +18,7 @@
 //!   Japanese*, 205-228. 規則 6 は Tables 6-7 に基づく。
 
 use haqumei_jpreprocess_core::pronunciation::{
-    Mora, MoraEnum,
+    Mora, MoraEnum, Pronunciation,
     phoneme::{Consonant, Vowel},
 };
 
@@ -38,20 +38,30 @@ struct MoraState<'a> {
 }
 
 pub fn njd_set_unvoiced_vowel(njd: &mut NJD) {
+    set_unvoiced_vowel(
+        njd.nodes
+            .iter_mut()
+            .map(|node| (*node.get_pos(), node.get_chain_flag(), node.get_pron_mut())),
+    );
+}
+
+/// 品詞・句の結合指定・発音から無声化を判定します。
+///
+/// 読み補正後の呼び出しでは、表層形や活用形を持つ NJDNode を作り直す必要がありません。
+pub fn set_unvoiced_vowel<'a>(
+    nodes: impl IntoIterator<Item = (POS, Option<bool>, &'a mut Pronunciation)>,
+) {
     let mut states: Vec<MoraState> = Vec::new();
 
     let mut midx = 0;
     let mut acc = 0;
-    for (node_index, node) in njd.nodes.iter_mut().enumerate() {
+    for (node_index, (pos, chain_flag, pron)) in nodes.into_iter().enumerate() {
         // If not chained, reset mora index for new word.
         // Otherwise, use the same accent position.
-        if matches!(node.get_chain_flag(), None | Some(false)) {
+        if matches!(chain_flag, None | Some(false)) {
             midx = 0;
-            acc = node.get_pron().accent();
+            acc = pron.accent();
         }
-
-        let pos = node.get_pos().to_owned();
-        let pron = node.get_pron_mut();
 
         for mora in pron.moras_mut() {
             states.push(MoraState {

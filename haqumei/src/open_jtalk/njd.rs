@@ -254,6 +254,7 @@ pub(crate) fn run_frontend(
     raw: &[&str],
     modify_numeral_reading: bool,
     protected_raw: &[bool],
+    apply_unvoicing: bool,
 ) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
@@ -298,7 +299,9 @@ pub(crate) fn run_frontend(
     digit::njd_set_digit(&mut njd);
     accent_phrase::njd_set_accent_phrase(&mut njd);
     accent_type::njd_set_accent_type(&mut njd);
-    unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
+    if apply_unvoicing {
+        unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
+    }
     Ok(rust_njd_to_features(&njd))
 }
 
@@ -339,43 +342,48 @@ fn modify_placeholder_maru(nodes: &mut [haqumei_jpreprocess_njd::NJDNode], prote
     }
 }
 
+/// 発音の解釈に失敗した場合は、JPCommon が音素化できる接頭辞を返します。
+pub(crate) fn pronunciation_from_feature(
+    feature: &NjdFeature,
+) -> haqumei_jpreprocess_core::pronunciation::Pronunciation {
+    use haqumei_jpreprocess_core::pronunciation::{MoraEnum, Pronunciation};
+    // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
+    let segments = Pronunciation::parse_mora_str(&feature.pron);
+    let incomplete = segments.len() > 1;
+    let mut moras = segments
+        .into_iter()
+        .next()
+        .filter(|(range, _)| range.start == 0)
+        .map(|(_, moras)| moras)
+        .unwrap_or_default();
+    if incomplete
+        && let Some(end) = moras
+            .iter()
+            .position(|mora| mora.mora_enum == MoraEnum::Touten)
+    {
+        moras.truncate(end);
+    }
+    let mut pron = Pronunciation::new(moras, feature.acc.max(0) as usize);
+    if pron.is_touten() && feature.pron != "、" {
+        pron = Pronunciation::new(Vec::new(), feature.acc.max(0) as usize);
+    }
+    pron.set_mora_size(feature.mora_size.max(0) as usize);
+    pron
+}
+
 /// 公開特徴量から、補正後の値を持つ Rust の NJD を作る。
 pub(crate) fn features_to_njd(
     features: &[NjdFeature],
 ) -> Result<haqumei_jpreprocess_njd::NJD, HaqumeiError> {
     use haqumei_jpreprocess_core::{
-        accent_rule::ChainRules,
-        cform::CForm,
-        ctype::CType,
-        pos::POS,
-        pronunciation::{MoraEnum, Pronunciation},
-        word_details::WordDetails,
+        accent_rule::ChainRules, cform::CForm, ctype::CType, pos::POS, word_details::WordDetails,
     };
     use haqumei_jpreprocess_njd::{NJD, NJDNode};
     use std::str::FromStr;
 
     let mut nodes = Vec::with_capacity(features.len());
     for feature in features {
-        // JPCommon は解釈できない発音の直前までを音素化するため、同じ接頭辞を渡す。
-        let mut pron = Pronunciation::parse(&feature.pron, feature.acc.max(0) as usize)
-            .unwrap_or_else(|_| {
-                let moras = Pronunciation::parse_mora_str(&feature.pron)
-                    .into_iter()
-                    .next()
-                    .filter(|(range, _)| range.start == 0)
-                    .map(|(_, moras)| {
-                        moras
-                            .into_iter()
-                            .take_while(|mora| mora.mora_enum != MoraEnum::Touten)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Pronunciation::new(moras, feature.acc.max(0) as usize)
-            });
-        if pron.is_touten() && feature.pron != "、" {
-            pron = Pronunciation::new(Vec::new(), feature.acc.max(0) as usize);
-        }
-        pron.set_mora_size(feature.mora_size.max(0) as usize);
+        let pron = pronunciation_from_feature(feature);
         fn nonempty(value: &str) -> &str {
             if value.is_empty() { "*" } else { value }
         }
@@ -474,7 +482,7 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw, false, &[]).unwrap();
+        let features = super::run_frontend(&raw, false, &[], true).unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();

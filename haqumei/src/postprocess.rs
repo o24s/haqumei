@@ -949,6 +949,7 @@ pub(crate) fn process_odori_features(
             // 再解析実行と適用
             if let Some((text, consumed_next)) = reanalysis_result {
                 let mut analyzed = open_jtalk.run_frontend(&text)?;
+                apply_unvoicing(&mut analyzed);
 
                 if let Some(first) = analyzed.get_mut(0) {
                     first.chain_flag = 1;
@@ -1344,5 +1345,63 @@ where
         resolved = resolved.resolve_q_allophone(None, split_q);
         resolved = resolved.resolve_n_allophone(None, split_n, split_n_r, split_n_pa);
         *target = resolved;
+    }
+}
+
+/// 読みの補正後の発音に、辞書指定の無声化を残して自動判定を適用します。
+pub(crate) fn apply_unvoicing(features: &mut [NjdFeature]) {
+    use haqumei_jpreprocess_core::pos::POS;
+    let mut pronunciations: Vec<_> = features
+        .iter()
+        .map(crate::open_jtalk::njd::pronunciation_from_feature)
+        .collect();
+    haqumei_jpreprocess_njd::unvoiced_vowel::set_unvoiced_vowel(
+        features
+            .iter()
+            .zip(&mut pronunciations)
+            .map(|(feature, pron)| {
+                let pos = POS::from_strs(
+                    &feature.pos,
+                    &feature.pos_group1,
+                    &feature.pos_group2,
+                    &feature.pos_group3,
+                )
+                .unwrap_or(POS::Others);
+                let chain_flag = match feature.chain_flag {
+                    0 => Some(false),
+                    1 => Some(true),
+                    _ => None,
+                };
+                (pos, chain_flag, pron)
+            }),
+    );
+    for (feature, pron) in features.iter_mut().zip(&pronunciations) {
+        // 無声化記号だけを変更する。解釈できない発音の末尾も削除せず残す。
+        // 記号の追加・削除が無い語では String を確保しない。
+        let mut rewritten: Option<String> = None;
+        let mut position = 0;
+        let mut copied = 0;
+        for mora in pron.moras() {
+            let spelling = mora.as_str();
+            if !feature.pron[position..].starts_with(spelling) {
+                break;
+            }
+            let end = position + spelling.len();
+            let marked = feature.pron[end..].starts_with('’');
+            position = end + if marked { '’'.len_utf8() } else { 0 };
+            if marked == mora.is_voiced {
+                let output =
+                    rewritten.get_or_insert_with(|| String::with_capacity(feature.pron.len() + 3));
+                output.push_str(&feature.pron[copied..end]);
+                if !mora.is_voiced {
+                    output.push('’');
+                }
+                copied = position;
+            }
+        }
+        if let Some(mut rewritten) = rewritten {
+            rewritten.push_str(&feature.pron[copied..]);
+            feature.pron = rewritten;
+        }
     }
 }
