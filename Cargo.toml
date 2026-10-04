@@ -73,7 +73,7 @@ tar = "0.4.46"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 unicode-normalization = "0.1.25"
-vibrato = { package = "vibrato-rkyv", version = "0.7.17", default-features = false }
+vibrato = { package = "vibrato-rkyv", version = "0.7.18", default-features = false }
 walkdir = "2.5.0"
 zstd = "0.14.0"
 

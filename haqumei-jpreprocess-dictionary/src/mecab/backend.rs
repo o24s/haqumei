@@ -111,6 +111,7 @@ impl Model {
         Ok(SharedTokenizer(Arc::new(
             vibrato::Tokenizer::new(dict)
                 .prefer_dictionary_on_tie(true)
+                .suppress_unknown_for_user_lexicon(true)
                 .ignore_space(true)
                 .map_err(io::Error::other)?
                 .max_grouping_len(24),
@@ -341,5 +342,43 @@ impl Worker {
             best_path,
             total_cost: snapshot.total_cost,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Model;
+
+    #[test]
+    fn user_lexicon_suppression_is_enabled_in_the_backend() {
+        let dict = vibrato::SystemDictionaryBuilder::from_readers(
+            "東京,0,0,0,system\n".as_bytes(),
+            "1 1\n0 0 0\n".as_bytes(),
+            "DEFAULT 1 1 2\nSPACE 0 1 0\n0x0020 SPACE\n".as_bytes(),
+            "DEFAULT,0,0,100,unknown\n".as_bytes(),
+        )
+        .unwrap();
+        let tokenizer = Model::tokenizer_from(vibrato::Dictionary::from_inner(dict)).unwrap();
+        let tokenizer = tokenizer
+            .0
+            .as_ref()
+            .clone()
+            .with_user_lexicon("カキ,0,0,150,user\n東京,0,0,150,user\n".as_bytes())
+            .unwrap();
+        let mut worker = tokenizer.new_worker();
+        for (text, expected) in [("カキ", "user"), ("カキク", "unknown"), ("東京", "system")]
+        {
+            worker.reset_sentence(text);
+            worker.tokenize();
+            assert_eq!(worker.num_tokens(), 1);
+            assert_eq!(worker.token(0).feature(), expected);
+            let lattice = worker.lattice_snapshot().unwrap();
+            assert!(
+                !lattice
+                    .nodes
+                    .iter()
+                    .any(|n| n.feature == "unknown" && n.range_char == (0..2))
+            );
+        }
     }
 }

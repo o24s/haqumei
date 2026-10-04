@@ -471,7 +471,17 @@ impl Model {
         if nodes.is_empty() || kind.invoke() {
             let mut next = start + width;
             let mut grouped_end = None;
+            let user_ends: Vec<_> = nodes
+                .iter()
+                .filter(|node| node.dictionary_index > 0)
+                .map(|node| node.byte_span.end)
+                .collect();
             let add = |stop, nodes: &mut Vec<Node>| {
+                // 本体はユーザー辞書と同一区間の未知語を生成しない。
+                // 比較用の Viterbi 計算にも同じ候補集合を渡す。
+                if user_ends.contains(&stop) {
+                    return Ok(());
+                }
                 self.0.reference_unknown.as_ref().unwrap().append(
                     self.0.unknown_values[kind.category()],
                     start..stop,
@@ -898,11 +908,15 @@ mod tests {
             .push(lexicon(&[("a", -1, 0, "user")], 1));
         let analysis = model.analyze_reference("a").unwrap();
         assert_eq!(analysis.nodes[analysis.best_path[0]].dictionary_index, 1);
+        assert!(!analysis.nodes.iter().any(|node| node.is_unknown));
         assert!(
-            analysis
-                .nodes
+            model
+                .lookup("aa", 0)
+                .unwrap()
                 .iter()
-                .any(|node| node.is_unknown && node.dictionary_index == 255)
+                .any(|node| node.is_unknown
+                    && node.byte_span == (0..2)
+                    && node.dictionary_index == 255)
         );
         assert!(
             model
