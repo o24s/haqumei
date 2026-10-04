@@ -172,4 +172,18 @@ mod tests {
         let mapping = haqumei.g2p_mapping_detailed("クールフェーラック").unwrap();
         assert!(mapping.iter().any(|m| m.is_unknown));
     }
+
+    #[test]
+    fn lake_names_keep_their_nucleus_after_shortening() {
+        let mut engine = Haqumei::new().unwrap();
+        for (text, expected, accent) in [
+            ("宮沢湖", "ミヤザワコ", 4),
+            ("琵琶湖", "ビワコ", 0),
+            ("諏訪湖", "スワコ", 0),
+            ("湖", "ミズウミ", 3),
+        ] {
+            assert_eq!(engine.g2k(text).unwrap(), expected);
+            assert_eq!(engine.run_frontend(text).unwrap()[0].acc, accent, "{text}");
+        }
+    }
 }

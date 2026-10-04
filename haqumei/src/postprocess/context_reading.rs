@@ -982,11 +982,18 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected:
         {
             continue;
         }
+        let shortened_lake = node.string == "湖"
+            && node
+                .pron
+                .chars()
+                .filter(|&c| c != '’')
+                .eq("ミズウミ".chars())
+            && rule.reading == "コ";
         node.pron = rule.reading.to_string();
         // 読みが変わるとモーラ数も変わりうるため数え直す
         let old_mora = node.mora_size;
         node.mora_size = count_mora(rule.reading) as i32;
-        shift_accent_nucleus(njd_features, i, old_mora);
+        shift_accent_nucleus(njd_features, i, old_mora, shortened_lake);
     }
 }
 
@@ -1001,7 +1008,12 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected:
 ///
 /// 読みが短くなると、核が書き換えた形態素の中にあったときにその位置が無くなるので、
 /// その形態素の末尾のモーラに置く。
-fn shift_accent_nucleus(njd_features: &mut [NjdFeature], i: usize, old_mora: i32) {
+fn shift_accent_nucleus(
+    njd_features: &mut [NjdFeature],
+    i: usize,
+    old_mora: i32,
+    shortened_lake: bool,
+) {
     let new_mora = njd_features[i].mora_size;
     if new_mora == old_mora {
         return;
@@ -1017,9 +1029,62 @@ fn shift_accent_nucleus(njd_features: &mut [NjdFeature], i: usize, old_mora: i32
         // 核は書き換えた形態素より前にあるので変更しない。
         return;
     }
-    njd_features[head].acc = if acc > before + old_mora {
+    // 3 モーラ以下の湖名は「コ」の直前に核を置く。
+    // ミズウミの核を単に末尾へ丸めると、湖名が尾高型になる。
+    njd_features[head].acc = if shortened_lake && before + new_mora <= 3 && acc > before + new_mora
+    {
+        before
+    } else if acc > before + old_mora {
         acc + new_mora - old_mora
     } else {
         before + (acc - before).min(new_mora)
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn noun(surface: &str, pron: &str, acc: i32, chain_flag: i32) -> NjdFeature {
+        NjdFeature {
+            string: surface.into(),
+            pos: "名詞".into(),
+            pos_group1: "一般".into(),
+            pos_group2: "*".into(),
+            pos_group3: "*".into(),
+            ctype: "*".into(),
+            cform: "*".into(),
+            orig: surface.into(),
+            read: pron.into(),
+            pron: pron.into(),
+            acc,
+            mora_size: count_mora(pron) as i32,
+            chain_rule: "C1".into(),
+            chain_flag,
+        }
+    }
+
+    #[test]
+    fn short_lake_retreats_only_the_nucleus_removed_with_mizuumi() {
+        let mut nodes = [noun("西", "サイ", 5, 0), noun("湖", "ミズウミ", 3, 1)];
+        modify_context_reading(&mut nodes, &[]);
+        assert_eq!(
+            (&*nodes[1].pron, nodes[1].mora_size, nodes[0].acc),
+            ("コ", 1, 2)
+        );
+
+        let mut already_correct = [noun("西", "サイ", 3, 0), noun("湖", "コ", 1, 1)];
+        let before = already_correct.clone();
+        modify_context_reading(&mut already_correct, &[]);
+        assert_eq!(already_correct, before);
+
+        let mut protected = [noun("西", "サイ", 5, 0), noun("湖", "ミズウミ", 3, 1)];
+        let before = protected.clone();
+        modify_context_reading(&mut protected, &[false, true]);
+        assert_eq!(protected, before);
+
+        let mut earlier_nucleus = [noun("西", "サイ", 1, 0), noun("湖", "ミズウミ", 3, 1)];
+        modify_context_reading(&mut earlier_nucleus, &[]);
+        assert_eq!(earlier_nucleus[0].acc, 1);
+    }
 }

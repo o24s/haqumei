@@ -113,6 +113,32 @@ fn plus_pos_flags(
     )
 }
 
+fn modify_lake_chain_rules(nodes: &mut [haqumei_jpreprocess_njd::NJDNode]) {
+    use haqumei_jpreprocess_core::{accent_rule::ChainRules, pos::POS};
+
+    for i in 1..nodes.len() {
+        if nodes[i].get_string() != "湖" || nodes[i].get_pron().to_pure_string() != "ミズウミ"
+        {
+            continue;
+        }
+        // 「湖」をコと読む湖名が 4 モーラ以上なら、湖の直前に核を置く。
+        // ミズウミのモーラ数で結合すると、読みを短くした後も核が湖の中に残る。
+        let mut moras = 1;
+        for node in nodes[..i].iter().rev() {
+            if !matches!(node.get_pos(), POS::Meishi(_)) {
+                break;
+            }
+            moras += node.get_pron().mora_size();
+            if node.get_chain_flag() == Some(false) {
+                break;
+            }
+        }
+        if moras >= 4 {
+            nodes[i].get_details_mut().chain_rule = ChainRules::new("C3");
+        }
+    }
+}
+
 /// 未知語が `njd_set_pronunciation` でフィラーに変更されたのを、MeCab の品詞に戻す。
 ///
 /// Open JTalk は「読みを持たない語が仮名として読めたらフィラーにする」という
@@ -267,6 +293,7 @@ pub(crate) fn run_frontend(
     }
     restore_unknown_word_pos(&mut njd.nodes, raw);
     apply_plus_rules(&mut njd.nodes);
+    modify_lake_chain_rules(&mut njd.nodes);
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
     accent_phrase::njd_set_accent_phrase(&mut njd);
