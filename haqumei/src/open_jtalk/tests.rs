@@ -46,6 +46,60 @@ fn test_njd() {
 }
 
 #[test]
+fn test_split_dictionary_entry_char_spans() {
+    let mut ojt = OpenJTalk::new().unwrap();
+    for (surface, orig, pron, accent, lengths) in [
+        (
+            "富士河口湖",
+            "富士:河口湖",
+            "フジ:カワグチコ",
+            "1/2:4/5",
+            [2, 3],
+        ),
+        (
+            "山本五十六",
+            "山本:五十六",
+            "ヤマモト:イソロク",
+            "0/4:0/4",
+            [2, 3],
+        ),
+        ("𠮷田富士", "𠮷田:富士", "ヨシダ:フジ", "0/3:1/2", [2, 2]),
+    ] {
+        let end = 1 + surface.chars().count();
+        let morphs: Vec<MecabMorph> = [
+            ("前", "前", "マエ", "1/2", 0..1),
+            (surface, orig, pron, accent, 1..end),
+            ("町", "町", "マチ", "2/2", end..end + 1),
+        ]
+        .into_iter()
+        .map(|(surface, orig, pron, accent, char_span)| MecabMorph {
+            surface: surface.into(),
+            feature: format!(
+                "{surface},名詞,固有名詞,地域,一般,*,*,{orig},{pron},{pron},{accent},*"
+            ),
+            left_id: 1353,
+            right_id: 1353,
+            pos_id: 0,
+            word_cost: 0,
+            is_unknown: false,
+            char_span,
+            dictionary_index: 0,
+            is_ignored: false,
+        })
+        .collect();
+        let features = ojt
+            .run_njd_from_mecab(morphs.iter().map(|m| m.feature.as_str()))
+            .unwrap();
+        let middle = 1 + lengths[0];
+        assert_eq!(
+            njd_char_spans(&features, &morphs),
+            [0..1, 1..middle, middle..end, end..end + 1],
+            "{surface}"
+        );
+    }
+}
+
+#[test]
 fn test_userdict() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);

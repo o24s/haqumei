@@ -632,8 +632,8 @@ fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usi
 /// そのまま対応するバイト位置は無い。そこで MeCab の形態素列と突き合わせ、
 /// 各 NJD 形態素が元の文字列のどこにあたるかを求める。
 ///
-/// 突き合わせは 4 通りになる。表層形がそのまま一致する場合、NJD が複数の形態素を
-/// 1 語にまとめた場合、数詞の並び、踊り字の展開である。数詞の並びは
+/// 突き合わせは 5 通りになる。表層形がそのまま一致する場合、辞書の連語を分割した場合、
+/// NJD が複数の形態素を1語にまとめた場合、数詞の並び、踊り字の展開である。数詞の並びは
 /// `align_number_block` が MeCab の形態素と NJD の形態素を対応付け、踊り字は
 /// `consume_odori_morphs` が消費する形態素の数を数える。
 ///
@@ -705,6 +705,31 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
             idx = feature_end;
             morph_idx = morph_end;
             continue;
+        }
+
+        // 原形を「富士:河口湖」と登録すると、MeCab の1形態素が NJD では2形態素になる。
+        // 元の表層形を再現する分割だけ、各語の文字数で区間を分ける。
+        if word.len() < morph.surface.len()
+            && morph.surface.starts_with(word)
+            && let Some(orig) = morph.feature.split(',').nth(7)
+            && orig.contains(':')
+        {
+            let end = idx + orig.split(':').count();
+            if let Some(parts) = features.get(idx..end)
+                && orig.split(':').eq(parts.iter().map(|f| f.string.as_str()))
+                && parts.iter().map(|f| f.string.as_str()).collect::<String>() == morph.surface
+                && morph.surface.chars().count() == morph.char_span.len()
+            {
+                let mut start = morph.char_span.start;
+                for (feature, span) in parts.iter().zip(&mut spans[idx..end]) {
+                    let end = start + feature.string.chars().count();
+                    *span = start..end;
+                    start = end;
+                }
+                idx = end;
+                morph_idx += 1;
+                continue;
+            }
         }
 
         let start = morph.char_span.start;
