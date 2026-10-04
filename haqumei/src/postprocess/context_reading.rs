@@ -438,7 +438,10 @@ const RULES: &[Rule] = &[
     Rule {
         surface: "部屋",
         pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        cue: Cue::All(&[
+            Cue::PrevPosIn(&["名詞"]),
+            Cue::Not(&Cue::PrevPosGroup1In(&["数"])),
+        ]),
         reading: "ベヤ",
     },
     // 「お年玉付郵便はがき」の 付 は ツキ になる。ズケ は 日付 などの別エントリ。

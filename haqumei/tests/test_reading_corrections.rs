@@ -1,4 +1,4 @@
-use haqumei::{Haqumei, OpenJTalk};
+use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
 fn unvoicing_uses_corrected_readings_in_each_api() {
@@ -69,4 +69,27 @@ fn decimal_digits_do_not_take_integer_counter_readings() {
     let enumeration = engine.run_frontend("四・六級").unwrap();
     let six = enumeration.iter().find(|f| f.string == "六").unwrap();
     assert_eq!(six.pron, "ロッ");
+}
+
+#[test]
+fn room_counter_is_not_changed_back_to_beya() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("一部屋", "ヒトヘヤ"),
+        ("二部屋", "フタヘヤ"),
+        ("三部屋", "サンヘヤ"),
+        ("子供部屋", "コドモベヤ"),
+        ("相撲部屋", "スモーベヤ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+    let mut without_context = Haqumei::with_options(HaqumeiOptions {
+        modify_context_reading: false,
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        engine.g2k("三部屋").unwrap(),
+        without_context.g2k("三部屋").unwrap()
+    );
 }
