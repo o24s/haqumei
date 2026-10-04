@@ -78,6 +78,9 @@ enum Cue {
     /// のではなく品詞で見る。助詞を挟む場合は複合語ではないので発火しない。
     PrevPosIn(&'static [&'static str]),
 
+    /// 直前の形態素の活用形が、いずれかに一致する。
+    PrevCformIn(&'static [&'static str]),
+
     /// 直後の形態素の品詞が、いずれかに一致する。
     NextPosIn(&'static [&'static str]),
 
@@ -552,13 +555,18 @@ const RULES: &[Rule] = &[
         ]),
         reading: "ジャヤ",
     },
-    // 動詞の連用形 + 「入っ」は イッ と読む。(見入った・立ち入った)
-    // 負の対照: 「手に入っ」は直前が助詞なので発火しない。
+    // 「視入った」「駈け入った」など、前の動詞が連用形の複合動詞を イッ と読む。
+    // 「ひがみ入っている」の ひがみ も動詞の連用形と解析されるが、
+    // 名詞の「ひがみ」が入る意味なので、ハイッ を残す。
     // [12 / 0]
     Rule {
         surface: "入っ",
         pos_group1: None,
-        cue: Cue::PrevPosIn(&["動詞"]),
+        cue: Cue::All(&[
+            Cue::PrevPosIn(&["動詞"]),
+            Cue::PrevCformIn(&["連用形"]),
+            Cue::Not(&Cue::PrevIn(&["ひがみ", "僻み"])),
+        ]),
         reading: "イッ",
     },
     // 「何で」「何でも」の 何 は ナン と読む。
@@ -923,6 +931,9 @@ fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
             .any(|f| NEGATIVE_ORIGS.contains(&f.orig.as_str())),
         Cue::PrevPosIn(candidates) => {
             i > 0 && candidates.contains(&njd_features[i - 1].pos.as_str())
+        }
+        Cue::PrevCformIn(candidates) => {
+            i > 0 && candidates.contains(&njd_features[i - 1].cform.as_str())
         }
         Cue::PrevPosGroup1In(candidates) => {
             i > 0 && candidates.contains(&njd_features[i - 1].pos_group1.as_str())
