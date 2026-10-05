@@ -178,6 +178,10 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_resolve_kanji_variants: bool,
 
+    /// 顔文字の読みを省略する処理を無効にする
+    #[arg(long)]
+    no_ignore_kaomoji: bool,
+
     /// 辞書に無い漢字へのフォールバック読みを無効にする (デフォルトは有効)
     #[arg(long)]
     no_read_unknown_kanji: bool,
@@ -281,6 +285,7 @@ fn main() -> Result<()> {
     let haqumei_options = HaqumeiOptions {
         normalize_unicode: cli.options.normalize_unicode.into(),
         normalize_iu: cli.options.normalize_iu.map(Into::into),
+        ignore_kaomoji: !cli.options.no_ignore_kaomoji,
         use_read_as_pron: cli.options.use_read_as_pron,
         revert_long_vowels: cli.options.revert_long_vowels,
         revert_yotsugana: cli.options.revert_yotsugana,

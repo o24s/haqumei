@@ -3,6 +3,7 @@ mod cursor;
 mod data;
 pub mod errors;
 pub mod features;
+mod kaomoji;
 #[macro_use]
 mod macros;
 pub mod ipa;
@@ -733,6 +734,12 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
+        if self.options.ignore_kaomoji
+            && let Some(prepared) = kaomoji::prepare(text, self.options.normalize_unicode)
+        {
+            return Ok(self.run_frontend_prepared(text, Some(prepared))?.0);
+        }
+
         let text = self.normalize_unicode_if_needed(text);
         let text = text.as_ref();
 
@@ -781,39 +788,60 @@ impl Haqumei {
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let text = self.normalize_unicode_if_needed(text);
-        let text = text.as_ref();
+        let prepared = self
+            .options
+            .ignore_kaomoji
+            .then(|| kaomoji::prepare(text, self.options.normalize_unicode))
+            .flatten();
+        self.run_frontend_prepared(text, prepared)
+    }
 
-        let (njd_features, mecab_morphs) = if let Some(filter) = self.morph_filter.clone() {
-            // 書き換えてから NJD に渡す
-            let mut morphs = self.open_jtalk.run_mecab_detailed(text)?;
-            // 位置は `text2mecab` を通した文字列が基準なので、手続きが数え直さずに
-            // 済むよう正規化済みの文を渡す
-            let normalized = self.open_jtalk.text2mecab_string(text)?;
-            let nodes = self.open_jtalk.analyze_lattice(text)?;
-            filter(&normalized, &nodes, &mut morphs);
-            let features = self.open_jtalk.run_njd_from_morphs(
-                &morphs,
-                self.options.modify_numeral_reading,
-                self.options.protect_user_dict_readings,
-            )?;
-            (features, morphs)
+    fn run_frontend_prepared(
+        &mut self,
+        input: &str,
+        prepared: Option<kaomoji::Prepared>,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        let text = if let Some(prepared) = &prepared {
+            std::borrow::Cow::Borrowed(prepared.unicode.as_str())
         } else {
-            self.open_jtalk.run_frontend_detailed_with_numeral_reading(
-                text,
-                self.options.modify_numeral_reading,
-                self.options.protect_user_dict_readings,
-            )?
+            self.normalize_unicode_if_needed(input)
         };
+        let mut morphs = self.open_jtalk.run_mecab_detailed(&text)?;
+        let before_filter =
+            (prepared.is_some() && self.morph_filter.is_some()).then(|| morphs.clone());
+        if let Some(filter) = self.morph_filter.clone() {
+            let normalized = self.open_jtalk.text2mecab_string(&text)?;
+            let nodes = self.open_jtalk.analyze_lattice(&text)?;
+            filter(&normalized, &nodes, &mut morphs);
+        }
+        if let Some(prepared) = &prepared {
+            let mut ranges = prepared.select(input, &morphs);
+            if let Some(before) = before_filter {
+                kaomoji::protect_edits(&mut ranges, &before, &morphs);
+            }
+            kaomoji::merge(&prepared.normalized, &mut morphs, &ranges);
+        }
+        self.finish_frontend(&text, morphs)
+    }
 
+    fn finish_frontend(
+        &mut self,
+        text: &str,
+        morphs: Vec<MecabMorph>,
+    ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
+        let features = self.open_jtalk.run_njd_from_morphs(
+            &morphs,
+            self.options.modify_numeral_reading,
+            self.options.protect_user_dict_readings,
+        )?;
         let protected = if self.options.protect_user_dict_readings {
-            protected_indices(&njd_features, &mecab_morphs)
+            protected_indices(&features, &morphs)
         } else {
             HashMap::new()
         };
         Ok((
-            self.apply_postprocessing(text, njd_features, &protected, &mecab_morphs)?,
-            mecab_morphs,
+            self.apply_postprocessing(text, features, &protected, &morphs)?,
+            morphs,
         ))
     }
 

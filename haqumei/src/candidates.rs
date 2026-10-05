@@ -32,14 +32,13 @@
 //!   `Phoneme::I` の置き換え、`Phoneme::Pau` の任意化として、返した音素列を
 //!   呼び出し側が書き換える
 
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashSet};
 use std::ops::Range;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use crate::errors::HaqumeiError;
-use crate::open_jtalk::reading_protection::protected_indices;
 use crate::prosody::{PitchAccent, ProsodicPhoneme};
 use crate::{
     Haqumei, MecabMorph, NjdFeature, WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody,
@@ -560,11 +559,44 @@ impl Haqumei {
         // 表層形に戻らない (`ｶﾞム` の `ガム` が `ｶﾞ` になる)。`run_mecab_detailed` と
         // `analyze_lattice` は中でもう一度 `text2mecab` を呼ぶが、出力をもう一度
         // 通しても変わらない
-        let text = self.normalize_unicode_if_needed(text);
-        let text = self.open_jtalk.text2mecab_string(text.as_ref())?;
+        let input = text;
+        let prepared = self
+            .options
+            .ignore_kaomoji
+            .then(|| crate::kaomoji::prepare(input, self.options.normalize_unicode))
+            .flatten();
+        let text = if let Some(prepared) = &prepared {
+            prepared.normalized.clone()
+        } else {
+            let text = self.normalize_unicode_if_needed(text);
+            self.open_jtalk.text2mecab_string(text.as_ref())?
+        };
 
-        let morphs = self.open_jtalk.run_mecab_detailed(&text)?;
-        let nodes = self.open_jtalk.analyze_lattice(&text)?;
+        let mut morphs = self.open_jtalk.run_mecab_detailed(&text)?;
+        let mut nodes = self.open_jtalk.analyze_lattice(&text)?;
+        let before_filter = self.morph_filter.is_some().then(|| morphs.clone());
+        if let Some(filter) = self.morph_filter.clone() {
+            filter(&text, &nodes, &mut morphs);
+        }
+        if let Some(before) = &before_filter {
+            let changed = crate::kaomoji::edited_ranges(before, &morphs);
+            nodes.retain(|node| {
+                let i = changed.partition_point(|r| r.end <= node.char_span.start);
+                !changed.get(i).is_some_and(|r| r.start < node.char_span.end)
+            });
+        }
+        if let Some(prepared) = &prepared {
+            let mut ranges = prepared.select(input, &morphs);
+            if let Some(before) = before_filter {
+                crate::kaomoji::protect_edits(&mut ranges, &before, &morphs);
+            }
+            // 顔の内部や境界をまたぐ別経路では、無読化した文字が再び読みに戻る。
+            nodes.retain(|node| {
+                let i = ranges.partition_point(|r| r.end <= node.char_span.start);
+                !ranges.get(i).is_some_and(|r| r.start < node.char_span.end)
+            });
+            crate::kaomoji::merge(&text, &mut morphs, &ranges);
+        }
         let branches = collect_branches(&morphs, &nodes, &options, &self.options);
 
         let mut candidates = Vec::new();
@@ -577,22 +609,10 @@ impl Haqumei {
             // 列を使い回すと、`make_phoneme_mapping` が読む `feature` と `is_unknown`
             // が 1-best のエントリのままになる
             let cand_morphs = build_morphs(&morphs, &branches, &choices);
-            let njd_features = self.open_jtalk.run_njd_from_morphs(
-                &cand_morphs,
-                self.options.modify_numeral_reading,
-                self.options.protect_user_dict_readings,
-            )?;
+            let (njd_features, cand_morphs) = self.finish_frontend(&text, cand_morphs)?;
             if njd_features.is_empty() {
                 continue;
             }
-
-            let protected = if self.options.protect_user_dict_readings {
-                protected_indices(&njd_features, &cand_morphs)
-            } else {
-                HashMap::new()
-            };
-            let njd_features =
-                self.apply_postprocessing(&text, njd_features, &protected, &cand_morphs)?;
 
             let words = T::build(self, &njd_features, cand_morphs)?;
             if seen.insert(T::dedup_key(&words)) {
@@ -666,12 +686,15 @@ fn collect_branches(
     // 独立して境界を探す
     let mut run_start = 0usize;
     while run_start < morphs.len() {
-        if morphs[run_start].is_ignored {
+        if morphs[run_start].is_ignored || crate::kaomoji::is_face(&morphs[run_start]) {
             run_start += 1;
             continue;
         }
         let mut run_end = run_start;
-        while run_end < morphs.len() && !morphs[run_end].is_ignored {
+        while run_end < morphs.len()
+            && !morphs[run_end].is_ignored
+            && !crate::kaomoji::is_face(&morphs[run_end])
+        {
             run_end += 1;
         }
         collect_in_run(

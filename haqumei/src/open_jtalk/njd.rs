@@ -289,7 +289,11 @@ pub(crate) fn run_frontend(
             .map_err(|error| HaqumeiError::MecabError(format!("NJD: {feature}: {error}")))?;
         match entry {
             WordEntry::Single(details) => {
-                nodes.push(NJDNode::from_details(fields[0].to_owned(), details))
+                let mut node = NJDNode::from_details(fields[0].to_owned(), details);
+                if fields[1] == "その他" && fields[2] == "顔文字" {
+                    node.silence();
+                }
+                nodes.push(node)
             }
             entry @ WordEntry::Multiple(_) => nodes.extend(NJDNode::load(fields[0], &entry)),
         }
@@ -316,6 +320,23 @@ pub(crate) fn run_frontend(
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
     number::remove_number_spaces(&mut njd.nodes);
+    // 無読の顔を句頭にすると、後続語の核が発音のない要素に記録される。
+    // 数詞の処理後、アクセント計算の間だけ顔を除き、元の位置に戻す。
+    let mut silent = Vec::new();
+    if njd.nodes.iter().any(NJDNode::is_silent) {
+        njd.nodes = std::mem::take(&mut njd.nodes)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, node)| {
+                if node.is_silent() {
+                    silent.push((i, node));
+                    None
+                } else {
+                    Some(node)
+                }
+            })
+            .collect();
+    }
     accent_phrase::njd_set_accent_phrase(&mut njd);
     if split_prefixes {
         split_prefix_accent_phrase(&mut njd.nodes);
@@ -323,6 +344,20 @@ pub(crate) fn run_frontend(
     accent_type::njd_set_accent_type(&mut njd);
     if apply_unvoicing {
         unvoiced_vowel::njd_set_unvoiced_vowel(&mut njd);
+    }
+    if !silent.is_empty() {
+        let total = silent.len() + njd.nodes.len();
+        let mut spoken = std::mem::take(&mut njd.nodes).into_iter();
+        let mut silent = silent.into_iter().peekable();
+        njd.nodes = (0..total)
+            .map(|i| {
+                if silent.peek().is_some_and(|(at, _)| *at == i) {
+                    silent.next().unwrap().1
+                } else {
+                    spoken.next().unwrap()
+                }
+            })
+            .collect();
     }
     Ok(rust_njd_to_features(&njd))
 }
@@ -443,7 +478,11 @@ pub(crate) fn features_to_njd(
                 _ => None,
             },
         };
-        nodes.push(NJDNode::from_details(feature.string.clone(), details));
+        let mut node = NJDNode::from_details(feature.string.clone(), details);
+        if feature.pos == "その他" && feature.pos_group1 == "顔文字" {
+            node.silence();
+        }
+        nodes.push(node);
     }
     Ok(NJD { nodes })
 }

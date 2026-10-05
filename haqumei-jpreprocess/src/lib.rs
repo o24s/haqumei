@@ -2,6 +2,7 @@
 
 mod normalize_open_jtalk;
 pub use normalize_open_jtalk::normalize_text_for_open_jtalk;
+pub use normalize_open_jtalk::normalize_text_for_open_jtalk_with_mapping;
 
 #[doc(hidden)]
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

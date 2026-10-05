@@ -12,7 +12,7 @@ use haqumei_jpreprocess_window::*;
 
 pub fn njd_set_pronunciation(njd: &mut NJD) {
     for node in &mut njd.nodes {
-        if node.get_pron().mora_size() != 0 {
+        if node.is_silent() || node.get_pron().mora_size() != 0 {
             continue;
         }
         let mut moras = Pronunciation::parse_mora_str(node.get_string())

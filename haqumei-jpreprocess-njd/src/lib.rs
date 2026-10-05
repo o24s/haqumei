@@ -18,7 +18,8 @@ pub struct NJD {
 
 impl NJD {
     pub fn remove_silent_node(&mut self) {
-        self.nodes.retain(|node| !node.get_pron().is_empty())
+        self.nodes
+            .retain(|node| node.is_silent() || !node.get_pron().is_empty())
     }
 
     pub fn from_tokens<'a, T: Token>(

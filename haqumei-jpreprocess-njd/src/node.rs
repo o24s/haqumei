@@ -13,6 +13,7 @@ pub struct NJDNode {
     string: String, //*は空文字列として扱う
     details: WordDetails,
     digit_sequence_reading: Option<bool>,
+    silent: bool,
 }
 
 impl Display for NJDNode {
@@ -84,6 +85,7 @@ impl NJDNode {
         self.string.clear();
         self.details = WordDetails::default();
         self.digit_sequence_reading = None;
+        self.silent = false;
     }
 }
 
@@ -149,7 +151,20 @@ impl NJDNode {
             string,
             details,
             digit_sequence_reading: None,
+            silent: false,
         }
+    }
+
+    /// 表層形を保持したまま読みを生成しない要素にします。
+    pub fn silence(&mut self) {
+        self.silent = true;
+        self.details.read = Some(String::new());
+        self.details.pron = Pronunciation::default();
+    }
+
+    /// 表層形を保持する無読要素かどうかを返します。
+    pub fn is_silent(&self) -> bool {
+        self.silent
     }
 
     /// 数字列を位取りで読む指定なら `Some(true)`、桁読みなら `Some(false)` を返します。

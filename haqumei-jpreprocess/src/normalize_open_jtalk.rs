@@ -2,21 +2,38 @@ use phf::{Map, phf_map};
 
 /// Open JTalk と同じ変換表で正規化します。ASCII の制御文字は出力しません。
 pub fn normalize_text_for_open_jtalk(input: &str) -> String {
+    normalize_text_for_open_jtalk_with_mapping(input, |_, _| {})
+}
+
+/// 正規化し、変換ごとに元のバイト区間と出力の文字区間を通知します。
+///
+/// 除去される文字も空の出力区間として通知します。
+pub fn normalize_text_for_open_jtalk_with_mapping(
+    input: &str,
+    mut mapped: impl FnMut(std::ops::Range<usize>, std::ops::Range<usize>),
+) -> String {
     let mut result = String::with_capacity(input.len());
     let mut chars = input.char_indices().peekable();
+    let mut count = 0;
     while let Some((start, current)) = chars.next() {
+        let before = count;
         if let Some(&(next, ch)) = chars.peek()
             && let Some(replacement) = COMPOSED.get(&input[start..next + ch.len_utf8()])
         {
             result.push_str(replacement);
             chars.next();
+            count += replacement.chars().count();
+            mapped(start..next + ch.len_utf8(), before..count);
             continue;
         }
         if let Some(replacement) = SINGLE.get(&current) {
             result.push_str(replacement);
+            count += replacement.chars().count();
         } else if !current.is_ascii_control() {
             result.push(current);
+            count += 1;
         }
+        mapped(start..start + current.len_utf8(), before..count);
     }
     result
 }
@@ -213,7 +230,27 @@ const COMPOSED: Map<&str, &str> = phf_map! {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_text_for_open_jtalk;
+    use super::{normalize_text_for_open_jtalk, normalize_text_for_open_jtalk_with_mapping};
+
+    #[test]
+    fn mapping_tracks_composed_removed_and_unchanged_characters() {
+        let mut spans = Vec::new();
+        let normalized =
+            normalize_text_for_open_jtalk_with_mapping("\tｶﾞAﾟ𠮷", |from, to| {
+                spans.push((from, to));
+            });
+        assert_eq!(normalized, "ガＡ𠮷");
+        assert_eq!(
+            spans,
+            [
+                (0..1, 0..0),
+                (1..7, 0..1),
+                (7..8, 1..2),
+                (8..11, 2..2),
+                (11..15, 2..3),
+            ]
+        );
+    }
 
     #[test]
     fn ascii_symbols_keep_open_jtalk_spellings() {

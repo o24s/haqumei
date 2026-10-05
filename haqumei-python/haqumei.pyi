@@ -1124,6 +1124,7 @@ class Haqumei:
         self,
         normalize_unicode: UnicodeNormalization = UnicodeNormalization.None_,
         *,
+        ignore_kaomoji: bool = True,
         use_read_as_pron: bool = False,
         revert_long_vowels: bool = False,
         revert_yotsugana: bool = False,
@@ -1151,6 +1152,10 @@ class Haqumei:
         enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。
+
+        ignore_kaomoji は既定で有効です。認識した顔文字を一要素にまとめ、
+        正規化後の表層形を残して読みと音素を空にします。
+        解析結果に現れたユーザー登録語は無読化しません。
 
         resolve_kanji_variants は、未知の異体字を含む語を CJKVI の字体対応で
         再解析します。2 字以上のシステム辞書の語として読めた場合だけ採用し、

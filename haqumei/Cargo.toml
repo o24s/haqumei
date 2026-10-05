@@ -56,6 +56,7 @@ tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
+unicode-segmentation = "1.13.3"
 walkdir.workspace = true
 zstd.workspace = true
 

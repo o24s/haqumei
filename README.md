@@ -461,6 +461,12 @@ so **the value cannot serve as an arc weight**.
 You can customize the behavior of `Haqumei` by using `Haqumei::with_options`.
 For details on the default behavior and available options, please refer to [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html).
 
+`ignore_kaomoji` is enabled by default. Recognized kaomoji are returned as one element
+with their normalized surface preserved and an empty reading and phoneme list.
+Words selected from user dictionaries and explicit morph edits are preserved. A kaomoji does not
+insert a pause: `コ(^_^)ーヒー` is pronounced コーヒー. Set `ignore_kaomoji = false`
+(Python: `ignore_kaomoji=False`, CLI: `--no-ignore-kaomoji`) to disable recognition.
+
 `protect_user_dict_accents` prevents accent retreat at a user dictionary's registered
 nucleus when the pronunciation, mora count, word boundaries, and nucleus position
 still match the entry. It is disabled by default and independent of reading protection.

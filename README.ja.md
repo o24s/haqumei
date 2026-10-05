@@ -463,6 +463,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `Haqumei::with_options` を使用することで、`Haqumei` の出力をカスタマイズできます。
 デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) を参照してください。
 
+`ignore_kaomoji` は既定で有効です。認識した顔文字を一要素にまとめ、正規化後の
+表層形を残して読みと音素を空にします。解析結果に現れたユーザー登録語と、形態素フィルタで
+書き換えた語は無読化しません。顔文字によるポーズは挿入せず、`コ(^_^)ーヒー` は
+コーヒーと読みます。`ignore_kaomoji = false`（Python: `ignore_kaomoji=False`、
+CLI: `--no-ignore-kaomoji`）で無効にできます。
+
 `protect_user_dict_accents` は、発音・モーラ数・語の区切り・核の位置が登録時と
 一致する場合に、ユーザー辞書の登録核の後退を抑えます。
 既定では無効で、読みの保護とは独立した指定です。

@@ -10,6 +10,13 @@ pub struct HaqumeiOptions {
     /// デフォルトで無効になっています。
     pub normalize_unicode: UnicodeNormalization,
 
+    /// 顔文字の形を認識し、一つの表層形と空の読み・音素列にまとめます。
+    ///
+    /// 顔の前後の本文と、解析結果に現れたユーザー登録語は残します。
+    /// 顔文字だけを理由とするポーズは追加せず、顔を越える長音の接続も許します。
+    /// デフォルトで有効です。
+    pub ignore_kaomoji: bool,
+
     /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
     ///
     /// これにより、長音の自動変換機能が無効化されます。 (e.g., "ジンセー" -> "ジンセイ")
@@ -516,6 +523,7 @@ impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
             normalize_unicode: UnicodeNormalization::None,
+            ignore_kaomoji: true,
             use_read_as_pron: false,
             revert_long_vowels: false,
             revert_yotsugana: false,

@@ -36,9 +36,14 @@ impl From<&[NJDNode]> for Utterance {
         let mut accent_phrases: Vec<AccentPhrase> = Vec::with_capacity(nodes.len());
 
         let mut pause_pending = false;
+        let mut silent_gap = false;
 
         for (source_index, node) in nodes.iter().enumerate() {
             let pron = node.get_pron();
+            if node.is_silent() {
+                silent_gap = true;
+                continue;
+            }
             if pron.is_question() || pron.is_exclamation() {
                 // 句読点はまだ音素を作らないので、連続する「？」「！」も同じ句に付く。
                 let accent_phrase = accent_phrases.last_mut().or_else(|| {
@@ -56,6 +61,7 @@ impl From<&[NJDNode]> for Utterance {
             }
             if pron.is_touten() || pron.is_question() || pron.is_exclamation() {
                 pause_pending = true;
+                silent_gap = false;
                 continue;
             }
 
@@ -77,9 +83,9 @@ impl From<&[NJDNode]> for Utterance {
                     })
                     .flatten()
                 {
-                    if leading_long < word.count_mora() {
-                        // 長音の後にも発音が続く形態素は、長音だけ前の語へ渡すと
-                        // 読みと音素の対応がずれる。句構造とは別に元の添字を保つ。
+                    if leading_long < word.count_mora() || silent_gap {
+                        // 後続音のある形態素や顔を挟む長音は、前の語へ表層形を結合できない。
+                        // 長音の音素を元の形態素へ返せるよう、句構造とは別に添字を保つ。
                         let start = previous.count_mora();
                         previous
                             .source_overrides
@@ -100,6 +106,7 @@ impl From<&[NJDNode]> for Utterance {
             if word.moras.is_empty() {
                 continue;
             }
+            silent_gap = false;
 
             let is_chained = matches!(node.get_chain_flag(), Some(true));
             if pause_pending && !is_chained && !accent_phrases.is_empty() {

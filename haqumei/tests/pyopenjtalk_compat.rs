@@ -128,6 +128,8 @@ mod tests {
     #[test]
     fn test_odoriji() {
         let mut haqumei = Haqumei::new().unwrap();
+        // 顔文字を含む旧来の踊り字処理と比較するため、無読化を無効にする。
+        haqumei.options.ignore_kaomoji = false;
 
         // --- 一の字点（ゝ、ゞ、ヽ、ヾ）の処理テスト ---
 

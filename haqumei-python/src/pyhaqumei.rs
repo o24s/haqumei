@@ -38,6 +38,7 @@ impl PyHaqumei {
     #[pyo3(signature = (
         normalize_unicode = UnicodeNormalization::None_,
         *,
+        ignore_kaomoji = true,
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
@@ -66,6 +67,7 @@ impl PyHaqumei {
     ))]
     fn new(
         normalize_unicode: UnicodeNormalization,
+        ignore_kaomoji: bool,
         use_read_as_pron: bool,
         revert_long_vowels: bool,
         revert_yotsugana: bool,
@@ -98,6 +100,7 @@ impl PyHaqumei {
                 UnicodeNormalization::Nfc => ::haqumei::UnicodeNormalization::Nfc,
                 UnicodeNormalization::Nfkc => ::haqumei::UnicodeNormalization::Nfkc,
             },
+            ignore_kaomoji,
             use_read_as_pron,
             revert_long_vowels,
             revert_yotsugana,
