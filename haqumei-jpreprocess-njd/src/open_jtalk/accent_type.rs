@@ -145,7 +145,8 @@ fn calc_digit_acc(prev: &NJDNode, current: &NJDNode, next: Option<&NJDNode>) -> 
             JYUU,
             Some(ICHI | NI | SAN | YON | GO | ROKU | NANA | HACHI | KYUU),
         ) => Some(0),
-        // (SAN | YON | KYUU | NAN | SUU, JYUU, _) => Some(1),
+        (GO | ROKU | HACHI, JYUU, _) => Some(prev.get_pron().mora_size() + 1),
+        (NANA, JYUU, _) => Some(2),
         (_, JYUU, _) => Some(1),
 
         (NANA, HYAKU, _) => Some(2),
@@ -169,6 +170,32 @@ fn calc_digit_acc(prev: &NJDNode, current: &NJDNode, next: Option<&NJDNode>) -> 
 #[cfg(test)]
 mod tests {
     use crate::{NJD, accent_type::njd_set_accent_type};
+
+    #[test]
+    fn tens_keep_their_nucleus_when_units_are_absent() {
+        for (digit, pron, moras, accent, with_units) in [
+            ("五", "ゴ", 1, 2, 0),
+            ("六", "ロク", 2, 3, 0),
+            ("七", "ナナ", 2, 2, 2),
+            ("八", "ハチ", 2, 3, 0),
+        ] {
+            for tail in [false, true] {
+                let mut entries = vec![
+                    format!("{digit},名詞,数,*,*,*,*,{digit},{pron},{pron},1/{moras},C3,0"),
+                    "十,名詞,数,*,*,*,*,十,ジュウ,ジュー,1/2,*,1".to_owned(),
+                ];
+                if tail {
+                    entries.push("一,名詞,数,*,*,*,*,一,イチ,イチ,2/2,C3,0".to_owned());
+                }
+                let mut njd: NJD = entries.iter().map(String::as_str).collect();
+                njd_set_accent_type(&mut njd);
+                assert_eq!(
+                    njd.nodes[0].get_pron().accent(),
+                    if tail { with_units } else { accent }
+                );
+            }
+        }
+    }
 
     #[test]
     fn prefix_p2_preserves_its_original_nucleus() {
