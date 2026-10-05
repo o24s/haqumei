@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NjdFeature {
-    /// 表層形
+    /// 表層形。ローマ数字を複数の数詞へ展開した場合は、先頭だけに元の表記を残します。
+    /// 後続の数詞は空文字列になり、縮約した助数詞の表記は残ります。
     pub string: String,
     /// 品詞
     pub pos: String,

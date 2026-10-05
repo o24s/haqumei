@@ -12,12 +12,22 @@ use crate::utils::count_mora;
 /// 「数詞 + 年」と「第」の直後では、組番号の読みを維持します。
 pub(crate) fn modify_group_reading(features: &mut [NjdFeature], protected: &[bool]) {
     for i in 0..features.len() {
+        // 展開したローマ数字は表層形を戻しているが、原形には一・二が残る。
+        let number = if features[i].pos_group1 == "数"
+            && matches!(features[i].orig.as_str(), "一" | "二")
+            && (features[i].string.is_empty() || crate::roman::parse(&features[i].string).is_some())
+        {
+            features[i].orig.as_str()
+        } else {
+            features[i].string.as_str()
+        };
+        let is_one = number == "一";
         let combined = features[i].string == "一組"
             && features[i].read == "イチクミ"
             && features[i].pos == "名詞"
             && features[i].pos_group1 == "一般";
         let separate = features[i].pos_group1 == "数"
-            && matches!(features[i].string.as_str(), "一" | "二")
+            && matches!(number, "一" | "二")
             && features.get(i + 1).is_some_and(|next| {
                 next.string == "組" && next.read == "クミ" && next.pos_group2 == "助数詞"
             });
@@ -39,7 +49,7 @@ pub(crate) fn modify_group_reading(features: &mut [NjdFeature], protected: &[boo
         }
         let (before, after) = if combined {
             ("イチクミ", "ヒトクミ")
-        } else if features[i].string == "一" {
+        } else if is_one {
             ("イチ", "ヒト")
         } else {
             ("ニ", "フタ")

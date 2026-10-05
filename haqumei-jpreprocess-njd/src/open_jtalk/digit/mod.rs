@@ -55,6 +55,8 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 && !prev.get_string().is_empty()
                 && is_period(node.get_string())
                 && node.digit_sequence_reading() != Some(false)
+                && prev.roman_source().is_none()
+                && next.roman_source().is_none()
                 && prev.get_pos().is_kazu()
                 && next.get_pos().is_kazu()
             {
@@ -93,7 +95,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 Double::Full(prev, node) => (prev, node),
                 _ => continue,
             };
-            if !prev.get_pos().is_kazu() {
+            if !prev.get_pos().is_kazu() || node.counter_reading_protected() {
                 continue;
             }
             if node.get_pos().is_kazu() && !node.get_string().is_empty() {
@@ -153,6 +155,13 @@ pub fn njd_set_digit(njd: &mut NJD) {
             };
 
             let mut nx3 = nx3_t;
+            if node.counter_reading_protected()
+                || nx1.counter_reading_protected()
+                || nx2.counter_reading_protected()
+                || nx3.as_ref().is_some_and(|n| n.counter_reading_protected())
+            {
+                continue;
+            }
 
             enum UnsetPattern {
                 None,

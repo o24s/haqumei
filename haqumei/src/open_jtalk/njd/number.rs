@@ -23,6 +23,9 @@ fn digit(character: char) -> Option<usize> {
 }
 
 fn is_digit(node: &NJDNode) -> bool {
+    if node.roman_source().is_some() {
+        return false;
+    }
     let mut chars = node.get_string().chars();
     chars.next().and_then(digit).is_some() && chars.next().is_none()
 }
@@ -84,18 +87,6 @@ pub(super) fn expand_unknown_digits(
     {
         return false;
     }
-    const DIGITS: [&str; 10] = [
-        "０,名詞,数,*,*,*,*,０,ゼロ,ゼロ,1/2,C3",
-        "１,名詞,数,*,*,*,*,１,イチ,イチ,2/2,C3",
-        "２,名詞,数,*,*,*,*,２,ニ,ニ,1/1,C3",
-        "３,名詞,数,*,*,*,*,３,サン,サン,0/2,C3",
-        "４,名詞,数,*,*,*,*,４,ヨン,ヨン,1/2,C1",
-        "５,名詞,数,*,*,*,*,５,ゴ,ゴ,1/1,C3",
-        "６,名詞,数,*,*,*,*,６,ロク,ロク,2/2,C3",
-        "７,名詞,数,*,*,*,*,７,ナナ,ナナ,1/2,C3",
-        "８,名詞,数,*,*,*,*,８,ハチ,ハチ,2/2,C3",
-        "９,名詞,数,*,*,*,*,９,キュウ,キュー,1/2,C3",
-    ];
     if postal {
         nodes.push(NJDNode::new_single("〒,記号,一般,*,*,*,*,〒,〒,〒,*/*,*"));
     }
@@ -113,6 +104,40 @@ pub(super) fn expand_unknown_digits(
         nodes.push(node);
     }
     true
+}
+
+const DIGITS: [&str; 10] = [
+    "０,名詞,数,*,*,*,*,０,ゼロ,ゼロ,1/2,C3",
+    "１,名詞,数,*,*,*,*,１,イチ,イチ,2/2,C3",
+    "２,名詞,数,*,*,*,*,２,ニ,ニ,1/1,C3",
+    "３,名詞,数,*,*,*,*,３,サン,サン,0/2,C3",
+    "４,名詞,数,*,*,*,*,４,ヨン,ヨン,1/2,C1",
+    "５,名詞,数,*,*,*,*,５,ゴ,ゴ,1/1,C3",
+    "６,名詞,数,*,*,*,*,６,ロク,ロク,2/2,C3",
+    "７,名詞,数,*,*,*,*,７,ナナ,ナナ,1/2,C3",
+    "８,名詞,数,*,*,*,*,８,ハチ,ハチ,2/2,C3",
+    "９,名詞,数,*,*,*,*,９,キュウ,キュー,1/2,C3",
+];
+
+pub(super) fn expand_roman(value: u16, source: std::num::NonZeroU32, nodes: &mut Vec<NJDNode>) {
+    use haqumei_jpreprocess_njd::{NJD, digit_sequence};
+    let mut numeral = NJD {
+        nodes: value
+            .to_string()
+            .bytes()
+            .map(|c| {
+                let mut node = NJDNode::new_single(DIGITS[(c - b'0') as usize]);
+                node.set_digit_sequence_reading(Some(true));
+                node
+            })
+            .collect(),
+    };
+    // 番号の文脈でもⅫは十二を表す。文へ戻す前に、数値単独で位取りを確定する。
+    digit_sequence::njd_digit_sequence(&mut numeral);
+    for node in &mut numeral.nodes {
+        node.set_roman_source(source);
+    }
+    nodes.extend(numeral.nodes);
 }
 
 pub(super) fn retain_number_spaces(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {

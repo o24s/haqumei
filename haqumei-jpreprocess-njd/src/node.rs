@@ -14,6 +14,8 @@ pub struct NJDNode {
     details: WordDetails,
     digit_sequence_reading: Option<bool>,
     silent: bool,
+    roman_source: Option<std::num::NonZeroU32>,
+    counter_reading_protected: bool,
 }
 
 impl Display for NJDNode {
@@ -43,6 +45,8 @@ impl NJDNode {
             replacement.details.chain_flag = self.details.chain_flag;
         }
         replacement.digit_sequence_reading = self.digit_sequence_reading;
+        replacement.roman_source = self.roman_source;
+        replacement.counter_reading_protected = self.counter_reading_protected;
         *self = replacement;
     }
 
@@ -86,6 +90,8 @@ impl NJDNode {
         self.details = WordDetails::default();
         self.digit_sequence_reading = None;
         self.silent = false;
+        self.roman_source = None;
+        self.counter_reading_protected = false;
     }
 }
 
@@ -152,6 +158,8 @@ impl NJDNode {
             details,
             digit_sequence_reading: None,
             silent: false,
+            roman_source: None,
+            counter_reading_protected: false,
         }
     }
 
@@ -170,6 +178,26 @@ impl NJDNode {
     /// 数字列を位取りで読む指定なら `Some(true)`、桁読みなら `Some(false)` を返します。
     pub fn digit_sequence_reading(&self) -> Option<bool> {
         self.digit_sequence_reading
+    }
+
+    /// 展開前のローマ数字を表す、呼び出し側が割り当てた番号を返します。
+    pub fn roman_source(&self) -> Option<std::num::NonZeroU32> {
+        self.roman_source
+    }
+
+    /// 展開前のローマ数字を表す番号を設定します。
+    pub fn set_roman_source(&mut self, source: std::num::NonZeroU32) {
+        self.roman_source = Some(source);
+    }
+
+    /// 助数詞の読みを数詞の音便・縮約で変更しない指定を返します。
+    pub fn counter_reading_protected(&self) -> bool {
+        self.counter_reading_protected
+    }
+
+    /// 助数詞の読みを数詞の音便・縮約から保護します。
+    pub fn protect_counter_reading(&mut self) {
+        self.counter_reading_protected = true;
     }
 
     /// 数字列の読み方を指定します。`None` は前後の語による判定を使います。

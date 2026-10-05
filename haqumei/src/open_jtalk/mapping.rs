@@ -684,6 +684,13 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
     let mut idx = 0;
 
     while idx < features.len() {
+        // ローマ数字の位取りを展開した後続要素は、表層形を重複して持たない。
+        if features[idx].string.is_empty() {
+            let at = idx.checked_sub(1).map_or(0, |i| spans[i].end);
+            spans[idx] = at..at;
+            idx += 1;
+            continue;
+        }
         // NJD の形態素列に現れない morph (空白など) を先に進める
         while morphs.get(morph_idx).is_some_and(|m| m.is_ignored) {
             morph_idx += 1;
@@ -1207,6 +1214,13 @@ impl OpenJTalk {
         let mut mapping_options: Vec<Option<T>> = mapping.into_iter().map(Some).collect();
 
         for idx in 0..mapping_options.len() {
+            if mapping_options[idx]
+                .as_ref()
+                .is_some_and(|m| m.word().is_empty())
+            {
+                result.push(mapping_options[idx].take().unwrap().into_mismatch());
+                continue;
+            }
             // is_ignored な Morph を先に進めておく
             while let Some(m) = morphs.get(morph_idx) {
                 if m.is_ignored {

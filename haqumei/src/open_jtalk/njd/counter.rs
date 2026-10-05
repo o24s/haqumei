@@ -11,21 +11,43 @@ use haqumei_jpreprocess_njd::NJDNode;
 // https://github.com/tsukumijima/open_jtalk/commit/7ca709eba57f6d8eb73bfeb74f06c007fe2b67b1
 pub(super) fn restore_counter_features(nodes: &mut [NJDNode], protected: &[bool]) {
     for i in 1..nodes.len() {
+        let roman_counter = nodes[i - 1].roman_source().is_some()
+            && matches!(
+                nodes[i].get_string(),
+                "月" | "巻" | "章" | "節" | "項" | "編" | "世"
+            );
         if protected[i]
             || !nodes[i - 1].get_pos().is_kazu()
-            || matches!(
-                nodes[i].get_pos(),
-                POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi))
-            )
-            || !matches!(
-                nodes[i].get_pos(),
-                POS::Meishi(Meishi::General | Meishi::Hijiritsu(_) | Meishi::Setsubi(_))
-                    | POS::Settoushi(Settoushi::SuuSetsuzoku)
-            )
+            || (!roman_counter
+                && matches!(
+                    nodes[i].get_pos(),
+                    POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi))
+                ))
+            || (!roman_counter
+                && !matches!(
+                    nodes[i].get_pos(),
+                    POS::Meishi(Meishi::General | Meishi::Hijiritsu(_) | Meishi::Setsubi(_))
+                        | POS::Settoushi(Settoushi::SuuSetsuzoku)
+                ))
         {
             continue;
         }
-        let Some(&(read, pron, accent, rule)) = COUNTERS.get(nodes[i].get_string()) else {
+        // ローマ数字の直後は数詞との接続コストが使われず、「巻」がマキにもなる。
+        let entry = if roman_counter {
+            match nodes[i].get_string() {
+                "月" => Some(&("ガツ", "ガツ", 2, "C1")),
+                "巻" => Some(&("カン", "カン", 1, "C3")),
+                "章" => Some(&("ショウ", "ショー", 1, "C3")),
+                "節" => Some(&("セツ", "セツ", 1, "C3")),
+                "項" => Some(&("コウ", "コー", 1, "C3")),
+                "編" => Some(&("ヘン", "ヘン", 1, "C3")),
+                "世" => Some(&("セイ", "セー", 1, "C3")),
+                _ => None,
+            }
+        } else {
+            COUNTERS.get(nodes[i].get_string())
+        };
+        let Some(&(read, pron, accent, rule)) = entry else {
             continue;
         };
         let mut start = i - 1;
@@ -49,6 +71,19 @@ pub(super) fn restore_counter_features(nodes: &mut [NJDNode], protected: &[bool]
         {
             continue;
         }
+        let rule = if roman_counter
+            && nodes[i].get_string() == "月"
+            && (i < 2 || nodes[i - 2].roman_source() != nodes[i - 1].roman_source())
+        {
+            // 三月・五月・九月は頭高で、ほかの月名はガツの末尾に核がある。
+            match nodes[i - 1].get_string() {
+                "三" => "F4@-1",
+                "五" | "九" => "F4@0",
+                _ => rule,
+            }
+        } else {
+            rule
+        };
         let details = nodes[i].get_details_mut();
         details.pos = POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi));
         details.pos_original = None;

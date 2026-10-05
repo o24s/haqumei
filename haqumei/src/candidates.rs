@@ -560,6 +560,11 @@ impl Haqumei {
         // `analyze_lattice` は中でもう一度 `text2mecab` を呼ぶが、出力をもう一度
         // 通しても変わらない
         let input = text;
+        let roman = self
+            .options
+            .resolve_roman_numerals
+            .then(|| crate::roman::prepare(input, self.options.normalize_unicode))
+            .flatten();
         let prepared = self
             .options
             .ignore_kaomoji
@@ -567,6 +572,8 @@ impl Haqumei {
             .flatten();
         let text = if let Some(prepared) = &prepared {
             prepared.normalized.clone()
+        } else if let Some(roman) = &roman {
+            roman.normalized.clone()
         } else {
             let text = self.normalize_unicode_if_needed(text);
             self.open_jtalk.text2mecab_string(text.as_ref())?
@@ -585,10 +592,14 @@ impl Haqumei {
                 !changed.get(i).is_some_and(|r| r.start < node.char_span.end)
             });
         }
+        let edited = before_filter
+            .as_ref()
+            .map(|before| crate::kaomoji::edited_ranges(before, &morphs))
+            .unwrap_or_default();
         if let Some(prepared) = &prepared {
             let mut ranges = prepared.select(input, &morphs);
-            if let Some(before) = before_filter {
-                crate::kaomoji::protect_edits(&mut ranges, &before, &morphs);
+            if let Some(before) = &before_filter {
+                crate::kaomoji::protect_edits(&mut ranges, before, &morphs);
             }
             // 顔の内部や境界をまたぐ別経路では、無読化した文字が再び読みに戻る。
             nodes.retain(|node| {
@@ -596,6 +607,13 @@ impl Haqumei {
                 !ranges.get(i).is_some_and(|r| r.start < node.char_span.end)
             });
             crate::kaomoji::merge(&text, &mut morphs, &ranges);
+        }
+        if let Some(roman) = &roman {
+            let ranges = roman.merge(&mut morphs, &edited);
+            nodes.retain(|node| {
+                let i = ranges.partition_point(|r| r.end <= node.char_span.start);
+                !ranges.get(i).is_some_and(|r| r.start < node.char_span.end)
+            });
         }
         let branches = collect_branches(&morphs, &nodes, &options, &self.options);
 
@@ -609,7 +627,7 @@ impl Haqumei {
             // 列を使い回すと、`make_phoneme_mapping` が読む `feature` と `is_unknown`
             // が 1-best のエントリのままになる
             let cand_morphs = build_morphs(&morphs, &branches, &choices);
-            let (njd_features, cand_morphs) = self.finish_frontend(&text, cand_morphs)?;
+            let (njd_features, cand_morphs) = self.finish_frontend(&text, cand_morphs, &edited)?;
             if njd_features.is_empty() {
                 continue;
             }

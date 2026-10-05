@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests;
 
-mod normalization;
+pub(crate) mod normalization;
 mod objects;
 mod shape;
 
@@ -53,7 +53,7 @@ fn complete_face_end(input: &str, at: usize) -> Option<usize> {
     None
 }
 
-fn map_positions(input: &str, queries: &[usize]) -> (String, Vec<usize>) {
+pub(crate) fn map_positions(input: &str, queries: &[usize]) -> (String, Vec<usize>) {
     let mut result = Vec::with_capacity(queries.len());
     let normalized =
         haqumei_jpreprocess::normalize_text_for_open_jtalk_with_mapping(input, |source, output| {

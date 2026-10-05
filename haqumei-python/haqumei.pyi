@@ -1125,6 +1125,7 @@ class Haqumei:
         normalize_unicode: UnicodeNormalization = UnicodeNormalization.None_,
         *,
         ignore_kaomoji: bool = True,
+        resolve_roman_numerals: bool = True,
         use_read_as_pron: bool = False,
         revert_long_vowels: bool = False,
         revert_yotsugana: bool = False,
@@ -1152,6 +1153,10 @@ class Haqumei:
         enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。
+
+        resolve_roman_numerals は既定で有効です。専用文字のローマ数字を1〜3999の数値として読みます。
+        ラテン文字は「第IV章」のような章・節・巻・部・項・編の序数に限ります。
+        ユーザー登録語と形態素フィルタの指定を優先します。
 
         ignore_kaomoji は既定で有効です。認識した顔文字を一要素にまとめ、
         正規化後の表層形を残して読みと音素を空にします。

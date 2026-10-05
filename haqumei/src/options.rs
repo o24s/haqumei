@@ -17,6 +17,13 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効です。
     pub ignore_kaomoji: bool,
 
+    /// ローマ数字の専用文字を1〜3999の数値として読み、助数詞と結合します。
+    /// ラテン文字は「第IV章」のような章・節・巻・部・項・編の序数だけを対象にします。
+    /// 正規化前に判定し、ユーザー登録語と形態素フィルターの変更を優先します。
+    /// 加算表記のIIII、上線付きの表記、専用文字とラテン文字の混在は対象外です。
+    /// デフォルトで有効です。
+    pub resolve_roman_numerals: bool,
+
     /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
     ///
     /// これにより、長音の自動変換機能が無効化されます。 (e.g., "ジンセー" -> "ジンセイ")
@@ -524,6 +531,7 @@ impl Default for HaqumeiOptions {
         Self {
             normalize_unicode: UnicodeNormalization::None,
             ignore_kaomoji: true,
+            resolve_roman_numerals: true,
             use_read_as_pron: false,
             revert_long_vowels: false,
             revert_yotsugana: false,

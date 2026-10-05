@@ -270,6 +270,7 @@ impl OpenJTalk {
                 &mecab_morphs,
                 modify_numeral_reading,
                 protect_user_dict_readings,
+                &[],
             )?,
             mecab_morphs,
         ))
@@ -991,13 +992,25 @@ impl OpenJTalk {
         morphs: &[MecabMorph],
         modify_numeral_reading: bool,
         protect_user_dict_readings: bool,
+        edited: &[std::ops::Range<usize>],
     ) -> Result<Vec<NjdFeature>, HaqumeiError> {
+        let mut after_roman = false;
         let (raw, protected): (Vec<_>, Vec<_>) = morphs
             .iter()
             .map(|m| {
+                // ローマ数字のために助数詞を読み直す場合も、登録読みと明示的な編集を優先する。
+                let edited_at = edited.partition_point(|r| r.end <= m.char_span.start);
+                let preserve_counter = after_roman
+                    && (m.is_from_user_dictionary()
+                        || edited
+                            .get(edited_at)
+                            .is_some_and(|r| r.start < m.char_span.end));
+                if !m.is_ignored {
+                    after_roman = crate::roman::is_roman(m);
+                }
                 (
                     m.feature.as_str(),
-                    protect_user_dict_readings && m.is_from_user_dictionary(),
+                    (protect_user_dict_readings && m.is_from_user_dictionary()) || preserve_counter,
                 )
             })
             .unzip();

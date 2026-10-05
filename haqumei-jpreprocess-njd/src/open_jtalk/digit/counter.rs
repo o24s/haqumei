@@ -47,6 +47,9 @@ fn is_decimal_digit(
 }
 
 fn is_counter(nodes: &[NJDNode], i: usize, decimal_points: &[usize]) -> bool {
+    if nodes[i].counter_reading_protected() {
+        return false;
+    }
     if matches!(
         nodes[i].get_pos(),
         POS::Meishi(Meishi::FukushiKanou | Meishi::Setsubi(Setsubi::Josuushi))

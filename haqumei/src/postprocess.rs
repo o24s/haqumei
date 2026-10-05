@@ -306,6 +306,8 @@ pub(crate) fn predict_kana_english(
 
         // 保護対象を隣の英字と結合すると、元の読みを復元する位置が失われる。
         if protected.contains_key(&spans[i].start)
+            || njd_features[i].pos_group1 == "数"
+            || njd_features[i].string.is_empty()
             || njd_features[i]
                 .string
                 .chars()
@@ -321,6 +323,8 @@ pub(crate) fn predict_kana_english(
         // 形態素の品詞ではなく元の文字位置を使うと、"notes" は 1 語に戻せる一方、
         // "notes So" の空白を挟んだ "s" と "S" は別の語として残る。
         while end < njd_features.len()
+            && njd_features[end].pos_group1 != "数"
+            && !njd_features[end].string.is_empty()
             && !protected.contains_key(&spans[end].start)
             && njd_features[end]
                 .string
@@ -426,6 +430,8 @@ pub(crate) fn suppress_english_hyphen_pause(
     let spans = njd_char_spans(njd_features, morphs);
     for i in 1..njd_features.len() - 1 {
         if !matches!(njd_features[i].string.as_str(), "−" | "‐")
+            || njd_features[i - 1].pos_group1 == "数"
+            || njd_features[i + 1].pos_group1 == "数"
             || !is_alphabet(&njd_features[i - 1].string)
             || !is_alphabet(&njd_features[i + 1].string)
             || spans[i - 1].end != spans[i].start

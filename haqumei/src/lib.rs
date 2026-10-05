@@ -13,6 +13,7 @@ pub mod options;
 pub mod phoneme;
 mod postprocess;
 pub mod prosody;
+mod roman;
 pub mod utils;
 pub mod word_phoneme;
 
@@ -734,10 +735,18 @@ impl Haqumei {
             return Ok(Vec::new());
         }
 
-        if self.options.ignore_kaomoji
-            && let Some(prepared) = kaomoji::prepare(text, self.options.normalize_unicode)
-        {
-            return Ok(self.run_frontend_prepared(text, Some(prepared))?.0);
+        let roman = self
+            .options
+            .resolve_roman_numerals
+            .then(|| roman::prepare(text, self.options.normalize_unicode))
+            .flatten();
+        let prepared = self
+            .options
+            .ignore_kaomoji
+            .then(|| kaomoji::prepare(text, self.options.normalize_unicode))
+            .flatten();
+        if roman.is_some() || prepared.is_some() {
+            return Ok(self.run_frontend_prepared(text, prepared, roman)?.0);
         }
 
         let text = self.normalize_unicode_if_needed(text);
@@ -793,46 +802,64 @@ impl Haqumei {
             .ignore_kaomoji
             .then(|| kaomoji::prepare(text, self.options.normalize_unicode))
             .flatten();
-        self.run_frontend_prepared(text, prepared)
+        let roman = self
+            .options
+            .resolve_roman_numerals
+            .then(|| roman::prepare(text, self.options.normalize_unicode))
+            .flatten();
+        self.run_frontend_prepared(text, prepared, roman)
     }
 
     fn run_frontend_prepared(
         &mut self,
         input: &str,
         prepared: Option<kaomoji::Prepared>,
+        roman: Option<roman::Prepared>,
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
         let text = if let Some(prepared) = &prepared {
             std::borrow::Cow::Borrowed(prepared.unicode.as_str())
+        } else if let Some(roman) = &roman {
+            std::borrow::Cow::Borrowed(roman.unicode.as_str())
         } else {
             self.normalize_unicode_if_needed(input)
         };
         let mut morphs = self.open_jtalk.run_mecab_detailed(&text)?;
-        let before_filter =
-            (prepared.is_some() && self.morph_filter.is_some()).then(|| morphs.clone());
+        let before_filter = ((prepared.is_some() || roman.is_some())
+            && self.morph_filter.is_some())
+        .then(|| morphs.clone());
         if let Some(filter) = self.morph_filter.clone() {
             let normalized = self.open_jtalk.text2mecab_string(&text)?;
             let nodes = self.open_jtalk.analyze_lattice(&text)?;
             filter(&normalized, &nodes, &mut morphs);
         }
+        let edited = before_filter
+            .as_ref()
+            .map(|before| kaomoji::edited_ranges(before, &morphs))
+            .unwrap_or_default();
         if let Some(prepared) = &prepared {
             let mut ranges = prepared.select(input, &morphs);
-            if let Some(before) = before_filter {
-                kaomoji::protect_edits(&mut ranges, &before, &morphs);
+            if let Some(before) = &before_filter {
+                kaomoji::protect_edits(&mut ranges, before, &morphs);
             }
             kaomoji::merge(&prepared.normalized, &mut morphs, &ranges);
         }
-        self.finish_frontend(&text, morphs)
+        if let Some(roman) = &roman {
+            roman.merge(&mut morphs, &edited);
+        }
+        self.finish_frontend(&text, morphs, &edited)
     }
 
     fn finish_frontend(
         &mut self,
         text: &str,
         morphs: Vec<MecabMorph>,
+        edited: &[std::ops::Range<usize>],
     ) -> Result<(Vec<NjdFeature>, Vec<MecabMorph>), HaqumeiError> {
         let features = self.open_jtalk.run_njd_from_morphs(
             &morphs,
             self.options.modify_numeral_reading,
             self.options.protect_user_dict_readings,
+            edited,
         )?;
         let protected = if self.options.protect_user_dict_readings {
             protected_indices(&features, &morphs)

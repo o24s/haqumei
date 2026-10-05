@@ -268,6 +268,7 @@ pub(crate) fn run_frontend(
     };
 
     let mut nodes = Vec::with_capacity(raw.len());
+    let mut has_roman = false;
     let mut protected_nodes = Vec::new();
     for (i, feature) in raw.iter().enumerate() {
         let mut fields = ["*"; 13];
@@ -275,6 +276,22 @@ pub(crate) fn run_frontend(
             *field = value;
         }
         let is_protected = protected_raw.get(i).copied().unwrap_or(false);
+        if fields[1..4] == ["名詞", "数", "ローマ数字"]
+            && let Ok(value @ 1..=3999) = fields[7].parse::<u16>()
+        {
+            has_roman = true;
+            let source = u32::try_from(i + 1)
+                .ok()
+                .and_then(std::num::NonZeroU32::new)
+                .ok_or_else(|| {
+                    HaqumeiError::MecabError(
+                        "Too many morphemes for Roman numeral expansion".into(),
+                    )
+                })?;
+            number::expand_roman(value, source, &mut nodes);
+            protected_nodes.resize(nodes.len(), false);
+            continue;
+        }
         if !is_protected
             && number::expand_unknown_digits(
                 &fields,
@@ -300,6 +317,13 @@ pub(crate) fn run_frontend(
         protected_nodes.resize(nodes.len(), is_protected);
     }
     number::retain_number_spaces(&mut nodes, &mut protected_nodes);
+    if has_roman {
+        for i in 1..nodes.len() {
+            if protected_nodes[i] && nodes[i - 1].roman_source().is_some() {
+                nodes[i].protect_counter_reading();
+            }
+        }
+    }
     number::restore_numeric_zeros(&mut nodes, &protected_nodes);
     if modify_numeral_reading {
         modify_placeholder_maru(&mut nodes, &protected_nodes);
@@ -359,7 +383,27 @@ pub(crate) fn run_frontend(
             })
             .collect();
     }
-    Ok(rust_njd_to_features(&njd))
+    let mut features = rust_njd_to_features(&njd);
+    if has_roman {
+        let mut previous = None;
+        for (feature, node) in features.iter_mut().zip(&njd.nodes) {
+            if let Some(source) = node.roman_source() {
+                // 日付や人数の縮約で取り込んだ接尾辞は、元のローマ数字の後ろに残す。
+                let suffix = feature.string.trim_start_matches([
+                    '〇', '零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '百',
+                    '千',
+                ]);
+                let surface = if previous == Some(source) {
+                    ""
+                } else {
+                    raw[source.get() as usize - 1].split(',').next().unwrap()
+                };
+                feature.string = format!("{surface}{suffix}");
+            }
+            previous = node.roman_source();
+        }
+    }
+    Ok(features)
 }
 
 fn modify_placeholder_maru(nodes: &mut [haqumei_jpreprocess_njd::NJDNode], protected: &[bool]) {

@@ -463,22 +463,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `Haqumei::with_options` を使用することで、`Haqumei` の出力をカスタマイズできます。
 デフォルトの動作やオプションの詳細については、[HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/struct.HaqumeiOptions.html) を参照してください。
 
-`ignore_kaomoji` は既定で有効です。認識した顔文字を一要素にまとめ、正規化後の
-表層形を残して読みと音素を空にします。解析結果に現れたユーザー登録語と、形態素フィルタで
-書き換えた語は無読化しません。顔文字によるポーズは挿入せず、`コ(^_^)ーヒー` は
-コーヒーと読みます。`ignore_kaomoji = false`（Python: `ignore_kaomoji=False`、
-CLI: `--no-ignore-kaomoji`）で無効にできます。
-
-`protect_user_dict_accents` は、発音・モーラ数・語の区切り・核の位置が登録時と
-一致する場合に、ユーザー辞書の登録核の後退を抑えます。
-既定では無効で、読みの保護とは独立した指定です。
-
-`resolve_kanji_variants` は、未知の異体字を含む語を CJKVI の字体対応で辞書の語として
-読みます（`𠮷野家` → ヨシノヤ）。既定で有効で、返す表層形と文字位置は元の表記を
-保ちます。[同梱データの出典とライセンス](haqumei/data/cjkvi/README.md)を記載しています。
-
-`revert_long_vowels` と `revert_yotsugana` は指定した表記の違いだけを戻し、同じ語に含まれる助詞の発音・連濁・無声化を保ちます。
-
 このケースでは、デフォルトでは無効になっている `normalize_unicode` を有効にし、入力テキストに Unicode の NFC正規化 を適用しています。
 
 ```rust

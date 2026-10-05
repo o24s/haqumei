@@ -39,6 +39,7 @@ impl PyHaqumei {
         normalize_unicode = UnicodeNormalization::None_,
         *,
         ignore_kaomoji = true,
+        resolve_roman_numerals = true,
         use_read_as_pron = false,
         revert_long_vowels = false,
         revert_yotsugana = false,
@@ -68,6 +69,7 @@ impl PyHaqumei {
     fn new(
         normalize_unicode: UnicodeNormalization,
         ignore_kaomoji: bool,
+        resolve_roman_numerals: bool,
         use_read_as_pron: bool,
         revert_long_vowels: bool,
         revert_yotsugana: bool,
@@ -101,6 +103,7 @@ impl PyHaqumei {
                 UnicodeNormalization::Nfkc => ::haqumei::UnicodeNormalization::Nfkc,
             },
             ignore_kaomoji,
+            resolve_roman_numerals,
             use_read_as_pron,
             revert_long_vowels,
             revert_yotsugana,
