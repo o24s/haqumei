@@ -19,6 +19,16 @@ class UnicodeNormalization(IntEnum):
     Nfc = 1
     Nfkc = 2
 
+class NumberReading(IntEnum):
+    """番号の数字列の読み方。先頭の0は位取りの指定でも省略しません。"""
+
+    Cardinal = 0
+    """十・百・千などの位を付けて読みます。"""
+    Digits = 1
+    """0をゼロとして桁ごとに読みます。"""
+    DigitsWithMaru = 2
+    """0をマルとして桁ごとに読みます。"""
+
 class IuPronunciation(IntEnum):
     """「言う」の発音正規化方式を指定する。"""
 
@@ -1126,6 +1136,10 @@ class Haqumei:
         *,
         ignore_kaomoji: bool = True,
         resolve_roman_numerals: bool = True,
+        resolve_number_identifiers: bool = True,
+        room_number_reading: NumberReading = NumberReading.DigitsWithMaru,
+        route_number_reading: NumberReading = NumberReading.Cardinal,
+        model_number_reading: NumberReading = NumberReading.Cardinal,
         use_read_as_pron: bool = False,
         revert_long_vowels: bool = False,
         revert_yotsugana: bool = False,
@@ -1153,6 +1167,14 @@ class Haqumei:
         enable_final_glottal_stop: bool = False,
     ) -> None:
         """新しい Haqumei インスタンスを初期化します。
+
+        resolve_number_identifiers は既定で有効です。号室・号線・型番を用途別に読みます。
+        型番は型番・型式・品番・製品番号の直後、英数字に型・形・系が続く表記、
+        または号機の直前が対象です。単独の英数字列は対象外です。
+        見出しのない英数字は、大文字1〜3字と数字・ハイフンの組み合わせに限ります。
+        番号本体は64文字まで認識します。
+        room_number_reading、route_number_reading、model_number_reading で読み方を指定します。
+        ユーザー登録語と形態素フィルターの変更を優先します。
 
         resolve_roman_numerals は既定で有効です。専用文字のローマ数字を1〜3999の数値として読みます。
         ラテン文字は「第IV章」のような章・節・巻・部・項・編の序数に限ります。

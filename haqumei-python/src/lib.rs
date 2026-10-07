@@ -126,6 +126,24 @@ pub enum IuPronunciation {
     KanjiYuuBase = 6,
 }
 
+#[pyclass(name = "NumberReading", module = "haqumei", eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum NumberReading {
+    Cardinal = 0,
+    Digits = 1,
+    DigitsWithMaru = 2,
+}
+
+impl From<NumberReading> for ::haqumei::NumberReading {
+    fn from(value: NumberReading) -> Self {
+        match value {
+            NumberReading::Cardinal => Self::Cardinal,
+            NumberReading::Digits => Self::Digits,
+            NumberReading::DigitsWithMaru => Self::DigitsWithMaru,
+        }
+    }
+}
+
 #[pyclass(name = "Dictionary", module = "haqumei")]
 struct PyDictionary {
     inner: Dictionary,
@@ -182,6 +200,7 @@ fn haqumei(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_class::<UnicodeNormalization>()?;
     m.add_class::<IuPronunciation>()?;
+    m.add_class::<NumberReading>()?;
 
     m.add_class::<PyNjdFeature>()?;
     m.add_class::<PyDictionary>()?;

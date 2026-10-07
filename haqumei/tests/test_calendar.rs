@@ -99,7 +99,11 @@ fn spaced_calendar_dates_match_compact_dates() {
 
 #[test]
 fn periods_invalid_dates_and_word_fragments_keep_their_morphemes() {
-    let mut engine = Haqumei::new().unwrap();
+    let mut engine = Haqumei::with_options(HaqumeiOptions {
+        resolve_number_identifiers: false,
+        ..Default::default()
+    })
+    .unwrap();
 
     for input in [
         "1 月に一度会う",

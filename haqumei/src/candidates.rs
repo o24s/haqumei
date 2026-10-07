@@ -624,6 +624,16 @@ impl Haqumei {
             });
         }
 
+        let identifiers = crate::identifier::merge(&text, &mut morphs, &edited, &self.options);
+        if !identifiers.is_empty() {
+            nodes.retain(|node| {
+                let i = identifiers.partition_point(|r| r.end <= node.char_span.start);
+                !identifiers
+                    .get(i)
+                    .is_some_and(|r| r.start < node.char_span.end)
+            });
+        }
+
         let branches = collect_branches(&morphs, &nodes, &options, &self.options);
 
         let mut candidates = Vec::new();

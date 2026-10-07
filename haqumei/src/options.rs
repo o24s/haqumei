@@ -24,6 +24,25 @@ pub struct HaqumeiOptions {
     /// デフォルトで有効です。
     pub resolve_roman_numerals: bool,
 
+    /// 号室・号線・型番の手がかりがある番号を、用途別の指定で読みます。
+    /// 型番は「型番・型式・品番・製品番号」の直後、または「型・形・系・号機」の直前を対象にします。
+    /// 見出しのない英数字は、大文字1〜3字と数字・ハイフンの組み合わせに限ります。
+    /// 単独の英数字列、小数、位を漢字で書いた数は対象外です。
+    /// 番号本体は64文字まで認識します。
+    /// ユーザー登録語と形態素フィルターの変更を優先します。デフォルトで有効です。
+    pub resolve_number_identifiers: bool,
+
+    /// 「号室」の前の数字列の読み方。デフォルトは0をマルとする桁読みです。
+    /// 「十二」のように位を漢字で書いた数は変更しません。
+    pub room_number_reading: NumberReading,
+
+    /// 「号線」の前の数字列の読み方。デフォルトは位取り読みです。
+    pub route_number_reading: NumberReading,
+
+    /// 型番の数字列の読み方。デフォルトは位取り読みです。
+    /// 英字は文字名で読み、ハイフンは数字列を区切ります。
+    pub model_number_reading: NumberReading,
+
     /// この値が true の場合、発音表記 (`pron`) が文字表記 (`read`) によって上書きされます。
     ///
     /// これにより、長音の自動変換機能が無効化されます。 (e.g., "ジンセー" -> "ジンセイ")
@@ -526,12 +545,28 @@ pub struct HaqumeiOptions {
     pub enable_final_glottal_stop: bool,
 }
 
+/// 番号に含まれる連続した数字の読み方。
+/// 先頭が0の数字列は、位取りを指定しても0を省かず桁ごとに読みます。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumberReading {
+    /// 十・百・千などの位を付けて読みます。
+    Cardinal,
+    /// 0をゼロとして桁ごとに読みます。複数桁の2と5はニー・ゴーとします。
+    Digits,
+    /// 桁ごとに読み、0はマルとします。
+    DigitsWithMaru,
+}
+
 impl Default for HaqumeiOptions {
     fn default() -> Self {
         Self {
             normalize_unicode: UnicodeNormalization::None,
             ignore_kaomoji: true,
             resolve_roman_numerals: true,
+            resolve_number_identifiers: true,
+            room_number_reading: NumberReading::DigitsWithMaru,
+            route_number_reading: NumberReading::Cardinal,
+            model_number_reading: NumberReading::Cardinal,
             use_read_as_pron: false,
             revert_long_vowels: false,
             revert_yotsugana: false,

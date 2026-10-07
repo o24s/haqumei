@@ -269,7 +269,7 @@ pub(crate) fn run_frontend(
 
     let mut nodes = Vec::with_capacity(raw.len());
     let mut has_roman = false;
-    let mut has_calendar = false;
+    let mut has_expanded_surface = false;
     let mut protected_nodes = Vec::new();
 
     for (i, feature) in raw.iter().enumerate() {
@@ -281,6 +281,15 @@ pub(crate) fn run_frontend(
         let is_protected = protected_raw.get(i).copied().unwrap_or(false);
 
         if fields[1..3] == ["名詞", "数"]
+            && matches!(fields[3], "番号位" | "番号桁" | "番号丸")
+            && number::expand_identifier_digits(&fields, expansion_source(i)?, &mut nodes)
+        {
+            has_expanded_surface = true;
+            protected_nodes.resize(nodes.len(), false);
+            continue;
+        }
+
+        if fields[1..3] == ["名詞", "数"]
             && let Ok(value) = fields[7].parse::<u16>()
             && match fields[3] {
                 "暦年" => (1..=9999).contains(&value),
@@ -290,13 +299,8 @@ pub(crate) fn run_frontend(
                 _ => false,
             }
         {
-            has_calendar = true;
-            let source = u32::try_from(i + 1)
-                .ok()
-                .and_then(std::num::NonZeroU32::new)
-                .ok_or_else(|| {
-                    HaqumeiError::MecabError("Too many morphemes for calendar expansion".into())
-                })?;
+            has_expanded_surface = true;
+            let source = expansion_source(i)?;
 
             number::expand_calendar(value, fields[3], source, &mut nodes);
             protected_nodes.resize(nodes.len(), false);
@@ -307,14 +311,7 @@ pub(crate) fn run_frontend(
             && let Ok(value @ 1..=3999) = fields[7].parse::<u16>()
         {
             has_roman = true;
-            let source = u32::try_from(i + 1)
-                .ok()
-                .and_then(std::num::NonZeroU32::new)
-                .ok_or_else(|| {
-                    HaqumeiError::MecabError(
-                        "Too many morphemes for Roman numeral expansion".into(),
-                    )
-                })?;
+            let source = expansion_source(i)?;
             number::expand_roman(value, source, &mut nodes);
             protected_nodes.resize(nodes.len(), false);
             continue;
@@ -334,7 +331,8 @@ pub(crate) fn run_frontend(
         match entry {
             WordEntry::Single(details) => {
                 let mut node = NJDNode::from_details(fields[0].to_owned(), details);
-                if fields[1] == "その他" && fields[2] == "顔文字" {
+                if fields[1] == "その他" && matches!(fields[2], "顔文字" | "番号区切り")
+                {
                     node.silence();
                 }
                 nodes.push(node)
@@ -371,8 +369,8 @@ pub(crate) fn run_frontend(
     digit_sequence::njd_digit_sequence(&mut njd);
     digit::njd_set_digit(&mut njd);
     number::remove_number_spaces(&mut njd.nodes);
-    // 無読の顔を句頭にすると、後続語の核が発音のない要素に記録される。
-    // 数詞の処理後、アクセント計算の間だけ顔を除き、元の位置に戻す。
+    // 無読の顔や番号の区切りを句頭にすると、後続語の核が発音のない要素に記録される。
+    // 数詞の処理後、アクセント計算の間だけ無読の要素を除き、元の位置に戻す。
     let mut silent = Vec::new();
     if njd.nodes.iter().any(NJDNode::is_silent) {
         njd.nodes = std::mem::take(&mut njd.nodes)
@@ -431,11 +429,11 @@ pub(crate) fn run_frontend(
         }
     }
 
-    if has_calendar {
+    if has_expanded_surface {
         let mut previous = None;
 
         for (feature, node) in features.iter_mut().zip(&njd.nodes) {
-            if let Some(source) = node.calendar_source() {
+            if let Some(source) = node.surface_source() {
                 // 先頭ゼロと空白を含む表層形を1回だけ戻し、展開した数詞の音素を同じ区間へ集める。
                 feature.string = if previous == Some(source) {
                     String::new()
@@ -448,11 +446,19 @@ pub(crate) fn run_frontend(
                 };
             }
 
-            previous = node.calendar_source();
+            previous = node.surface_source();
         }
     }
 
     Ok(features)
+}
+
+fn expansion_source(index: usize) -> Result<std::num::NonZeroU32, HaqumeiError> {
+    index
+        .checked_add(1)
+        .and_then(|i| u32::try_from(i).ok())
+        .and_then(std::num::NonZeroU32::new)
+        .ok_or_else(|| HaqumeiError::MecabError("Too many morphemes for number expansion".into()))
 }
 
 fn modify_placeholder_maru(nodes: &mut [haqumei_jpreprocess_njd::NJDNode], protected: &[bool]) {

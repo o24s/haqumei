@@ -192,7 +192,16 @@ impl DigitSequence {
         {
             match *digit {
                 0 => {
-                    node.set_pron(pron!([Ze, Ro], 1));
+                    // 号室などで明示されたマルを、一般の桁読みのゼロに戻さない。
+                    node.set_pron(
+                        if node.digit_sequence_reading() == Some(false)
+                            && node.get_read() == Some("マル")
+                        {
+                            pron!([Ma, Ru], 1)
+                        } else {
+                            pron!([Ze, Ro], 1)
+                        },
+                    );
                 }
                 2 => {
                     node.set_pron(pron!([Ni, Long], 1));

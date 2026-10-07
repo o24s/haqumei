@@ -7,6 +7,7 @@ mod kaomoji;
 #[macro_use]
 mod macros;
 mod calendar;
+mod identifier;
 pub mod ipa;
 pub mod nani_predict;
 pub mod open_jtalk;
@@ -761,7 +762,9 @@ impl Haqumei {
                 .chars()
                 .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
 
-        if calendar::may_contain_date(text) {
+        if calendar::may_contain_date(text)
+            || (self.options.resolve_number_identifiers && identifier::may_contain_identifier(text))
+        {
             let mut morphs = self.open_jtalk.run_mecab_with_symbol_split(
                 text,
                 self.options.protect_user_dict_readings || needs_english_positions,
@@ -769,6 +772,7 @@ impl Haqumei {
             let normalized = self.open_jtalk.text2mecab_string(text)?;
 
             calendar::merge(&normalized, &mut morphs, &[]);
+            identifier::merge(&normalized, &mut morphs, &[], &self.options);
 
             return Ok(self.finish_frontend(text, morphs, &[])?.0);
         }
@@ -838,9 +842,12 @@ impl Haqumei {
         };
         let mut morphs = self.open_jtalk.run_mecab_detailed(&text)?;
         let has_calendar = calendar::may_contain_date(&text);
-        let before_filter = ((prepared.is_some() || roman.is_some() || has_calendar)
-            && self.morph_filter.is_some())
-        .then(|| morphs.clone());
+        let has_identifier =
+            self.options.resolve_number_identifiers && identifier::may_contain_identifier(&text);
+        let before_filter =
+            ((prepared.is_some() || roman.is_some() || has_calendar || has_identifier)
+                && self.morph_filter.is_some())
+            .then(|| morphs.clone());
         if let Some(filter) = self.morph_filter.clone() {
             let normalized = self.open_jtalk.text2mecab_string(&text)?;
             let nodes = self.open_jtalk.analyze_lattice(&text)?;
@@ -861,9 +868,16 @@ impl Haqumei {
             roman.merge(&mut morphs, &edited);
         }
 
-        if has_calendar {
+        if has_calendar || has_identifier {
             let normalized = self.open_jtalk.text2mecab_string(&text)?;
-            calendar::merge(&normalized, &mut morphs, &edited);
+
+            if has_calendar {
+                calendar::merge(&normalized, &mut morphs, &edited);
+            }
+
+            if has_identifier {
+                identifier::merge(&normalized, &mut morphs, &edited, &self.options);
+            }
         }
 
         self.finish_frontend(&text, morphs, &edited)

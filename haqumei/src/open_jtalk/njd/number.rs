@@ -119,6 +119,44 @@ const DIGITS: [&str; 10] = [
     "９,名詞,数,*,*,*,*,９,キュウ,キュー,1/2,C3",
 ];
 
+pub(super) fn expand_identifier_digits(
+    fields: &[&str; 13],
+    source: std::num::NonZeroU32,
+    nodes: &mut Vec<NJDNode>,
+) -> bool {
+    use haqumei_jpreprocess_njd::{NJD, digit_sequence};
+
+    let digits = fields[7];
+    if digits.is_empty() || digits.len() > 64 || !digits.bytes().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    let cardinal = fields[3] == "番号位" && !digits.starts_with('0');
+    let mut number = NJD {
+        nodes: Vec::with_capacity(digits.len()),
+    };
+
+    for digit in digits.bytes() {
+        let mut node = NJDNode::new_single(DIGITS[(digit - b'0') as usize]);
+        node.set_digit_sequence_reading(Some(cardinal));
+
+        if digit == b'0' && fields[3] == "番号丸" {
+            node.set_read("マル");
+            node.set_pron(Pronunciation::parse("マル", 1).unwrap());
+        }
+
+        number.nodes.push(node);
+    }
+
+    digit_sequence::njd_digit_sequence(&mut number);
+    nodes.extend(number.nodes.into_iter().map(|mut node| {
+        node.set_surface_source(source);
+        node
+    }));
+
+    true
+}
+
 fn cardinal_nodes(value: u16) -> Vec<NJDNode> {
     use haqumei_jpreprocess_njd::{NJD, digit_sequence};
 
@@ -156,7 +194,7 @@ pub(super) fn expand_calendar(
     if kind == "暦元年" {
         // 「元年」は一般名詞として前の元号に結合する。数詞の「一年」とは句の区切りが異なる。
         let mut node = NJDNode::new_single("元年,名詞,一般,*,*,*,*,元年,ガンネン,ガンネン,1/4,C1");
-        node.set_calendar_source(source);
+        node.set_surface_source(source);
         nodes.push(node);
         return;
     }
@@ -181,7 +219,7 @@ pub(super) fn expand_calendar(
 
     number.push(counter);
     nodes.extend(number.into_iter().map(|mut node| {
-        node.set_calendar_source(source);
+        node.set_surface_source(source);
         node
     }));
 }

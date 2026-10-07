@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use clap::{Args, Parser, ValueEnum};
 use haqumei::{
-    Haqumei, HaqumeiOptions, IpaBoundary, IpaToken, IpaTokenProsody, IuPronunciation, PitchAccent,
-    ProsodicIpa, ProsodyFormat, UnicodeNormalization,
+    Haqumei, HaqumeiOptions, IpaBoundary, IpaToken, IpaTokenProsody, IuPronunciation,
+    NumberReading, PitchAccent, ProsodicIpa, ProsodyFormat, UnicodeNormalization,
 };
 use std::fs::File;
 use std::io::{self, BufRead, IsTerminal, Write};
@@ -90,6 +90,26 @@ enum OutputFormat {
     Text,
     /// 構造化された JSON (JSON Lines) 形式
     Json,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+enum CliNumberReading {
+    /// 十・百・千などの位を付けて読む。
+    Cardinal,
+    /// 0をゼロとして桁ごとに読む。
+    Digits,
+    /// 0をマルとして桁ごとに読む。
+    DigitsWithMaru,
+}
+
+impl From<CliNumberReading> for NumberReading {
+    fn from(value: CliNumberReading) -> Self {
+        match value {
+            CliNumberReading::Cardinal => Self::Cardinal,
+            CliNumberReading::Digits => Self::Digits,
+            CliNumberReading::DigitsWithMaru => Self::DigitsWithMaru,
+        }
+    }
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -185,6 +205,22 @@ struct HaqumeiConfigArgs {
     /// ローマ数字の数詞処理を無効にする。
     #[arg(long)]
     no_resolve_roman_numerals: bool,
+
+    /// 号室・号線・型番の番号読みを無効にする。
+    #[arg(long)]
+    no_resolve_number_identifiers: bool,
+
+    /// 号室の数字列の読み方。
+    #[arg(long, value_enum, default_value_t = CliNumberReading::DigitsWithMaru)]
+    room_number_reading: CliNumberReading,
+
+    /// 号線の数字列の読み方。
+    #[arg(long, value_enum, default_value_t = CliNumberReading::Cardinal)]
+    route_number_reading: CliNumberReading,
+
+    /// 型番の数字列の読み方。
+    #[arg(long, value_enum, default_value_t = CliNumberReading::Cardinal)]
+    model_number_reading: CliNumberReading,
 
     /// 辞書に無い漢字へのフォールバック読みを無効にする (デフォルトは有効)
     #[arg(long)]
@@ -291,6 +327,10 @@ fn main() -> Result<()> {
         normalize_iu: cli.options.normalize_iu.map(Into::into),
         ignore_kaomoji: !cli.options.no_ignore_kaomoji,
         resolve_roman_numerals: !cli.options.no_resolve_roman_numerals,
+        resolve_number_identifiers: !cli.options.no_resolve_number_identifiers,
+        room_number_reading: cli.options.room_number_reading.into(),
+        route_number_reading: cli.options.route_number_reading.into(),
+        model_number_reading: cli.options.model_number_reading.into(),
         use_read_as_pron: cli.options.use_read_as_pron,
         revert_long_vowels: cli.options.revert_long_vowels,
         revert_yotsugana: cli.options.revert_yotsugana,
