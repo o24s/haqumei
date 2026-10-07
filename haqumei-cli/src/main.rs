@@ -210,9 +210,13 @@ struct HaqumeiConfigArgs {
     #[arg(long)]
     no_resolve_number_identifiers: bool,
 
-    /// 号室の数字列の読み方。
+    /// 号室の数字列の読み方。digitsでは0をゼロと読む。
     #[arg(long, value_enum, default_value_t = CliNumberReading::DigitsWithMaru)]
     room_number_reading: CliNumberReading,
+
+    /// 号室の番号の先頭に続く0を読み飛ばす。すべて0なら1桁だけ残す。
+    #[arg(long)]
+    skip_room_number_leading_zeros: bool,
 
     /// 号線の数字列の読み方。
     #[arg(long, value_enum, default_value_t = CliNumberReading::Cardinal)]
@@ -329,6 +333,7 @@ fn main() -> Result<()> {
         resolve_roman_numerals: !cli.options.no_resolve_roman_numerals,
         resolve_number_identifiers: !cli.options.no_resolve_number_identifiers,
         room_number_reading: cli.options.room_number_reading.into(),
+        skip_room_number_leading_zeros: cli.options.skip_room_number_leading_zeros,
         route_number_reading: cli.options.route_number_reading.into(),
         model_number_reading: cli.options.model_number_reading.into(),
         use_read_as_pron: cli.options.use_read_as_pron,

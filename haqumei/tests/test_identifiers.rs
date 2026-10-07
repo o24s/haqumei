@@ -40,6 +40,111 @@ fn reading_policies_distinguish_rooms_routes_and_models() {
 }
 
 #[test]
+fn room_zeros_can_be_read_as_zero_or_skipped_at_the_start() {
+    let mut engine = Haqumei::with_options(HaqumeiOptions {
+        room_number_reading: NumberReading::Digits,
+        ..Default::default()
+    })
+    .unwrap();
+
+    for (text, expected) in [
+        ("802号室", "ハチゼロニーゴーシツ"),
+        ("01号室", "ゼロイチゴーシツ"),
+        ("001号室", "ゼロゼロイチゴーシツ"),
+        ("000号室", "ゼロゼロゼロゴーシツ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+
+    engine.options.skip_room_number_leading_zeros = true;
+
+    for (text, expected) in [
+        ("01号室", "イチゴーシツ"),
+        ("001号室", "イチゴーシツ"),
+        ("００１号室", "イチゴーシツ"),
+        ("〇〇一号室", "イチゴーシツ"),
+        ("零零一号室", "イチゴーシツ"),
+        ("00802号室", "ハチゼロニーゴーシツ"),
+        ("00100号室", "イチゼロゼロゴーシツ"),
+        ("0号室", "ゼロゴーシツ"),
+        ("000号室", "ゼロゴーシツ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+
+    engine.options.room_number_reading = NumberReading::DigitsWithMaru;
+    assert_eq!(engine.g2k("00802号室").unwrap(), "ハチマルニーゴーシツ");
+    assert_eq!(engine.g2k("000号室").unwrap(), "マルゴーシツ");
+
+    engine.options.room_number_reading = NumberReading::Cardinal;
+    assert_eq!(engine.g2k("00802号室").unwrap(), "ハッピャクニゴーシツ");
+    assert_eq!(engine.g2k("000号室").unwrap(), "ゼロゴーシツ");
+}
+
+#[test]
+fn skipping_room_zeros_retains_the_remaining_numbers_prosody() {
+    let mut engine = Haqumei::with_options(HaqumeiOptions {
+        skip_room_number_leading_zeros: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    for reading in [
+        NumberReading::Cardinal,
+        NumberReading::Digits,
+        NumberReading::DigitsWithMaru,
+    ] {
+        engine.options.room_number_reading = reading;
+
+        for number in (0..=120).chain([201, 409, 802, 1000, 2139, 3248, 10000]) {
+            let expected = engine
+                .g2p_prosody(&format!("{number}号室へ向かう"))
+                .unwrap();
+
+            for zeros in ["0", "000"] {
+                let text = format!("{zeros}{number}号室へ向かう");
+                assert_eq!(
+                    engine.g2p_prosody(&text).unwrap(),
+                    expected,
+                    "{reading:?}: {text}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn skipping_leading_zeros_is_limited_to_enabled_room_numbers() {
+    let mut engine = Haqumei::new().unwrap();
+
+    for text in [
+        "0",
+        "01",
+        "802号室",
+        "001号線",
+        "001号機",
+        "型番AB001",
+        "〒001-0001",
+        "01人",
+        "2008 年 05 月 05 日",
+        "Ⅻ号室",
+        "A001号室",
+        "0.01号室",
+    ] {
+        engine.options.skip_room_number_leading_zeros = false;
+        let expected = engine.g2p_prosody(text).unwrap();
+        engine.options.skip_room_number_leading_zeros = true;
+        assert_eq!(engine.g2p_prosody(text).unwrap(), expected, "{text}");
+    }
+
+    engine.options.resolve_number_identifiers = false;
+    engine.options.skip_room_number_leading_zeros = false;
+    let expected = engine.g2p_prosody("001号室").unwrap();
+    engine.options.skip_room_number_leading_zeros = true;
+    assert_eq!(engine.g2p_prosody("001号室").unwrap(), expected);
+}
+
+#[test]
 fn cardinal_policy_retains_existing_number_and_counter_accents() {
     let mut enabled = Haqumei::with_options(HaqumeiOptions {
         room_number_reading: NumberReading::Cardinal,
@@ -148,19 +253,27 @@ fn digit_reading_keeps_every_zero_and_number_boundary() {
 
 #[test]
 fn identifier_spans_candidates_and_batch_agree() {
-    for mode in [
+    for (mode, skip_zeros) in [
         UnicodeNormalization::None,
         UnicodeNormalization::Nfc,
         UnicodeNormalization::Nfkc,
-    ] {
+    ]
+    .into_iter()
+    .flat_map(|mode| [false, true].map(|skip| (mode, skip)))
+    {
         let mut engine = Haqumei::with_options(HaqumeiOptions {
             normalize_unicode: mode,
+            skip_room_number_leading_zeros: skip_zeros,
             ..Default::default()
         })
         .unwrap();
         let inputs = [
             "802号室",
             "０１　号室",
+            "001号室",
+            "000号室",
+            "零零一号室",
+            "000802号室",
             "二〇一号室",
             "〇〇一号室",
             "409号線",
@@ -244,6 +357,9 @@ fn morph_filters_take_precedence_over_number_policies() {
     });
 
     assert_eq!(engine.g2k("802号室").unwrap(), "ハッピャクニテスト");
+    let expected = engine.g2p_prosody("001号室").unwrap();
+    engine.options.skip_room_number_leading_zeros = true;
+    assert_eq!(engine.g2p_prosody("001号室").unwrap(), expected);
     assert_eq!(
         engine.g2p_mapping_detailed("802号室").unwrap(),
         engine

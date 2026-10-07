@@ -59,6 +59,7 @@ struct Candidate {
     context: Range<usize>,
     reading: NumberReading,
     model: bool,
+    skip_leading_zeros: bool,
 }
 
 fn model_prefix(chars: &[char], start: usize) -> Option<usize> {
@@ -133,7 +134,8 @@ fn candidates(chars: &[char], options: &HaqumeiOptions) -> Vec<Candidate> {
         }
 
         let only_digits = token.iter().all(|&c| digit(c).is_some());
-        let (reading, context, model) = if only_digits && starts_with(chars, suffix, "号室") {
+        let room = only_digits && starts_with(chars, suffix, "号室");
+        let (reading, context, model) = if room {
             (options.room_number_reading, start..suffix + 2, false)
         } else if only_digits && starts_with(chars, suffix, "号線") {
             (options.route_number_reading, start..suffix + 2, false)
@@ -156,6 +158,7 @@ fn candidates(chars: &[char], options: &HaqumeiOptions) -> Vec<Candidate> {
             context,
             reading,
             model,
+            skip_leading_zeros: room && options.skip_room_number_leading_zeros,
         });
     }
 
@@ -256,6 +259,14 @@ fn expand(chars: &[char], candidate: &Candidate, output: &mut Vec<MecabMorph>) {
                     .iter()
                     .map(|&c| char::from(b'0' + digit(c).unwrap()))
                     .collect();
+                let digits = if candidate.skip_leading_zeros {
+                    let trimmed = digits.trim_start_matches('0');
+
+                    // 全桁が0の番号も読みを失わないよう、0を1桁残す。
+                    if trimmed.is_empty() { "0" } else { trimmed }
+                } else {
+                    digits.as_str()
+                };
                 let mode = match candidate.reading {
                     NumberReading::Cardinal if !digits.starts_with('0') => "番号位",
                     NumberReading::DigitsWithMaru => "番号丸",
@@ -395,7 +406,7 @@ mod tests {
         let csv = temp.path().join("identifiers.csv");
         let dic = temp.path().join("identifiers.dic");
 
-        let rows: String = ["８０２", "号線", "ＡＢ１２３", "型番", "形"]
+        let rows: String = ["８０２", "００１", "号線", "ＡＢ１２３", "型番", "形"]
             .into_iter()
             .map(|word| {
                 format!("{word},1345,1345,-20000,名詞,一般,*,*,*,*,{word},テスト,テスト,1/3,C1\n")
@@ -415,12 +426,20 @@ mod tests {
                 &dic,
                 HaqumeiOptions {
                     protect_user_dict_readings: protect,
+                    skip_room_number_leading_zeros: true,
                     ..Default::default()
                 },
             )
             .unwrap();
 
-            for text in ["802号室", "409号線", "AB123型", "型番A320", "E5000形"] {
+            for text in [
+                "802号室",
+                "001号室",
+                "409号線",
+                "AB123型",
+                "型番A320",
+                "E5000形",
+            ] {
                 engine.options.resolve_number_identifiers = false;
                 let expected = engine.g2p_prosody(text).unwrap();
                 engine.options.resolve_number_identifiers = true;

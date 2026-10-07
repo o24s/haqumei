@@ -33,8 +33,14 @@ pub struct HaqumeiOptions {
     pub resolve_number_identifiers: bool,
 
     /// 「号室」の前の数字列の読み方。デフォルトは0をマルとする桁読みです。
+    /// [`NumberReading::Digits`] では0をゼロと読みます。
     /// 「十二」のように位を漢字で書いた数は変更しません。
     pub room_number_reading: NumberReading,
+
+    /// 号室の番号の先頭に続く0を読み飛ばします。デフォルトで無効です。
+    /// 「001号室」は「1号室」と同じ読みになり、すべて0なら1桁だけ残します。
+    /// 残った数字には [`Self::room_number_reading`] を適用し、元の表層形と文字位置は保持します。
+    pub skip_room_number_leading_zeros: bool,
 
     /// 「号線」の前の数字列の読み方。デフォルトは位取り読みです。
     pub route_number_reading: NumberReading,
@@ -546,7 +552,8 @@ pub struct HaqumeiOptions {
 }
 
 /// 番号に含まれる連続した数字の読み方。
-/// 先頭が0の数字列は、位取りを指定しても0を省かず桁ごとに読みます。
+/// 先頭が0の数字列は、位取りを指定しても桁ごとに読みます。
+/// [`HaqumeiOptions::skip_room_number_leading_zeros`] が有効な号室では、先頭の0を省いてから適用します。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumberReading {
     /// 十・百・千などの位を付けて読みます。
@@ -565,6 +572,7 @@ impl Default for HaqumeiOptions {
             resolve_roman_numerals: true,
             resolve_number_identifiers: true,
             room_number_reading: NumberReading::DigitsWithMaru,
+            skip_room_number_leading_zeros: false,
             route_number_reading: NumberReading::Cardinal,
             model_number_reading: NumberReading::Cardinal,
             use_read_as_pron: false,

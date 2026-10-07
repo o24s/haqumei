@@ -20,7 +20,11 @@ class UnicodeNormalization(IntEnum):
     Nfkc = 2
 
 class NumberReading(IntEnum):
-    """番号の数字列の読み方。先頭の0は位取りの指定でも省略しません。"""
+    """番号の数字列の読み方。
+
+    先頭が0の数字列は、位取りを指定しても桁ごとに読みます。
+    skip_room_number_leading_zeros が有効な号室では、先頭の0を省いてから適用します。
+    """
 
     Cardinal = 0
     """十・百・千などの位を付けて読みます。"""
@@ -1138,6 +1142,7 @@ class Haqumei:
         resolve_roman_numerals: bool = True,
         resolve_number_identifiers: bool = True,
         room_number_reading: NumberReading = NumberReading.DigitsWithMaru,
+        skip_room_number_leading_zeros: bool = False,
         route_number_reading: NumberReading = NumberReading.Cardinal,
         model_number_reading: NumberReading = NumberReading.Cardinal,
         use_read_as_pron: bool = False,
@@ -1174,6 +1179,9 @@ class Haqumei:
         見出しのない英数字は、大文字1〜3字と数字・ハイフンの組み合わせに限ります。
         番号本体は64文字まで認識します。
         room_number_reading、route_number_reading、model_number_reading で読み方を指定します。
+        room_number_reading=NumberReading.Digits では0をゼロと読みます。
+        skip_room_number_leading_zeros=True では001号室を1号室と同じ読みとし、
+        すべて0なら1桁だけ残します。元の表層形と文字位置は保持します。既定では省略しません。
         ユーザー登録語と形態素フィルターの変更を優先します。
 
         resolve_roman_numerals は既定で有効です。専用文字のローマ数字を1〜3999の数値として読みます。
