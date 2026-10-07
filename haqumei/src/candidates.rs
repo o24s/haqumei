@@ -615,6 +615,15 @@ impl Haqumei {
                 !ranges.get(i).is_some_and(|r| r.start < node.char_span.end)
             });
         }
+
+        let dates = crate::calendar::merge(&text, &mut morphs, &edited);
+        if !dates.is_empty() {
+            nodes.retain(|node| {
+                let i = dates.partition_point(|r| r.end <= node.char_span.start);
+                !dates.get(i).is_some_and(|r| r.start < node.char_span.end)
+            });
+        }
+
         let branches = collect_branches(&morphs, &nodes, &options, &self.options);
 
         let mut candidates = Vec::new();

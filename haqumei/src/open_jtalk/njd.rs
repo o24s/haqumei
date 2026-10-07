@@ -269,13 +269,40 @@ pub(crate) fn run_frontend(
 
     let mut nodes = Vec::with_capacity(raw.len());
     let mut has_roman = false;
+    let mut has_calendar = false;
     let mut protected_nodes = Vec::new();
+
     for (i, feature) in raw.iter().enumerate() {
         let mut fields = ["*"; 13];
         for (field, value) in fields.iter_mut().zip(feature.split(',')) {
             *field = value;
         }
+
         let is_protected = protected_raw.get(i).copied().unwrap_or(false);
+
+        if fields[1..3] == ["名詞", "数"]
+            && let Ok(value) = fields[7].parse::<u16>()
+            && match fields[3] {
+                "暦年" => (1..=9999).contains(&value),
+                "暦元年" => value == 1,
+                "暦月" => (1..=12).contains(&value),
+                "暦日" => (1..=31).contains(&value),
+                _ => false,
+            }
+        {
+            has_calendar = true;
+            let source = u32::try_from(i + 1)
+                .ok()
+                .and_then(std::num::NonZeroU32::new)
+                .ok_or_else(|| {
+                    HaqumeiError::MecabError("Too many morphemes for calendar expansion".into())
+                })?;
+
+            number::expand_calendar(value, fields[3], source, &mut nodes);
+            protected_nodes.resize(nodes.len(), false);
+            continue;
+        }
+
         if fields[1..4] == ["名詞", "数", "ローマ数字"]
             && let Ok(value @ 1..=3999) = fields[7].parse::<u16>()
         {
@@ -403,6 +430,28 @@ pub(crate) fn run_frontend(
             previous = node.roman_source();
         }
     }
+
+    if has_calendar {
+        let mut previous = None;
+
+        for (feature, node) in features.iter_mut().zip(&njd.nodes) {
+            if let Some(source) = node.calendar_source() {
+                // 先頭ゼロと空白を含む表層形を1回だけ戻し、展開した数詞の音素を同じ区間へ集める。
+                feature.string = if previous == Some(source) {
+                    String::new()
+                } else {
+                    raw[source.get() as usize - 1]
+                        .split(',')
+                        .next()
+                        .unwrap()
+                        .to_owned()
+                };
+            }
+
+            previous = node.calendar_source();
+        }
+    }
+
     Ok(features)
 }
 

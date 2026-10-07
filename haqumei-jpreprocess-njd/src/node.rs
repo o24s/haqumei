@@ -15,6 +15,7 @@ pub struct NJDNode {
     digit_sequence_reading: Option<bool>,
     silent: bool,
     roman_source: Option<std::num::NonZeroU32>,
+    calendar_source: Option<std::num::NonZeroU32>,
     counter_reading_protected: bool,
 }
 
@@ -46,6 +47,7 @@ impl NJDNode {
         }
         replacement.digit_sequence_reading = self.digit_sequence_reading;
         replacement.roman_source = self.roman_source;
+        replacement.calendar_source = self.calendar_source;
         replacement.counter_reading_protected = self.counter_reading_protected;
         *self = replacement;
     }
@@ -91,6 +93,7 @@ impl NJDNode {
         self.digit_sequence_reading = None;
         self.silent = false;
         self.roman_source = None;
+        self.calendar_source = None;
         self.counter_reading_protected = false;
     }
 }
@@ -159,6 +162,7 @@ impl NJDNode {
             digit_sequence_reading: None,
             silent: false,
             roman_source: None,
+            calendar_source: None,
             counter_reading_protected: false,
         }
     }
@@ -188,6 +192,16 @@ impl NJDNode {
     /// 展開前のローマ数字を表す番号を設定します。
     pub fn set_roman_source(&mut self, source: std::num::NonZeroU32) {
         self.roman_source = Some(source);
+    }
+
+    /// 展開前の暦の年月日を表す、呼び出し側が割り当てた番号を返します。
+    pub fn calendar_source(&self) -> Option<std::num::NonZeroU32> {
+        self.calendar_source
+    }
+
+    /// 展開前の暦の年月日を表す番号を設定します。
+    pub fn set_calendar_source(&mut self, source: std::num::NonZeroU32) {
+        self.calendar_source = Some(source);
     }
 
     /// 助数詞の読みを数詞の音便・縮約で変更しない指定を返します。

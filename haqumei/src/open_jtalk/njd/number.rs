@@ -119,8 +119,9 @@ const DIGITS: [&str; 10] = [
     "９,名詞,数,*,*,*,*,９,キュウ,キュー,1/2,C3",
 ];
 
-pub(super) fn expand_roman(value: u16, source: std::num::NonZeroU32, nodes: &mut Vec<NJDNode>) {
+fn cardinal_nodes(value: u16) -> Vec<NJDNode> {
     use haqumei_jpreprocess_njd::{NJD, digit_sequence};
+
     let mut numeral = NJD {
         nodes: value
             .to_string()
@@ -132,12 +133,57 @@ pub(super) fn expand_roman(value: u16, source: std::num::NonZeroU32, nodes: &mut
             })
             .collect(),
     };
-    // 番号の文脈でもⅫは十二を表す。文へ戻す前に、数値単独で位取りを確定する。
+
+    // ローマ数字と暦の数値は、前後の番号表現に左右されないよう、文へ戻す前に位取りを確定する。
     digit_sequence::njd_digit_sequence(&mut numeral);
-    for node in &mut numeral.nodes {
+
+    numeral.nodes
+}
+
+pub(super) fn expand_roman(value: u16, source: std::num::NonZeroU32, nodes: &mut Vec<NJDNode>) {
+    nodes.extend(cardinal_nodes(value).into_iter().map(|mut node| {
         node.set_roman_source(source);
+        node
+    }));
+}
+
+pub(super) fn expand_calendar(
+    value: u16,
+    kind: &str,
+    source: std::num::NonZeroU32,
+    nodes: &mut Vec<NJDNode>,
+) {
+    if kind == "暦元年" {
+        // 「元年」は一般名詞として前の元号に結合する。数詞の「一年」とは句の区切りが異なる。
+        let mut node = NJDNode::new_single("元年,名詞,一般,*,*,*,*,元年,ガンネン,ガンネン,1/4,C1");
+        node.set_calendar_source(source);
+        nodes.push(node);
+        return;
     }
-    nodes.extend(numeral.nodes);
+
+    let mut number = cardinal_nodes(value);
+    let counter = match kind {
+        "暦年" => "年,名詞,接尾,助数詞,*,*,*,年,ネン,ネン,1/2,C3",
+        "暦月" => "月,名詞,接尾,助数詞,*,*,*,月,ガツ,ガツ,2/2,C1",
+        "暦日" => "日,名詞,接尾,助数詞,*,*,*,日,ニチ,ニチ,1/2,C3",
+        _ => unreachable!(),
+    };
+    let mut counter = NJDNode::new_single(counter);
+
+    if kind == "暦月" {
+        counter.get_details_mut().chain_rule =
+            haqumei_jpreprocess_core::accent_rule::ChainRules::new(match value {
+                3 => "F4@-1",
+                5 | 9 => "F4@0",
+                _ => "C1",
+            });
+    }
+
+    number.push(counter);
+    nodes.extend(number.into_iter().map(|mut node| {
+        node.set_calendar_source(source);
+        node
+    }));
 }
 
 pub(super) fn retain_number_spaces(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {

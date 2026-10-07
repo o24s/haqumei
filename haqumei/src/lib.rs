@@ -6,6 +6,7 @@ pub mod features;
 mod kaomoji;
 #[macro_use]
 mod macros;
+mod calendar;
 pub mod ipa;
 pub mod nani_predict;
 pub mod open_jtalk;
@@ -760,6 +761,18 @@ impl Haqumei {
                 .chars()
                 .any(|c| matches!(c, 'A'..='Z' | 'a'..='z' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ'));
 
+        if calendar::may_contain_date(text) {
+            let mut morphs = self.open_jtalk.run_mecab_with_symbol_split(
+                text,
+                self.options.protect_user_dict_readings || needs_english_positions,
+            )?;
+            let normalized = self.open_jtalk.text2mecab_string(text)?;
+
+            calendar::merge(&normalized, &mut morphs, &[]);
+
+            return Ok(self.finish_frontend(text, morphs, &[])?.0);
+        }
+
         if self.options.protect_user_dict_readings
             || (self.options.protect_user_dict_accents && self.options.retreat_acc_nuc)
             || needs_english_positions
@@ -824,7 +837,8 @@ impl Haqumei {
             self.normalize_unicode_if_needed(input)
         };
         let mut morphs = self.open_jtalk.run_mecab_detailed(&text)?;
-        let before_filter = ((prepared.is_some() || roman.is_some())
+        let has_calendar = calendar::may_contain_date(&text);
+        let before_filter = ((prepared.is_some() || roman.is_some() || has_calendar)
             && self.morph_filter.is_some())
         .then(|| morphs.clone());
         if let Some(filter) = self.morph_filter.clone() {
@@ -846,6 +860,12 @@ impl Haqumei {
         if let Some(roman) = &roman {
             roman.merge(&mut morphs, &edited);
         }
+
+        if has_calendar {
+            let normalized = self.open_jtalk.text2mecab_string(&text)?;
+            calendar::merge(&normalized, &mut morphs, &edited);
+        }
+
         self.finish_frontend(&text, morphs, &edited)
     }
 

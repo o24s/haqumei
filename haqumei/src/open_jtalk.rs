@@ -881,7 +881,7 @@ impl OpenJTalk {
         self.run_mecab_with_symbol_split(text, true)
     }
 
-    fn run_mecab_with_symbol_split(
+    pub(crate) fn run_mecab_with_symbol_split(
         &mut self,
         text: &str,
         split_symbols: bool,
