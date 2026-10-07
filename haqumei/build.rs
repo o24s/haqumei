@@ -14,10 +14,10 @@ use std::{
 
 #[cfg(feature = "download-dictionary")]
 const DICTIONARY_URL: &str =
-    "https://github.com/o24s/haqumei/releases/download/dictionary-20260909/dictionary.tar.zst";
+    "https://github.com/o24s/haqumei/releases/download/dictionary-20261007/dictionary.tar.zst";
 #[cfg(feature = "download-dictionary")]
 const COMPRESSED_DICTIONARY_HASH: &str =
-    "d56d7220629988bee1be60f2d4d409f20e4366102afbfff46e939f1c13466d54";
+    "68b199352f78ced62b993a8cba7663fd7adc4adee15b55779d181c088ffb1192";
 const DICTIONARY_NAME: &str = "dictionary.tar.zst";
 const RUNTIME_DICTIONARY_FILES: [&str; 3] = ["char.bin", "matrix.bin", "system.bin"];
 const DICTIONARY_LICENSE_NAME: &str = "COPYING";
