@@ -731,11 +731,11 @@ pub(crate) fn retreat_acc_nuc(njd_features: &mut [NjdFeature], registered: &[Opt
             acc = njd_features[head_index].acc;
         }
 
-        const YOUON_CHARS: &[char] = &['ャ', 'ュ', 'ョ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ'];
+        // 小書き仮名と無声化記号は独立したモーラではないため、核の位置に数えない。
         let pron_without_youon: String = njd_features[i]
             .pron
             .chars()
-            .filter(|c| !YOUON_CHARS.contains(c))
+            .filter(|&c| c != '’' && !crate::utils::is_small_kana(c))
             .collect();
 
         let pron_ref = if pron_without_youon.is_empty() {

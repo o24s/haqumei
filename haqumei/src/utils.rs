@@ -81,7 +81,10 @@ pub(crate) fn is_katakana_word(s: &str) -> bool {
 
 #[inline(always)]
 pub(crate) const fn is_small_kana(c: char) -> bool {
-    matches!(c, 'ャ' | 'ュ' | 'ョ' | 'ァ' | 'ィ' | 'ゥ' | 'ェ' | 'ォ')
+    matches!(
+        c,
+        'ャ' | 'ュ' | 'ョ' | 'ァ' | 'ィ' | 'ゥ' | 'ェ' | 'ォ' | 'ヮ'
+    )
 }
 
 /// 文字列をモーラ単位 (小書き文字を前の文字に結合) で分割する

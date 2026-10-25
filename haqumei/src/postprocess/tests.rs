@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn accent_retreat_counts_moras_without_devoicing_marks_or_small_wa() {
+    let mut features = OpenJTalk::new().unwrap().run_frontend("検査").unwrap();
+    features.truncate(1);
+    for (pron, accent, expected) in [
+        ("アサヒ’ソーゴービョーイン", 8, 8),
+        ("アサヒソーゴービョーイン", 8, 8),
+        ("クヮルテット", 4, 3),
+        ("シークヮーサー", 4, 3),
+    ] {
+        features[0].pron = pron.into();
+        features[0].mora_size = count_mora(pron) as i32;
+        features[0].acc = accent;
+        features[0].chain_flag = 0;
+        retreat_acc_nuc(&mut features, &[]);
+        assert_eq!(features[0].acc, expected, "{pron}");
+    }
+    features[0].acc = 4;
+    retreat_acc_nuc(&mut features, &[Some(4)]);
+    assert_eq!(features[0].acc, 4);
+}
+
+#[test]
 fn protected_english_words_are_not_merged_into_neighbors() {
     let mut engine = OpenJTalk::new().unwrap();
     let mut original = engine.run_frontend("Ｂ Ｃ Ｄ").unwrap();
