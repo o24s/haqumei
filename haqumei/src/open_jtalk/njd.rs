@@ -354,6 +354,9 @@ pub(crate) fn run_frontend(
         modify_placeholder_maru(&mut nodes, &protected_nodes);
     }
     counter::restore_counter_features(&mut nodes, &protected_nodes);
+    if modify_numeral_reading {
+        counter::prepare_fraction_denominators(&mut nodes, &protected_nodes);
+    }
     number::mark_identifiers(&mut nodes, &protected_nodes);
     let mut njd = NJD { nodes };
     pronunciation::njd_set_pronunciation(&mut njd);

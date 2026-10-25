@@ -1,6 +1,22 @@
 use haqumei::Haqumei;
 
 #[test]
+fn fraction_denominators_keep_the_number_before_bun() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("1分の3", "イチブンノサン"),
+        ("6分の1", "ロクブンノイチ"),
+        ("8分の1", "ハチブンノイチ"),
+        ("100分の1", "ヒャクブンノイチ"),
+        ("1分", "イップン"),
+        ("6分", "ロップン"),
+        ("七分袖", "シチブソデ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn counters_distinguish_quantities_suffixes_and_ordinals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [

@@ -81,6 +81,7 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
 
         // 「分袖」「階級」「年生」は、後続語まで見ないと時間や階数の読みになる。
         let conversion = match (node.get_string(), next) {
+            ("分", _) if node.get_read() == Some("ブン") => None,
             ("分", "袖") => {
                 node.set_read("ブ");
                 node.set_pron(pron!([Bu], node.get_pron().accent()));
@@ -130,7 +131,7 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
             )
             .is_some();
         let keep_sound = native
-            || (node.get_string() == "分" && node.get_read() == Some("ブ"))
+            || (node.get_string() == "分" && matches!(node.get_read(), Some("ブ" | "ブン")))
             || (node.get_string() == "階" && next == "級")
             || (node.get_string() == "波" && prev.get_string() == "八")
             || (node.get_string() == "鉢" && prev.get_string() == "四");

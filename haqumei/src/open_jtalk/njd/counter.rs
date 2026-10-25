@@ -5,6 +5,22 @@ use haqumei_jpreprocess_core::{
 };
 use haqumei_jpreprocess_njd::NJDNode;
 
+pub(super) fn prepare_fraction_denominators(nodes: &mut [NJDNode], protected: &[bool]) {
+    for i in 1..nodes.len().saturating_sub(2) {
+        if !protected[i]
+            && nodes[i - 1].get_pos().is_kazu()
+            && nodes[i].get_string() == "分"
+            && nodes[i + 1].get_string() == "の"
+            && nodes[i + 2].get_pos().is_kazu()
+        {
+            // 時間量の音便を計算してからブンへ戻すと、分母のイチまでイッに変わる。
+            let accent = nodes[i].get_pron().accent();
+            nodes[i].set_read("ブン");
+            nodes[i].set_pron(Pronunciation::parse("ブン", accent).unwrap());
+        }
+    }
+}
+
 // 数詞と助数詞の間に空白があると、「3 人」の「人」などが一般名詞になる。
 // 助数詞の特徴量へ戻してから既存の数詞処理で音便とアクセントを決める。
 // https://github.com/tsukumijima/open_jtalk/commit/46739160128d471996e878c9617d42cbd918a334
