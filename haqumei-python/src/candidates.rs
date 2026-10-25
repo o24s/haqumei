@@ -68,12 +68,7 @@ impl From<PyCandidateOptions> for CandidateOptions {
     }
 }
 
-#[pyclass(
-    name = "CandidateReading",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "CandidateReading", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyCandidateReading {
     pub surface: String,
@@ -117,12 +112,7 @@ impl From<CandidateReading> for PyCandidateReading {
     }
 }
 
-#[pyclass(
-    name = "CandidateAlternative",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "CandidateAlternative", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyCandidateAlternative {
     pub nodes: Vec<PyCandidateReading>,
@@ -158,12 +148,7 @@ impl From<CandidateAlternative> for PyCandidateAlternative {
     }
 }
 
-#[pyclass(
-    name = "CandidateBranch",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "CandidateBranch", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyCandidateBranch {
     pub char_span: (usize, usize),
@@ -202,7 +187,7 @@ impl From<CandidateBranch> for PyCandidateBranch {
 
 macro_rules! py_candidates {
     ($cand:ident, $cands:ident, $cand_name:literal, $cands_name:literal, $py_word:ty, $word:ty) => {
-        #[pyclass(name = $cand_name, module = "haqumei", get_all, skip_from_py_object)]
+        #[pyclass(name = $cand_name, module = "haqumei", get_all)]
         #[derive(Clone)]
         pub struct $cand {
             pub words: Vec<$py_word>,
@@ -232,7 +217,7 @@ macro_rules! py_candidates {
             }
         }
 
-        #[pyclass(name = $cands_name, module = "haqumei", get_all, skip_from_py_object)]
+        #[pyclass(name = $cands_name, module = "haqumei", get_all)]
         #[derive(Clone)]
         pub struct $cands {
             pub text: String,

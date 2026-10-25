@@ -36,12 +36,7 @@ impl From<PyProsodyFormat> for ProsodyFormat {
     }
 }
 
-#[pyclass(
-    name = "ProsodicPhoneme",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "ProsodicPhoneme", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyProsodicPhoneme {
     pub kind: &'static str,

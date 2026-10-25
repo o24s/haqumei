@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 
 use crate::prosody::PyPitchAccent;
 
-#[pyclass(name = "IpaPhone", module = "haqumei", get_all, skip_from_py_object)]
+#[pyclass(name = "IpaPhone", module = "haqumei", get_all)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PyIpaPhone {
     pub symbol: &'static str,
@@ -35,12 +35,7 @@ impl PyIpaPhone {
     }
 }
 
-#[pyclass(
-    name = "SpecialPhone",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "SpecialPhone", module = "haqumei", get_all)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PySpecialPhone {
     pub symbol: &'static str,
@@ -90,7 +85,7 @@ impl From<IpaBoundary> for PyIpaBoundary {
     }
 }
 
-#[pyclass(name = "IpaToken", module = "haqumei", get_all, skip_from_py_object)]
+#[pyclass(name = "IpaToken", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyIpaToken {
     pub kind: &'static str,
@@ -144,12 +139,7 @@ impl PyIpaToken {
     }
 }
 
-#[pyclass(
-    name = "IpaTokenProsody",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "IpaTokenProsody", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyIpaTokenProsody {
     pub kind: &'static str,
@@ -189,7 +179,7 @@ impl PyIpaTokenProsody {
     }
 }
 
-#[pyclass(name = "ProsodicIpa", module = "haqumei", get_all, skip_from_py_object)]
+#[pyclass(name = "ProsodicIpa", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyProsodicIpa {
     pub kind: &'static str,
@@ -232,7 +222,7 @@ impl PyProsodicIpa {
     }
 }
 
-#[pyclass(name = "WordIpaMap", module = "haqumei", get_all, skip_from_py_object)]
+#[pyclass(name = "WordIpaMap", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyWordIpaMap {
     pub word: String,
@@ -268,12 +258,7 @@ impl PyWordIpaMap {
     }
 }
 
-#[pyclass(
-    name = "WordIpaProsody",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "WordIpaProsody", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PyWordIpaProsody {
     pub word: String,

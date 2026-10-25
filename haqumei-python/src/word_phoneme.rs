@@ -5,12 +5,7 @@ use pyo3::prelude::*;
 
 use crate::prosody::PyProsodicPhoneme;
 
-#[pyclass(
-    name = "WordPhonemeMap",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "WordPhonemeMap", module = "haqumei", get_all)]
 #[derive(Clone)]
 pub struct PyWordPhonemeMap {
     pub word: String,
@@ -50,12 +45,7 @@ impl PyWordPhonemeMap {
     }
 }
 
-#[pyclass(
-    name = "WordPhonemeDetail",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "WordPhonemeDetail", module = "haqumei", get_all)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyWordPhonemeDetail {
     pub word: String,
@@ -158,12 +148,7 @@ impl PyWordPhonemeDetail {
     }
 }
 
-#[pyclass(
-    name = "WordPhonemeProsody",
-    module = "haqumei",
-    get_all,
-    skip_from_py_object
-)]
+#[pyclass(name = "WordPhonemeProsody", module = "haqumei", get_all)]
 #[derive(Debug, Clone)]
 pub struct PyWordPhonemeProsody {
     pub word: String,
