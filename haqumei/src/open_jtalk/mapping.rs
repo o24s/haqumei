@@ -834,6 +834,40 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
             continue;
         }
 
+        // 六・三・四さんから六三四・さんへ組み替えると、MeCab の境界をまたぐ。
+        // 敬称を含む表層形の全体が一致した場合だけ、NJD の語長で区間を分ける。
+        if features[idx].pos_group2 == "人名"
+            && let Some(suffix) = features.get(idx + 1)
+            && suffix.pos_group1 == "接尾"
+            && suffix.pos_group2 == "人名"
+        {
+            let joined = format!("{word}{}", suffix.string);
+            let mut surface = String::new();
+            let mut end = morph_idx;
+            while let Some(part) = morphs.get(end) {
+                if part.is_ignored || part.surface.chars().count() != part.char_span.len() {
+                    break;
+                }
+                surface.push_str(&part.surface);
+                end += 1;
+                if !joined.starts_with(&surface) || surface == joined {
+                    break;
+                }
+            }
+            if surface == joined {
+                let start = morph.char_span.start;
+                let middle = start + word.chars().count();
+                let end_char = morphs[end - 1].char_span.end;
+                if end_char - start == joined.chars().count() {
+                    spans[idx] = start..middle;
+                    spans[idx + 1] = middle..end_char;
+                    idx += 2;
+                    morph_idx = end;
+                    continue;
+                }
+            }
+        }
+
         // 数詞の並びは、まとめて突き合わせる。地名「十三」は別の語として保つ。
         if is_number_surface(word) && is_number_surface(&morph.surface) {
             let mut feature_end = idx;

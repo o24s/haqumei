@@ -69,6 +69,33 @@ fn school_year_lists_keep_decimal_quantities() {
 }
 
 #[test]
+fn musashi_needs_an_explicit_name_context() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "名前は六三四です",
+        "六三四さん",
+        "六三四くん",
+        "六三四君",
+        "六三四という名前",
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        let name = features
+            .iter()
+            .find(|f| f.string == "六三四")
+            .unwrap_or_else(|| panic!("{text}: {features:?}"));
+        assert_eq!(name.read, "ムサシ", "{text}");
+        assert_eq!(name.mora_size, 3, "{text}");
+    }
+    for text in ["六三四", "六三四円", "一六三四", "六三四を数える"] {
+        let with_rules = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        let without_rules = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = true;
+        assert_eq!(with_rules, without_rules, "{text}");
+    }
+}
+
+#[test]
 fn ichiban_suki_keeps_compound_zuki_elsewhere() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

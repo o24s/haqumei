@@ -3,6 +3,68 @@
 use haqumei_jpreprocess_core::{pos::POS, pronunciation::Pronunciation};
 use haqumei_jpreprocess_njd::NJDNode;
 
+pub(super) fn prepare_person_names(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {
+    let mut i = 0;
+    while i + 2 < nodes.len() {
+        let fused_san = nodes[i + 2].get_string() == "四さん";
+        let digits = nodes[i].get_string() == "六"
+            && nodes[i + 1].get_string() == "三"
+            && nodes[i..i + 2].iter().all(|n| n.get_pos().is_kazu())
+            && ((nodes[i + 2].get_string() == "四" && nodes[i + 2].get_pos().is_kazu())
+                || fused_san);
+        let isolated = (i == 0 || !nodes[i - 1].get_pos().is_kazu())
+            && nodes.get(i + 3).is_none_or(|n| !n.get_pos().is_kazu());
+        let name_label = i >= 2
+            && matches!(nodes[i - 1].get_string(), "は" | "が")
+            && matches!(nodes[i - 2].get_string(), "名前" | "氏名" | "名");
+        let honorific = fused_san
+            || nodes
+                .get(i + 3)
+                .is_some_and(|n| matches!(n.get_string(), "くん" | "君" | "さん"));
+        let named = nodes.get(i + 3).is_some_and(|n| n.get_string() == "と")
+            && nodes
+                .get(i + 4)
+                .is_some_and(|n| matches!(n.get_orig(), Some("いう" | "言う")))
+            && nodes
+                .get(i + 5)
+                .is_some_and(|n| matches!(n.get_string(), "名前" | "氏名" | "名"));
+        // 名前は六三四人で決めた、という数量を人名へ結合しない。
+        let name_end = nodes.get(i + 3).is_none_or(|node| {
+            matches!(
+                node.get_pos(),
+                POS::Joshi(_) | POS::Jodoushi | POS::Kigou(_)
+            ) || matches!(node.get_string(), "くん" | "君" | "さん")
+        });
+        if digits
+            && isolated
+            && name_end
+            && (name_label || honorific || named)
+            && !protected[i..i + 3].iter().any(|&value| value)
+        {
+            // 数の634までムサシへ変えないよう、名前の提示か敬称を確認してからまとめる。
+            nodes.splice(
+                i..i + 3,
+                [NJDNode::new_single(
+                    "六三四,名詞,固有名詞,人名,名,*,*,六三四,ムサシ,ムサシ,1/3,*",
+                )],
+            );
+            protected.splice(i..i + 3, [false]);
+            if fused_san {
+                // 辞書が四さんを一語にした場合も、数の部分だけを人名へまとめる。
+                nodes.insert(
+                    i + 1,
+                    NJDNode::new_single("さん,名詞,接尾,人名,*,*,*,さん,サン,サン,0/2,C5"),
+                );
+                protected.insert(i + 1, false);
+            }
+            if nodes.get(i + 1).is_some_and(|n| n.get_string() == "君") && !protected[i + 1] {
+                nodes[i + 1] = NJDNode::new_single("君,名詞,接尾,人名,*,*,*,君,クン,クン,1/2,C3");
+            }
+        }
+        i += 1;
+    }
+}
+
 pub(super) fn prepare_explicit_first_day(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {
     let mut i = 0;
     while i + 2 < nodes.len() {

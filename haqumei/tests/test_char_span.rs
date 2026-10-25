@@ -45,6 +45,28 @@ fn line_breaks_and_tabs_keep_numbers_separate_in_all_mappings() {
 }
 
 #[test]
+fn explicit_person_name_keeps_the_honorific_span() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, suffix) in [
+        ("六三四さん", 3..5),
+        ("六三四くん", 3..5),
+        ("六三四君", 3..4),
+    ] {
+        let (features, morphs) = engine.run_frontend_detailed(text).unwrap();
+        let spans = njd_char_spans(&features, &morphs);
+        assert_eq!(spans, vec![0..3, suffix], "{text}: {features:?}");
+        let mapped = engine.g2p_mapping(text).unwrap();
+        assert_eq!(
+            mapped
+                .iter()
+                .map(|word| word.char_span.clone())
+                .collect::<Vec<_>>(),
+            spans
+        );
+    }
+}
+
+#[test]
 fn number_and_symbol_boundaries_preserve_all_mapping_variants() {
     use haqumei::Phoneme;
     let mut engine = Haqumei::new().unwrap();
