@@ -316,6 +316,45 @@ pub(super) fn restore_numeric_zeros(nodes: &mut [NJDNode], protected: &[bool]) {
 // 発信先の3桁と、〒に直結する7桁だけを桁読みに指定する。
 // https://github.com/tsukumijima/open_jtalk/commit/e3cc6330c6afff76ab1b580d8bc67a591265ef1b
 pub(super) fn mark_identifiers(nodes: &mut [NJDNode], protected: &[bool]) {
+    for i in 1..nodes.len().saturating_sub(2) {
+        if nodes[i].get_string() != "・" || !is_digit(&nodes[i - 1]) || !is_digit(&nodes[i + 1]) {
+            continue;
+        }
+        let mut end = i + 2;
+        while nodes.get(end).is_some_and(is_digit) {
+            end += 1;
+        }
+        let school_year = nodes.get(end).is_some_and(|n| n.get_string() == "年生")
+            || (nodes.get(end).is_some_and(|n| n.get_string() == "年")
+                && nodes.get(end + 1).is_some_and(|n| n.get_string() == "生"));
+        if !school_year || protected[i - 1..end].iter().any(|&value| value) {
+            continue;
+        }
+        let prefix: String = nodes[i.saturating_sub(9)..i - 1]
+            .iter()
+            .map(|n| n.get_string())
+            .collect();
+        let prefix = prefix.trim_end_matches(['、', '，', ',', '：', ':']);
+        // 平均学年や学習進度は小数になり得る。〇年生も学年の列挙には含めない。
+        let decimal_context = [
+            "平均は",
+            "平均が",
+            "平均すると",
+            "平均して",
+            "平均学年は",
+            "平均学年が",
+        ]
+        .iter()
+        .any(|context| prefix.ends_with(context))
+            || (prefix.ends_with("進度は")
+                && nodes.get(end + 1).is_some_and(|n| n.get_string() == "相当"));
+        let zero_grade = nodes[i - 1].get_string().chars().next().and_then(digit) == Some(0)
+            || nodes[i + 1].get_string().chars().next().and_then(digit) == Some(0);
+        if !decimal_context && !zero_grade {
+            // 学年の列挙を小数の1.2年生へ変えない。
+            nodes[i].set_digit_sequence_reading(Some(false));
+        }
+    }
     let mut start = 0;
     while start < nodes.len() {
         if !is_digit(&nodes[start]) || !nodes[start].get_pos().is_kazu() {

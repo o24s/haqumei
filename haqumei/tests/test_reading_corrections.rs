@@ -42,6 +42,18 @@ fn punctuation_keeps_written_digit_groups_separate() {
 }
 
 #[test]
+fn school_year_lists_keep_decimal_quantities() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, kana) in [
+        ("1・2年生", "イチ・ニネンセー"),
+        ("二十・五％", "ニジュッテンゴパーセント"),
+        ("1.5年", "イッテンゴネン"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), kana, "{text}");
+    }
+}
+
+#[test]
 fn ichiban_suki_keeps_compound_zuki_elsewhere() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [
