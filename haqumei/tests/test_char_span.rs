@@ -1,5 +1,31 @@
 use haqumei::{Haqumei, HaqumeiOptions, njd_char_spans};
 
+#[test]
+fn numeric_contractions_keep_commas_zeros_and_the_day_counter() {
+    let mut engine = Haqumei::new().unwrap();
+    for input in ["1,000ー", "二〇日", "11日", "1日2日", "1,2"] {
+        let detailed = engine.g2p_mapping_detailed(input).unwrap();
+        let mut end = 0;
+        for word in &detailed {
+            if !word.char_span.is_empty() {
+                assert_eq!(word.char_span.start, end, "{input}: {detailed:?}");
+                end = word.char_span.end;
+            }
+        }
+        assert_eq!(end, input.chars().count(), "{input}: {detailed:?}");
+        let basic = engine.g2p_mapping(input).unwrap();
+        let prosody = engine.g2p_mapping_prosody(input).unwrap();
+        assert_eq!(
+            basic.iter().map(|w| &w.char_span).collect::<Vec<_>>(),
+            detailed.iter().map(|w| &w.char_span).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            prosody.iter().map(|w| &w.char_span).collect::<Vec<_>>(),
+            detailed.iter().map(|w| &w.char_span).collect::<Vec<_>>()
+        );
+    }
+}
+
 /// 表層形がそのまま対応する場合、NJD の位置は MeCab の位置と一致する。
 #[test]
 fn spans_line_up_when_the_segmentation_matches() {

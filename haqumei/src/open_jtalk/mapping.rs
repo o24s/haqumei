@@ -500,6 +500,16 @@ fn is_number_surface(surface: &str) -> bool {
     !surface.is_empty() && surface.chars().all(|c| number_key(c).is_some())
 }
 
+fn is_number_block_surface(surface: &str) -> bool {
+    is_number_surface(surface) || matches!(surface, "," | "，")
+}
+
+fn is_day_counter_surface(surface: &str) -> bool {
+    surface
+        .strip_suffix('日')
+        .is_some_and(|number| number.is_empty() || is_number_surface(number))
+}
+
 /// 数詞の並びを、突き合わせ用の文字列に直す。
 fn number_keys(surface: &str) -> Vec<char> {
     surface.chars().filter_map(number_key).collect()
@@ -705,15 +715,29 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
         };
 
         // 数詞の並びは、まとめて突き合わせる
-        if is_number_surface(word) && is_number_surface(&morph.surface) {
-            let feature_end = (idx..features.len())
-                .find(|&i| !is_number_surface(&features[i].string))
-                .unwrap_or(features.len());
+        if (is_number_surface(word) || is_day_counter_surface(word))
+            && is_number_surface(&morph.surface)
+        {
+            let mut feature_end = idx;
+            while let Some(feature) = features.get(feature_end) {
+                if is_day_counter_surface(&feature.string) {
+                    feature_end += 1;
+                    break;
+                }
+                if !is_number_block_surface(&feature.string) {
+                    break;
+                }
+                feature_end += 1;
+            }
             let mut morph_end = morph_idx;
-            while morphs
-                .get(morph_end)
-                .is_some_and(|m| m.is_ignored || is_number_surface(&m.surface))
-            {
+            while let Some(morph) = morphs.get(morph_end) {
+                if is_day_counter_surface(&morph.surface) {
+                    morph_end += 1;
+                    break;
+                }
+                if !morph.is_ignored && !is_number_block_surface(&morph.surface) {
+                    break;
+                }
                 morph_end += 1;
             }
             let source_indices: Vec<usize> = (morph_idx..morph_end)
