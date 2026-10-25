@@ -36,7 +36,7 @@ const NUMERAL_LIST9: DigitLUT = phf_map! {
     "八" => pron!([Ha, Xtsu], 0),
 };
 
-const NUMERAL_LIST10: Keys = phf_set! {"千", "兆"};
+const NUMERAL_LIST10: Keys = phf_set! {"千", "兆", "京"};
 
 const NUMERAL_LIST11: DigitLUT = phf_map! {
     "一" => pron!([I, Xtsu], 0),

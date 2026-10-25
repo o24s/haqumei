@@ -1,6 +1,21 @@
 use haqumei::Haqumei;
 
 #[test]
+fn kei_geminates_one_and_eight_like_chou() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("1京", "イッケー"),
+        ("一京", "イッケー"),
+        ("10000000000000000", "イッケー"),
+        ("8京", "ハッケー"),
+        ("2京", "ニケー"),
+        ("京都", "キョート"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn approximate_days_do_not_use_the_rank_suffix() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [
