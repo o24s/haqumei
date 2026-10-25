@@ -47,6 +47,25 @@ fn conventional_phrases_select_readings_before_chaining() {
 }
 
 #[test]
+fn religious_terms_need_direct_context() {
+    check_context_readings(
+        &[
+            ("天台声明を唱える", "声明", "ショウミョウ", 4),
+            ("真言声明が唱えられる", "声明", "ショウミョウ", 4),
+            ("この社は神を祀る", "社", "ヤシロ", 3),
+            ("在家信者が集まる", "在家", "ザイケ", 3),
+        ],
+        &[
+            "法要の声明を読んだ",
+            "声明が唱える理念",
+            "声明を唱える",
+            "この社は社員を募集する",
+            "在家さんが来る",
+        ],
+    );
+}
+
+#[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [

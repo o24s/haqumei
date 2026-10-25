@@ -226,6 +226,14 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
     }
 
     match node.get_string() {
+        // 姓や組織名のアリイエを保ち、宗教の語が直接続く場合だけザイケにする。
+        "在家"
+            if following.is_some_and(|n| {
+                matches!(n.get_string(), "信者" | "者" | "僧" | "信徒" | "仏教徒")
+            }) =>
+        {
+            Some(("ザイケ", "ザイケ", 0))
+        }
         // 神の代理・神の代行は別の形態素なので、独立した代だけを対象にする。
         "代" if matches!(node.get_pos(), POS::Meishi(Meishi::General))
             && via_no
@@ -237,6 +245,28 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
             }) =>
         {
             Some(("ヨ", "ヨ", 1))
+        }
+        // 反戦の声明も唱えられる。唱えるだけでは声明の意味を区別できないため、
+        // 宗派を冠した仏教音楽の名称か、旋律を述べる形に限る。
+        "声明"
+            if ((previous.is_some_and(|n| matches!(n.get_string(), "天台" | "真言"))
+                || nodes[i.saturating_sub(5)..i]
+                    .iter()
+                    .map(|n| n.get_string())
+                    .collect::<String>()
+                    .ends_with("仏教音楽である"))
+                && following.is_some_and(|n| matches!(n.get_string(), "を" | "が"))
+                && predicate.is_some_and(|n| {
+                    n.get_orig() == Some("唱える") && matches!(n.get_pos(), POS::Doushi(_))
+                })
+                && (following.unwrap().get_string() == "を"
+                    || nodes
+                        .get(i + 3)
+                        .is_some_and(|n| n.get_orig() == Some("られる"))))
+                || (following.is_some_and(|n| n.get_string() == "の")
+                    && predicate.is_some_and(|n| n.get_string() == "旋律")) =>
+        {
+            Some(("ショウミョウ", "ショーミョー", 1))
         }
         // 洪水の際・排水の際は、前の形態素が水ではないのでサイを保つ。
         "際" if via_no
@@ -255,6 +285,13 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
         {
             Some(("モト", "モト", 2))
         }
+        "社" if previous.is_some_and(|n| {
+            matches!(n.get_pos(), POS::Rentaishi)
+                && matches!(n.get_string(), "この" | "その" | "あの")
+        }) && shrine_context(nodes, i) =>
+        {
+            Some(("ヤシロ", "ヤシロ", 1))
+        }
         "汚れ"
             if following.is_some_and(|n| n.get_string() == "を")
                 && predicate.is_some_and(|n| n.get_orig() == Some("祓う")) =>
@@ -270,6 +307,75 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
         }
         _ => None,
     }
+}
+
+fn after_auxiliaries(nodes: &[NJDNode], mut at: usize) -> usize {
+    while let Some(node) = nodes.get(at) {
+        if matches!(node.get_pos(), POS::Jodoushi)
+            || node.get_pos().to_string().starts_with("動詞,非自立,")
+            || (node.get_string() == "て"
+                && nodes
+                    .get(at + 1)
+                    .is_some_and(|n| n.get_pos().to_string().starts_with("動詞,非自立,")))
+        {
+            at += 1;
+        } else {
+            break;
+        }
+    }
+    at
+}
+
+fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
+    let Some(particle) = nodes.get(i + 1) else {
+        return false;
+    };
+    let Some(next) = nodes.get(i + 2) else {
+        return false;
+    };
+    if particle.get_string() == "の"
+        && matches!(next.get_pos(), POS::Meishi(Meishi::General))
+        && matches!(
+            next.get_string(),
+            "祭神" | "社殿" | "拝殿" | "本殿" | "境内" | "御神体"
+        )
+    {
+        return true;
+    }
+    // 鳥居は姓でもある。一般名詞でも、設計を担当する鳥居は人物を指す。
+    if particle.get_string() == "の"
+        && next.get_string() == "鳥居"
+        && matches!(next.get_pos(), POS::Meishi(Meishi::General))
+        && nodes.get(i + 4).is_some_and(|n| {
+            matches!(
+                n.get_orig(),
+                Some("古い" | "赤い" | "建つ" | "立つ" | "建てる" | "修復" | "修理")
+            )
+        })
+    {
+        return true;
+    }
+    if matches!(particle.get_string(), "を" | "に")
+        && matches!(next.get_orig(), Some("参拝" | "拝む"))
+    {
+        return true;
+    }
+    if !matches!(particle.get_string(), "は" | "に") {
+        return false;
+    }
+    let at = i + 2 + usize::from(next.get_string() == "は");
+    nodes
+        .get(at)
+        .is_some_and(|n| matches!(n.get_string(), "神" | "祭神" | "御神体"))
+        && nodes
+            .get(at + 1)
+            .is_some_and(|n| matches!(n.get_string(), "を" | "が"))
+        && nodes
+            .get(at + 2)
+            .is_some_and(|n| n.get_orig() == Some("祀る"))
+        && nodes
+            .get(after_auxiliaries(nodes, at + 3))
+            .is_none_or(|n| !matches!(n.get_pos(), POS::Meishi(_)))
 }
 
 fn disability_enumeration(nodes: &[NJDNode], i: usize) -> bool {
