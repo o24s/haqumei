@@ -127,6 +127,10 @@ impl IntoPhonemeMapItem for WordPhonemeSeed {
         &self.word
     }
 
+    fn char_span(&self) -> &Range<usize> {
+        &self.char_span
+    }
+
     #[inline]
     fn new_ignored(morph: &MecabMorph) -> Self::Output {
         WordPhonemeMap {
@@ -205,6 +209,8 @@ pub(crate) trait IntoPhonemeMapItem: Sized {
 
     fn word(&self) -> &str;
 
+    fn char_span(&self) -> &Range<usize>;
+
     /// is_ignored な形態素用の出力を生成
     fn new_ignored(morph: &MecabMorph) -> Self::Output;
 
@@ -227,6 +233,10 @@ impl IntoPhonemeMapItem for WordPhonemeDetail {
     #[inline]
     fn word(&self) -> &str {
         &self.word
+    }
+
+    fn char_span(&self) -> &Range<usize> {
+        &self.char_span
     }
 
     #[inline]
@@ -300,6 +310,10 @@ impl IntoPhonemeMapItem for WordPhonemeProsody {
     #[inline]
     fn word(&self) -> &str {
         &self.word
+    }
+
+    fn char_span(&self) -> &Range<usize> {
+        &self.char_span
     }
 
     #[inline]
@@ -517,6 +531,96 @@ fn number_keys(surface: &str) -> Vec<char> {
     surface.chars().filter_map(number_key).collect()
 }
 
+fn day_number_keys(surface: &str) -> Vec<char> {
+    match number_keys(surface).as_slice() {
+        ['十'] => vec!['一', '〇'],
+        ['二', '十'] => vec!['二', '〇'],
+        keys => keys.to_vec(),
+    }
+}
+
+fn day_morph_end(morphs: &[MecabMorph], start: usize, surface: &str) -> Option<usize> {
+    if !is_day_counter_surface(surface) || surface == "日" {
+        return None;
+    }
+    let expected = day_number_keys(surface);
+    let mut number = String::new();
+    for (offset, morph) in morphs[start..].iter().enumerate() {
+        if morph.is_ignored {
+            continue;
+        }
+        if is_number_surface(&morph.surface) {
+            number.push_str(&morph.surface);
+        } else if is_day_counter_surface(&morph.surface) {
+            number.push_str(morph.surface.strip_suffix('日').unwrap());
+            let keys = day_number_keys(&number);
+            let first = keys.iter().position(|&c| c != '〇').unwrap_or(0);
+            if keys == expected || keys[first..] == expected {
+                return Some(start + offset + 1);
+            }
+            return None;
+        } else {
+            return None;
+        }
+    }
+    None
+}
+
+fn collect_number_morphs(
+    morphs: &[MecabMorph],
+    start: usize,
+    next_surface: &str,
+) -> (Vec<usize>, usize) {
+    let mut indices = Vec::new();
+    let mut stopped_before_day = false;
+    for i in start..morphs.len() {
+        let morph = &morphs[i];
+        if morph.is_ignored {
+            let following = (i + 1..morphs.len())
+                .find(|&j| !morphs[j].is_ignored)
+                .unwrap_or(morphs.len());
+            // 「1 10日」の日付を前の数へ含めると、空白と日付の区間が重なる。
+            if day_morph_end(morphs, following, next_surface).is_some() {
+                stopped_before_day = true;
+                break;
+            }
+            continue;
+        }
+        if !is_number_block_surface(&morph.surface)
+            || (i != start && morph.feature.split(',').nth(2) == Some("固有名詞"))
+        {
+            break;
+        }
+        indices.push(i);
+    }
+    // 「24日」の末尾の4は「四日」に含まれる。二十へは割り当てない。
+    let following = indices
+        .last()
+        .and_then(|&last| morphs[last + 1..].iter().find(|m| !m.is_ignored));
+    if !stopped_before_day
+        && is_day_counter_surface(next_surface)
+        && next_surface != "日"
+        && following.is_none_or(|m| !m.surface.starts_with(next_surface))
+    {
+        let expected = day_number_keys(next_surface);
+        let mut trailing = Vec::new();
+        for offset in (0..indices.len()).rev() {
+            let mut keys = number_keys(&morphs[indices[offset]].surface);
+            keys.extend(trailing);
+            trailing = keys;
+            if trailing == expected {
+                indices.truncate(offset);
+                break;
+            }
+            if !expected.ends_with(&trailing) {
+                break;
+            }
+        }
+    }
+    let end = indices.last().map_or(start, |i| i + 1);
+    (indices, end)
+}
+
 /// 編集距離の表が入力の長さの二乗で膨らまないための上限。通常の数値表記を
 /// 十分に上回る大きさにしてある。
 const MAX_NUMBER_BLOCK: usize = 128;
@@ -716,35 +820,27 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
             continue;
         };
 
-        // 数詞の並びは、まとめて突き合わせる
-        if (is_number_surface(word) || is_day_counter_surface(word))
-            && is_number_surface(&morph.surface)
-        {
+        if let Some(end) = day_morph_end(morphs, morph_idx, word) {
+            spans[idx] = morph.char_span.start..morphs[end - 1].char_span.end;
+            morph_idx = end;
+            idx += 1;
+            continue;
+        }
+
+        // 数詞の並びは、まとめて突き合わせる。地名「十三」は別の語として保つ。
+        if is_number_surface(word) && is_number_surface(&morph.surface) {
             let mut feature_end = idx;
             while let Some(feature) = features.get(feature_end) {
-                if is_day_counter_surface(&feature.string) {
-                    feature_end += 1;
-                    break;
-                }
-                if !is_number_block_surface(&feature.string) {
+                if !is_number_block_surface(&feature.string)
+                    || (feature_end != idx && feature.pos_group1 == "固有名詞")
+                {
                     break;
                 }
                 feature_end += 1;
             }
-            let mut morph_end = morph_idx;
-            while let Some(morph) = morphs.get(morph_end) {
-                if is_day_counter_surface(&morph.surface) {
-                    morph_end += 1;
-                    break;
-                }
-                if !morph.is_ignored && !is_number_block_surface(&morph.surface) {
-                    break;
-                }
-                morph_end += 1;
-            }
-            let source_indices: Vec<usize> = (morph_idx..morph_end)
-                .filter(|&i| !morphs[i].is_ignored)
-                .collect();
+            let next_surface = features.get(feature_end).map_or("", |f| f.string.as_str());
+            let (source_indices, morph_end) =
+                collect_number_morphs(morphs, morph_idx, next_surface);
             let source: Vec<Vec<char>> = source_indices
                 .iter()
                 .map(|&i| number_keys(&morphs[i].surface))
@@ -1331,6 +1427,16 @@ impl OpenJTalk {
                 let consumed_from = morph_idx;
                 if has_odori_chars(&morph.surface) {
                     morph_idx += consume_odori_morphs(&morphs, morph_idx, map.word());
+                } else if is_number_surface(&morph.surface)
+                    && (is_number_surface(map.word()) || is_day_counter_surface(map.word()))
+                {
+                    // NJD の区間と同じ境界まで消費し、日付の桁を二度割り当てない。
+                    while morphs
+                        .get(morph_idx)
+                        .is_some_and(|m| m.char_span.start < map.char_span().end)
+                    {
+                        morph_idx += 1;
+                    }
                 } else {
                     morph_idx += consume_mismatched_morphs(
                         &morphs,

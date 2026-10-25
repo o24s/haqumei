@@ -1,6 +1,87 @@
 use haqumei::{Haqumei, HaqumeiOptions, njd_char_spans};
 
 #[test]
+fn number_and_symbol_boundaries_preserve_all_mapping_variants() {
+    use haqumei::Phoneme;
+    let mut engine = Haqumei::new().unwrap();
+    for input in [
+        "　―「一人で",
+        "㏄　＋　レモン",
+        "４　四つの重点課題",
+        "３三振",
+        "１一般",
+        "千九百二十一　十一月",
+        "予定1 10日まで",
+        "1 20日",
+        "1 24日",
+        "1　10日",
+        "1  10日",
+        "1 一日",
+        "1 十日",
+        "1 二十日",
+        "1 四日",
+        "十 十三",
+        "十 十三駅",
+        "1 〇二日",
+        "1 〇・五日",
+        "住所は13ー3ー5です。",
+        "13ーー3ーー5",
+    ] {
+        let basic = engine.g2p_mapping(input).unwrap();
+        let detailed = engine.g2p_mapping_detailed(input).unwrap();
+        let prosody = engine.g2p_mapping_prosody(input).unwrap();
+        let mut end = 0;
+        for word in &basic {
+            if !word.char_span.is_empty() {
+                assert_eq!(word.char_span.start, end, "{input}: {basic:?}");
+                end = word.char_span.end;
+            }
+        }
+        assert_eq!(end, input.chars().count(), "{input}: {basic:?}");
+        let spans: Vec<_> = basic.iter().map(|w| &w.char_span).collect();
+        assert_eq!(
+            spans,
+            detailed.iter().map(|w| &w.char_span).collect::<Vec<_>>(),
+            "{input}"
+        );
+        assert_eq!(
+            spans,
+            prosody.iter().map(|w| &w.char_span).collect::<Vec<_>>(),
+            "{input}"
+        );
+        let mapped: Vec<_> = basic
+            .iter()
+            .flat_map(|w| w.phonemes.iter().copied())
+            .filter(|p| !matches!(p, Phoneme::Sp | Phoneme::Pau | Phoneme::Unk))
+            .collect();
+        let flat: Vec<_> = detailed
+            .iter()
+            .flat_map(|w| w.phonemes.iter().copied())
+            .filter(|p| !matches!(p, Phoneme::Sp | Phoneme::Pau | Phoneme::Unk))
+            .collect();
+        assert_eq!(mapped, flat, "{input}");
+    }
+}
+
+#[test]
+fn spaced_faces_keep_the_following_sentence_and_phone_origins() {
+    let mut engine = Haqumei::new().unwrap();
+    for faces in ["(^^) (^^)", "(^^)　(^^)", "(^^)  (^^)"] {
+        for prefix in ["おはよう", "1 24日"] {
+            let text = format!("{prefix}{faces}今日は晴れです。");
+            assert_eq!(
+                engine.g2p(&text).unwrap(),
+                engine.g2p(&format!("{prefix}今日は晴れです。")).unwrap()
+            );
+            let map = engine.g2p_mapping_detailed(&text).unwrap();
+            assert_eq!(map.iter().filter(|w| w.pos_group1 == "顔文字").count(), 2);
+            assert!(map.iter().any(|w| w.word == "今日"));
+            assert!(!engine.g2p_mapping_prosody(&text).unwrap().is_empty());
+        }
+    }
+}
+
+#[test]
 fn numeric_contractions_keep_commas_zeros_and_the_day_counter() {
     let mut engine = Haqumei::new().unwrap();
     for input in ["1,000ー", "二〇日", "11日", "1日2日", "1,2"] {
