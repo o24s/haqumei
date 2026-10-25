@@ -5,7 +5,7 @@ use std::ops::Range;
 use crate::{MecabMorph, NO_DICTIONARY_INDEX};
 
 pub(crate) fn may_contain_date(text: &str) -> bool {
-    text.contains('年') && text.contains('月') && text.contains([' ', '　'])
+    text.contains('年') && text.contains('月')
 }
 
 fn digit(c: char) -> Option<u16> {
@@ -119,7 +119,12 @@ fn parse(chars: &[char], start: usize) -> Option<(Range<usize>, Vec<Field>)> {
     }
 
     let end = day.as_ref().map_or(month.range.end, |d| d.range.end);
-    if !chars[start..end].iter().any(|c| matches!(c, ' ' | '　')) {
+    // 空白のない日付も0埋めを解釈する。0のない従来の解析結果は変更しない。
+    let padded = digit(chars[month.range.start]) == Some(0)
+        || day
+            .as_ref()
+            .is_some_and(|day| digit(chars[day.range.start]) == Some(0));
+    if !padded && !chars[start..end].iter().any(|c| matches!(c, ' ' | '　')) {
         return None;
     }
 

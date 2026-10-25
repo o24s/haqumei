@@ -138,7 +138,8 @@ fn periods_invalid_dates_and_word_fragments_keep_their_morphemes() {
         "2024 年 04 月 01 日々の記録",
         "2024 年 04 月 01 日曜日",
         "2008 年 05 月 05 日付で発行",
-        "2008年05月05日",
+        "2023年02月29日",
+        "2024年04月31日",
         "802号室",
         "409号線",
         "JAL15便",
@@ -150,6 +151,38 @@ fn periods_invalid_dates_and_word_fragments_keep_their_morphemes() {
             engine.run_mecab_detailed(input).unwrap(),
             "{input}"
         );
+    }
+}
+
+#[test]
+fn compact_padded_dates_keep_readings_prosody_and_input_ranges() {
+    let mut engine = Haqumei::new().unwrap();
+    for (input, plain) in [
+        ("2008年05月05日", "2008年5月5日"),
+        ("2008年05月", "2008年5月"),
+        ("令和元年05月01日", "令和元年5月1日"),
+        ("平成10年04月01日", "平成10年4月1日"),
+        ("2024年02月29日", "2024年2月29日"),
+    ] {
+        assert_eq!(
+            engine.g2k(input).unwrap(),
+            engine.g2k(plain).unwrap(),
+            "{input}"
+        );
+        assert_eq!(
+            prosody(&mut engine, input),
+            prosody(&mut engine, plain),
+            "{input}"
+        );
+        let words = engine.g2p_mapping_detailed(input).unwrap();
+        let mut end = 0;
+        for word in words {
+            if !word.char_span.is_empty() {
+                assert_eq!(word.char_span.start, end, "{input}: {word:?}");
+                end = word.char_span.end;
+            }
+        }
+        assert_eq!(end, input.chars().count(), "{input}");
     }
 }
 
