@@ -1,6 +1,32 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn restored_pronunciation_updates_the_public_mora_count() {
+    for (options, expected) in [
+        (
+            HaqumeiOptions {
+                use_read_as_pron: true,
+                ..Default::default()
+            },
+            4,
+        ),
+        (
+            HaqumeiOptions {
+                revert_long_vowels: true,
+                ..Default::default()
+            },
+            3,
+        ),
+    ] {
+        let mut engine = Haqumei::with_options(options).unwrap();
+        let words = engine.g2p_mapping_detailed("おめぇー").unwrap();
+        assert_eq!(words.iter().map(|w| w.mora_count).sum::<i32>(), expected);
+        let features = engine.run_frontend("おめぇー").unwrap();
+        assert_eq!(features.iter().map(|f| f.mora_size).sum::<i32>(), expected);
+    }
+}
+
+#[test]
 fn numeric_boundaries_and_limited_identifiers() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [

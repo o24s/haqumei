@@ -63,20 +63,23 @@ impl Haqumei {
         for feature in njd_features.iter_mut() {
             if options.use_read_as_pron {
                 feature.pron = feature.read.clone();
-                continue;
-            }
-            if !(options.revert_long_vowels && feature.pron.contains('ー'))
-                && !(options.revert_yotsugana
-                    && (feature.read.contains('ヅ') || feature.read.contains('ヂ')))
+            } else if (options.revert_long_vowels && feature.pron.contains('ー'))
+                || (options.revert_yotsugana && feature.read.contains(['ヅ', 'ヂ']))
             {
+                feature.pron = pron_restore::restore(
+                    &feature.read,
+                    &feature.pron,
+                    options.revert_long_vowels && !feature.orig.contains('ー'),
+                    options.revert_yotsugana,
+                );
+            } else {
                 continue;
             }
-            feature.pron = pron_restore::restore(
-                &feature.read,
-                &feature.pron,
-                options.revert_long_vowels && !feature.orig.contains('ー'),
-                options.revert_yotsugana,
-            );
+            // メェのように小書き仮名が独立する並びも、音素生成と同じ解析で数える。
+            feature.mora_size =
+                haqumei_jpreprocess_core::pronunciation::Pronunciation::parse(&feature.pron, 0)
+                    .map(|pron| pron.mora_size() as i32)
+                    .unwrap_or_else(|_| count_mora(&feature.pron) as i32);
         }
     }
 
