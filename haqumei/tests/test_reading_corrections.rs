@@ -1,6 +1,23 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn ichiban_suki_keeps_compound_zuki_elsewhere() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("この味が一番好きだ", "コノアジガイチバンスキダ"),
+        ("一番好きな道を歩く", "イチバンスキナミチヲアルク"),
+        ("旅好きな人だ", "タビズキナヒトダ"),
+        ("音楽好きの友人だ", "オンガクズキノユージンダ"),
+        ("物好きな客だ", "モノズキナキャクダ"),
+        ("一番手を任せる", "イチバンテヲマカセル"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+    h.options.modify_context_reading = false;
+    assert_eq!(h.g2k("一番好きだ").unwrap(), "イチバンズキダ");
+}
+
+#[test]
 fn dated_suffix_keeps_zuke_instead_of_attached_tsuki() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

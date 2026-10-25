@@ -126,6 +126,14 @@ struct Rule {
 /// 各規則の根拠と、確認した負の対照をコメントに残す。
 #[rustfmt::skip]
 const RULES: &[Rule] = &[
+    // 「一番好き」は最上級であり、「旅好き」のような名詞との複合語ではない。
+    // ズキのコストを変えると旅好きも清音化するため、一番に続く接尾辞だけを直す。
+    Rule {
+        surface: "好き",
+        pos_group1: Some("接尾"),
+        cue: Cue::PrevIn(&["一番"]),
+        reading: "スキ",
+    },
     // 「何にも知らない」はナンニモ、「何にも似ていない」はナニニモと読む。
     // 辞書で副詞を優先すると格助詞の用法も変わるため、述語と打ち消しを確認する。
     // https://github.com/tsukumijima/pyopenjtalk-plus/commit/17aa989573807971094af00fad6a22227ba90c82
