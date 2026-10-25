@@ -37,13 +37,7 @@ pub fn njd_set_pronunciation(njd: &mut NJD) {
             node.get_details_mut().ctype = haqumei_jpreprocess_core::ctype::CType::None;
             node.get_details_mut().cform = haqumei_jpreprocess_core::cform::CForm::None;
         }
-        let mut pron = Pronunciation::new(moras, node.get_pron().accent());
-        let z_count = node
-            .get_string()
-            .chars()
-            .filter(|c| matches!(c, 'Ｚ' | 'ｚ'))
-            .count();
-        pron.set_mora_size(pron.mora_size().saturating_sub(z_count));
+        let pron = Pronunciation::new(moras, node.get_pron().accent());
         if pron.mora_size() != 0 {
             *node.get_pos_mut() = POS::Filler;
         }
@@ -187,13 +181,13 @@ mod tests {
     }
 
     #[test]
-    fn unknown_z_uses_the_registered_mora_count() {
+    fn unknown_z_counts_all_three_moras() {
         let mut njd: NJD = ["Ｚ,名詞,一般,*,*,*,*,*"].into_iter().collect();
         njd_set_pronunciation(&mut njd);
         let node = &njd.nodes[0];
         assert_eq!(node.get_read(), Some("ゼット"));
         assert_eq!(node.get_pron().to_string(), "ゼット");
-        assert_eq!(node.get_pron().mora_size(), 2);
+        assert_eq!(node.get_pron().mora_size(), 3);
         assert_eq!(node.get_pron().moras().len(), 3);
     }
 
