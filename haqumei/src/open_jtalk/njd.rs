@@ -372,6 +372,7 @@ pub(crate) fn run_frontend(
         }
     }
     if modify_context_reading {
+        context::prepare_explicit_first_day(&mut nodes, &mut protected_nodes);
         context::prepare_readings(&mut nodes, &protected_nodes);
     }
     if modify_numeral_reading {

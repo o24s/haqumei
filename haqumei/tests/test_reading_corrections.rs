@@ -42,6 +42,21 @@ fn punctuation_keeps_written_digit_groups_separate() {
 }
 
 #[test]
+fn explicit_first_day_keeps_duration_readings() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, kana) in [
+        ("本日1日付で", "ホンジツツイタチズケデ"),
+        ("明日1日午前", "アシタツイタチゴゼン"),
+        ("1日午後", "ツイタチゴゴ"),
+        ("丸1日午後まで休む", "マルイチニチゴゴマデヤスム"),
+        ("今日も1日、", "キョーモイチニチ、"),
+        ("1日に3回", "イチニチニサンカイ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), kana, "{text}");
+    }
+}
+
+#[test]
 fn school_year_lists_keep_decimal_quantities() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [
