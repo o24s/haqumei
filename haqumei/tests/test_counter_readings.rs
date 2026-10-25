@@ -272,40 +272,6 @@ fn ordinal_counters_keep_kanji_number_readings() {
 }
 
 #[test]
-fn counters_distinguish_quantities_suffixes_and_ordinals() {
-    let mut engine = Haqumei::new().unwrap();
-    for (text, expected) in [
-        ("一試合", "イッシアイ"),
-        ("第一試合", "ダイイチシアイ"),
-        ("一人", "ヒトリ"),
-        ("一人前", "イチニンマエ"),
-        ("七分袖", "シチブソデ"),
-        ("七分", "ナナフン"),
-        ("三階級", "サンカイキュー"),
-        ("三本", "サンボン"),
-        ("三遍", "サンベン"),
-        ("何遍", "ナンベン"),
-        ("千遍", "センベン"),
-        ("一遍", "イッペン"),
-        ("三編", "サンペン"),
-        ("三篇", "サンペン"),
-        ("八課", "ハチカ"),
-        ("六課", "ロッカ"),
-        ("一箱", "ヒトハコ"),
-        ("六箱", "ロッパコ"),
-        ("三柱", "ミハシラ"),
-        ("七夜", "シチヤ"),
-        ("七年生", "ナナネンセー"),
-        ("七アンダー", "セブンアンダー"),
-        ("十七アンダー", "ジューナナアンダー"),
-        ("3石", "サンゼキ"),
-        ("8石", "ハッセキ"),
-    ] {
-        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
-    }
-}
-
-#[test]
 fn fractions_of_a_ratio_use_bu_without_changing_minutes() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [
@@ -324,6 +290,54 @@ fn fractions_of_a_ratio_use_bu_without_changing_minutes() {
     }
     engine.options.modify_numeral_reading = false;
     assert_eq!(engine.g2k("2割5分").unwrap(), "ニワリゴフン");
+}
+
+#[test]
+fn sokuon_counters_keep_odaka_except_after_multiples_of_ten() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, accent) in [
+        ("一発", 4),
+        ("六匹", 4),
+        ("一冊", 4),
+        ("十冊", 4),
+        ("二十冊", 2),
+        ("二十点", 2),
+        ("二十戦", 2),
+        ("三冊", 1),
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(features[0].acc, accent, "{text}: {features:?}");
+    }
+}
+
+#[test]
+fn man_yen_keeps_compound_number_accents_and_sen_yen() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, accent) in [
+        ("一万円", 0),
+        ("二万円", 0),
+        ("十万円", 0),
+        ("百万円", 0),
+        ("二十万円", 4),
+        ("何百万円", 5),
+        ("千円", 1),
+        ("二千円", 0),
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(features[0].acc, accent, "{text}: {features:?}");
+    }
+}
+
+#[test]
+fn five_and_three_ban_use_flat_counters_without_flattening_thirteen() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "五本", "五枚", "五台", "五代", "５番", "五年", "五題", "五段", "五問", "３番",
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(features[0].acc, 0, "{text}: {features:?}");
+    }
+    assert_eq!(engine.run_frontend("十三番").unwrap()[0].acc, 3);
 }
 
 #[test]

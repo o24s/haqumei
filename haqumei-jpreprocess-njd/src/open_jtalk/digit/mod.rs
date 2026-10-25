@@ -21,6 +21,7 @@ pub fn is_period(s: &str) -> bool {
 }
 
 pub fn njd_set_digit(njd: &mut NJD) {
+    accent::prepare_number_markers(njd);
     counter::convert_day_approximation(njd);
     let mut decimal_points = Vec::new();
     {
@@ -212,6 +213,11 @@ pub fn njd_set_digit(njd: &mut NJD) {
     geminate_one_before_kango(njd, &decimal_points);
     njd.remove_silent_node();
     accent::join_teens(njd);
+    accent::join_places(njd);
+    accent::sokuon_counters(njd);
+    accent::yen(njd);
+    accent::flat_short_counters(njd);
+    accent::man_yen(njd);
 }
 
 fn geminate_one_before_kango(njd: &mut NJD, decimal_points: &[usize]) {
