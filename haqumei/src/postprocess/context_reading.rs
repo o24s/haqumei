@@ -1135,6 +1135,19 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected:
         if protected.get(i) == Some(&true) {
             continue;
         }
+        // 「一日」は日数の読みだけを対象にし、十一日や日付のツイタチとは区別する。
+        if njd_features[i].string == "中"
+            && njd_features[i].read == "チュウ"
+            && i > 0
+            && njd_features[i - 1].string == "一日"
+            && njd_features[i - 1].read == "イチニチ"
+            && (i < 2 || njd_features[i - 2].pos_group1 != "数")
+        {
+            njd_features[i].read = "ジュウ".into();
+            njd_features[i].pron = "ジュー".into();
+            njd_features[i].mora_size = 2;
+            continue;
+        }
         let Some(rules) = by_surface.get(njd_features[i].string.as_str()) else {
             continue;
         };

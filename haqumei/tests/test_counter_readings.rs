@@ -17,6 +17,21 @@ fn fraction_denominators_keep_the_number_before_bun() {
 }
 
 #[test]
+fn all_day_uses_juu_without_changing_calendar_dates() {
+    let mut engine = Haqumei::new().unwrap();
+    assert_eq!(engine.g2k("1日中歩いた").unwrap(), "イチニチジューアルイタ");
+    for text in ["2日中に", "11日中に", "4月1日中に"] {
+        let nodes = engine.run_frontend(text).unwrap();
+        assert!(
+            !nodes.iter().any(|f| f.string == "中" && f.pron == "ジュー"),
+            "{text}"
+        );
+    }
+    engine.options.modify_context_reading = false;
+    assert_eq!(engine.g2k("1日中歩いた").unwrap(), "イチニチチューアルイタ");
+}
+
+#[test]
 fn counters_distinguish_quantities_suffixes_and_ordinals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [
