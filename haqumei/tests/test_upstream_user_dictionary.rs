@@ -27,6 +27,32 @@ fn engine(csv: &str) -> (tempfile::TempDir, Haqumei) {
 }
 
 #[test]
+fn halfwidth_voicing_does_not_replace_a_registered_variant_word() {
+    let (_temp, mut engine) =
+        engine("﨑山,1345,1345,-20000,名詞,一般,*,*,*,*,﨑山,テスト,テスト,1/3,C1\n");
+    for guide in ["ガイド", "ｶﾞｲﾄﾞ", "ﾊﾟﾝ"] {
+        let text = format!("{guide}は﨑山さん。表記は﨑です。");
+        let features = engine.run_frontend(&text).unwrap();
+        let registered = features.iter().find(|f| f.string == "﨑山").unwrap();
+        assert_eq!(registered.read, "テスト", "{text}");
+        assert_eq!(registered.mora_size, 3, "{text}");
+        let normalized = haqumei::OpenJTalk::new()
+            .unwrap()
+            .text2mecab_string(&text)
+            .unwrap();
+        let start = normalized
+            .chars()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .position(|part| part == ['﨑', '山'])
+            .unwrap();
+        let mapped = engine.g2p_mapping_detailed(&text).unwrap();
+        let word = mapped.iter().find(|w| w.word == "﨑山").unwrap();
+        assert_eq!(word.char_span, start..start + 2, "{text}");
+    }
+}
+
+#[test]
 fn protected_iteration_marks_keep_their_registered_readings() {
     let (_temp, mut engine) = engine(concat!(
         "々,1345,1345,-20000,名詞,一般,*,*,*,*,々,ノマ,ノマ,0/2,C1\n",
