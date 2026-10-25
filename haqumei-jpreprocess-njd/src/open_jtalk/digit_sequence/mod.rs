@@ -184,7 +184,11 @@ impl DigitSequence {
             .find_map(NJDNode::digit_sequence_reading)
         {
             self.is_numerical_reading = Some(reading);
-        } else if is_spelled_decimal_fraction(njd, self.start, self.end) {
+        } else if is_spelled_decimal_fraction(njd, self.start, self.end)
+            || (is_written_digit_sequence(njd, self.start, self.end)
+                && score::score(njd, self.start, self.end) <= 0)
+        {
+            // 二〇〇〇年など数量の手がかりがある形は、既存の位取りを保つ。
             self.is_numerical_reading = Some(false);
         }
         if self.is_numerical_reading.is_none() {
@@ -308,6 +312,32 @@ impl DigitSequence {
 
         offset as i64 - offset_comma
     }
+}
+
+fn is_written_digit_sequence(njd: &NJD, start: usize, end: usize) -> bool {
+    let written_digit = |node: &NJDNode| {
+        matches!(
+            node.get_string(),
+            "〇" | "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" | "九"
+        )
+    };
+    if !njd.nodes[start..=end].iter().all(written_digit) {
+        return false;
+    }
+    if njd.nodes[start..=end]
+        .iter()
+        .any(|node| node.get_orig() == Some("〇"))
+    {
+        return true;
+    }
+    // 三〇九,三八一の後ろの組も、前の〇が示す桁読みの表記に揃える。
+    start > 1
+        && njd.nodes[start - 1].get_string() == "，"
+        && njd.nodes[..start - 1]
+            .iter()
+            .rev()
+            .take_while(|node| written_digit(node))
+            .any(|node| node.get_orig() == Some("〇"))
 }
 
 fn is_spelled_decimal_fraction(njd: &NJD, start: usize, end: usize) -> bool {

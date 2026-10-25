@@ -1,6 +1,26 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn punctuation_keeps_written_digit_groups_separate() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, kana) in [
+        ("一〇一,", "イチゼロイチ，"),
+        ("四〇五,電話", "ヨンゼロゴー，デンワ"),
+        ("三〇九,三〇八", "サンゼロキュー，サンゼロハチ"),
+        ("三〇九,三八一", "サンゼロキュー，サンハチイチ"),
+        ("一,〇〇〇", "セン"),
+        (
+            "1,234,567",
+            "ヒャクニジューサンマンヨンセンゴヒャクロクジューナナ",
+        ),
+        ("1,050.5円", "センゴジュッテンゴエン"),
+        ("二〇〇〇年", "ニセンネン"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), kana, "{text}");
+    }
+}
+
+#[test]
 fn ichiban_suki_keeps_compound_zuki_elsewhere() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

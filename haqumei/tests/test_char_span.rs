@@ -49,6 +49,8 @@ fn number_and_symbol_boundaries_preserve_all_mapping_variants() {
     use haqumei::Phoneme;
     let mut engine = Haqumei::new().unwrap();
     for input in [
+        "三〇九,三〇八",
+        "一,〇〇〇",
         "　―「一人で",
         "㏄　＋　レモン",
         "４　四つの重点課題",

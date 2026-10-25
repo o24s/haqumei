@@ -11,7 +11,7 @@ pub fn from_njd(njd: &NJD) -> Vec<DigitSequence> {
     for (i, node) in njd.nodes.iter().enumerate() {
         if !is_in_seq && !digits.is_empty() {
             trim_digits(&mut digits);
-            result.extend(from_parsed_digits(start, &digits));
+            result.extend(from_parsed_digits(njd, start, &digits));
             digits.clear();
         }
 
@@ -46,7 +46,7 @@ pub fn from_njd(njd: &NJD) -> Vec<DigitSequence> {
     }
     if !digits.is_empty() {
         trim_digits(&mut digits);
-        result.extend(from_parsed_digits(start, &digits));
+        result.extend(from_parsed_digits(njd, start, &digits));
     }
 
     for seq in &mut result {
@@ -64,9 +64,14 @@ fn trim_digits(digits: &mut Vec<Digit>) {
     }
 }
 
-fn from_parsed_digits(start: usize, digits: &[Digit]) -> Vec<DigitSequence> {
+fn from_parsed_digits(njd: &NJD, start: usize, digits: &[Digit]) -> Vec<DigitSequence> {
     let is_zero_start = check_zero_start(digits);
-    if !is_zero_start && check_comma_sequence(digits) {
+    // 漢数字の〇を含む「三〇九,三〇八」は、3桁ずつの位取りではなく番号の列挙。
+    let has_written_zero = njd.nodes[start..start + digits.len()]
+        .iter()
+        .take_while(|node| node.get_string() != "，")
+        .any(|node| node.get_orig() == Some("〇"));
+    if !is_zero_start && !has_written_zero && check_comma_sequence(digits) {
         /* numerical reading */
         if let Some(seq) = create_seq(start, digits, Some(true)) {
             vec![seq]

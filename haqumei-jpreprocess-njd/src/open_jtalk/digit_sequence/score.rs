@@ -77,7 +77,14 @@ fn score_end(njd: &NJD, end: usize) -> i8 {
                 _ => 0,
             },
             BANGOU => -2,
-            s if is_period(s) => 4,
+            s if is_period(s)
+                && njd
+                    .nodes
+                    .get(end + 2)
+                    .is_some_and(|node| node.get_pos().is_kazu()) =>
+            {
+                4
+            }
             _ => 0,
         };
     }
