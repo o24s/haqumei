@@ -11,7 +11,7 @@ mod lut;
 
 use crate::NJD;
 
-use haqumei_jpreprocess_core::{pos::*, pron};
+use haqumei_jpreprocess_core::pron;
 use haqumei_jpreprocess_window::*;
 
 use self::lut::{DigitType, find_pron_conv_set, numeral};
@@ -23,12 +23,7 @@ pub fn is_period(s: &str) -> bool {
 pub fn njd_set_digit(njd: &mut NJD) {
     let mut decimal_points = Vec::new();
     {
-        enum SkipState {
-            Disabled,
-            IfMeishi,
-            Skipping,
-        }
-        let mut skip_state = SkipState::Disabled;
+        let mut skipping_decimal_digits = false;
         let node_count = njd.nodes.len();
         let mut iter = njd.iter_quint_mut();
         for index in 0..node_count {
@@ -37,19 +32,10 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 Triple::Full(prev, node, next) => (prev, node, next),
                 _ => continue,
             };
-            match (&skip_state, node.get_pos()) {
-                (SkipState::IfMeishi, _) => {
-                    skip_state = SkipState::Skipping;
-                    continue;
-                }
-                (SkipState::Skipping, POS::Meishi(_)) => {
-                    continue;
-                }
-                (SkipState::Skipping, _) => {
-                    skip_state = SkipState::Disabled;
-                    continue;
-                }
-                _ => (),
+            if skipping_decimal_digits {
+                // 単位や一般名詞まで飛ばすと、後ろにある別の小数点を処理できない。
+                skipping_decimal_digits = node.get_pos().is_kazu();
+                continue;
             }
             if !node.get_string().is_empty()
                 && !prev.get_string().is_empty()
@@ -81,7 +67,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
                     }
                     _ => (),
                 }
-                skip_state = SkipState::IfMeishi;
+                skipping_decimal_digits = true;
             }
         }
     }

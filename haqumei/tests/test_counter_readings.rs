@@ -1,6 +1,29 @@
 use haqumei::Haqumei;
 
 #[test]
+fn multiple_decimals_keep_points_after_units_and_nouns() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        (
+            "0.3cm白1.2cm",
+            "レーテンサンセンチメートルシロイッテンニセンチメートル",
+        ),
+        ("０．３　１．２", "レーテンサンイッテンニ"),
+        ("０．３白１．２", "レーテンサンシロイッテンニ"),
+        (
+            "０．３ｃｍ　１．２ｃｍ",
+            "レーテンサンセンチメートルイッテンニセンチメートル",
+        ),
+        (
+            "０．３　１．２　５．６",
+            "レーテンサンイッテンニゴーテンロク",
+        ),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn fraction_denominators_keep_the_number_before_bun() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [
