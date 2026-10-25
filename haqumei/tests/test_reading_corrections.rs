@@ -92,6 +92,18 @@ fn idiomatic_face_and_sound_need_local_causes() {
 }
 
 #[test]
+fn capsizing_reading_keeps_transitive_covering() {
+    check_context_readings(
+        &[("強風でボートが覆った", "覆っ", "クツガエッ", 5)],
+        &[
+            "海面をボートが覆った",
+            "ボートが覆った",
+            "ボートが覆っていた海面",
+        ],
+    );
+}
+
+#[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [

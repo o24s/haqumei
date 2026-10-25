@@ -165,6 +165,10 @@ pub(super) fn prepare_readings(nodes: &mut [NJDNode], protected: &[bool]) {
                 nodes[i].get_details_mut().pos_original = None;
                 nodes[i].set_chain_flag(false);
             }
+            if reading == "クツガエッ" {
+                nodes[i].set_orig("覆る");
+                nodes[i].get_details_mut().ctype = "五段・ラ行".parse().unwrap();
+            }
         }
         let table = nodes[i].get_string() == "表"
             && (nodes
@@ -228,6 +232,14 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
     let via_no = previous.is_some_and(|n| {
         n.get_string() == "の" && n.get_pos().to_string().starts_with("助詞,連体化,")
     });
+    if node.get_string() == "覆っ"
+        && node.get_orig() == Some("覆う")
+        && previous.is_some_and(|n| n.get_string() == "が")
+        && previous_previous.is_some_and(|n| matches!(n.get_string(), "船" | "舟" | "ボート"))
+        && capsizing_predicate(nodes, i)
+    {
+        return Some(("クツガエッ", "クツガエッ", 3));
+    }
     if !matches!(node.get_pos(), POS::Meishi(_)) {
         return None;
     }
@@ -342,6 +354,33 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
         }
         _ => None,
     }
+}
+
+fn capsizing_predicate(nodes: &[NJDNode], i: usize) -> bool {
+    // 船が主語でも覆うは他動詞になり得る。転覆の原因が述べられた文に限る。
+    if !sentence_nodes(nodes, i).iter().any(|n| {
+        matches!(
+            n.get_orig(),
+            Some("強風" | "突風" | "大波" | "荒波" | "事故" | "転覆")
+        )
+    }) {
+        return false;
+    }
+    // 海面を黒い船が覆った、では形容詞を越えた位置に目的語がある。
+    if nodes[..i.saturating_sub(2)]
+        .iter()
+        .rev()
+        .take_while(|n| !matches!(n.get_pos(), POS::Kigou(_)))
+        .any(|n| n.get_string() == "を")
+    {
+        return false;
+    }
+    let end = after_auxiliaries(nodes, i + 1);
+    // 船が覆っていた海面という連体修飾では、省略された目的語を排除できない。
+    nodes.get(end).is_none_or(|n| {
+        !matches!(n.get_pos(), POS::Meishi(_))
+            || (n.get_pos().to_string().starts_with("名詞,非自立,") && n.get_string() != "の")
+    })
 }
 
 fn after_auxiliaries(nodes: &[NJDNode], mut at: usize) -> usize {
@@ -498,6 +537,16 @@ fn giving_up_cause(nodes: &[NJDNode], i: usize) -> bool {
     previous.get_string() == "と"
         && i >= 2
         && matches!(nodes[i - 2].get_orig(), Some("辛い" | "苦しい"))
+}
+
+fn sentence_nodes(nodes: &[NJDNode], i: usize) -> &[NJDNode] {
+    let boundary = |node: &NJDNode| matches!(node.get_string(), "。" | "？" | "！" | "「" | "」");
+    let start = nodes[..i].iter().rposition(boundary).map_or(0, |at| at + 1);
+    let end = nodes[i + 1..]
+        .iter()
+        .position(boundary)
+        .map_or(nodes.len(), |at| i + 1 + at);
+    &nodes[start..end]
 }
 
 fn cloth_processing(nodes: &[NJDNode], i: usize) -> bool {
