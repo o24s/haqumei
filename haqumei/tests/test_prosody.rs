@@ -35,6 +35,20 @@ mod tests {
         assert!(vowels[50..].iter().all(|p| *p == PitchAccent::Low));
     }
 
+    #[test]
+    fn fillers_split_phrases_before_the_nucleus_is_calculated() {
+        let mut engine = Haqumei::new().unwrap();
+        let expected = engine.run_frontend("東京タワー").unwrap();
+        let features = engine.run_frontend("東京タワーえーとスカイツリー").unwrap();
+        assert_eq!(features[0].acc, expected[0].acc);
+        let filler = features.iter().position(|f| f.pos == "フィラー").unwrap();
+        assert_eq!(features[filler].chain_flag, 0);
+        assert_eq!(features[filler + 1].chain_flag, 0);
+        let prefix = engine.run_frontend("当大学病院").unwrap();
+        let plain = engine.run_frontend("大学病院").unwrap();
+        assert_eq!(prefix[1].acc, plain[0].acc);
+    }
+
     /// ピッチ付きの音素を生成する (High)
     fn h(ph: Phoneme) -> ProsodicPhoneme {
         ProsodicPhoneme::Phoneme {

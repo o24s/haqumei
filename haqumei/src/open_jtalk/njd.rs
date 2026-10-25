@@ -260,6 +260,7 @@ pub(crate) fn run_frontend(
     protected_raw: &[bool],
     apply_unvoicing: bool,
     split_prefixes: bool,
+    split_fillers: bool,
 ) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
@@ -392,6 +393,25 @@ pub(crate) fn run_frontend(
     accent_phrase::njd_set_accent_phrase(&mut njd);
     if split_prefixes {
         split_prefix_accent_phrase(&mut njd.nodes);
+    }
+    if split_fillers {
+        // 核の計算後に句だけを分けると、前の語に句の範囲を超える核が残る。
+        for i in 0..njd.nodes.len() {
+            if matches!(
+                njd.nodes[i].get_pos(),
+                haqumei_jpreprocess_core::pos::POS::Filler
+            ) {
+                njd.nodes[i].set_chain_flag(false);
+                if let Some(next) = njd.nodes.get_mut(i + 1)
+                    && matches!(
+                        next.get_pos(),
+                        haqumei_jpreprocess_core::pos::POS::Meishi(_)
+                    )
+                {
+                    next.set_chain_flag(false);
+                }
+            }
+        }
     }
     accent_type::njd_set_accent_type(&mut njd);
     if apply_unvoicing {
@@ -646,7 +666,7 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw, false, &[], true, false).unwrap();
+        let features = super::run_frontend(&raw, false, &[], true, false, false).unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();

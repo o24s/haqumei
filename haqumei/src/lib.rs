@@ -128,6 +128,7 @@ impl Haqumei {
         self.open_jtalk.resolve_kanji_variants = self.options.resolve_kanji_variants;
         self.open_jtalk.defer_unvoicing = true;
         self.open_jtalk.split_prefix_accent_phrase = self.options.split_prefix_accent_phrase;
+        self.open_jtalk.split_filler_accent_phrase = self.options.modify_filler_accent;
         Ok(())
     }
 
