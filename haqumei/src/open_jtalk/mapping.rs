@@ -877,6 +877,13 @@ impl OpenJTalk {
             .collect();
 
         self.assign_and_merge_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
+        for word in &mut mapping {
+            word.mora_count = word
+                .phonemes
+                .iter()
+                .filter(|p| p.is_vowel() || p.is_moraic_nasal() || **p == Phoneme::Cl)
+                .count() as i32;
+        }
         Ok(mapping)
     }
 
@@ -912,6 +919,12 @@ impl OpenJTalk {
             .collect();
 
         self.assign_and_merge_prosodic_phonemes(njd_features, &mut mapping, is_non_pause_symbol)?;
+        for word in &mut mapping {
+            word.mora_count = word.phonemes.iter().filter(|p| matches!(p,
+                ProsodicPhoneme::Phoneme { phoneme, .. }
+                    if phoneme.is_vowel() || phoneme.is_moraic_nasal() || *phoneme == Phoneme::Cl
+            )).count() as i32;
+        }
         Ok(mapping)
     }
 

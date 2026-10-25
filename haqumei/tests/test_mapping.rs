@@ -22,6 +22,26 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 ";
 
     #[test]
+    fn mora_count_matches_the_phonemes_generated_after_a_pause() {
+        let mut engine = Haqumei::new().unwrap();
+        let words = engine.g2p_mapping_detailed("叫ぶ（ーーッ）").unwrap();
+        let shout = words.iter().find(|w| w.word == "叫ぶ").unwrap();
+        assert_eq!(shout.mora_count, 3);
+        let trailing = words.iter().find(|w| w.word == "ーーッ").unwrap();
+        assert_eq!(trailing.phonemes, [Phoneme::Cl]);
+        assert_eq!(trailing.mora_count, 1);
+        let prosody = engine.g2p_mapping_prosody("叫ぶ（ーーッ）").unwrap();
+        assert_eq!(
+            prosody
+                .iter()
+                .find(|w| w.word == "ーーッ")
+                .unwrap()
+                .mora_count,
+            1
+        );
+    }
+
+    #[test]
     fn leading_long_vowels_stay_with_their_morph() {
         let mut engine = Haqumei::new().unwrap();
         for (text, expected) in [
