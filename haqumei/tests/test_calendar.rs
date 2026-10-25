@@ -1,6 +1,22 @@
 use haqumei::{Haqumei, HaqumeiOptions, UnicodeNormalization};
 use unicode_normalization::UnicodeNormalization as _;
 
+#[test]
+fn kanji_month_range_keeps_calendar_reading() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("二−四月の予定", "ニ−シガツノヨテー"),
+        ("二〜四月の予定", "ニ〜シガツノヨテー"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+    let duration = engine.run_frontend("一 月が過ぎた").unwrap();
+    assert_eq!(
+        duration.iter().find(|f| f.string == "月").unwrap().read,
+        "ツキ"
+    );
+}
+
 fn prosody(engine: &mut Haqumei, text: &str) -> Vec<String> {
     engine
         .g2p_prosody(text)

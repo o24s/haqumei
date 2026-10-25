@@ -304,3 +304,74 @@ fn counters_distinguish_quantities_suffixes_and_ordinals() {
         assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
     }
 }
+
+#[test]
+fn fractions_of_a_ratio_use_bu_without_changing_minutes() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("打率3割2分5厘", "ダリツサンワリニブゴリン"),
+        ("2割5分", "ニワリゴブ"),
+        ("1割1分", "イチワリイチブ"),
+        ("3割6分", "サンワリロクブ"),
+        ("5分5厘", "ゴブゴリン"),
+        ("3分5秒", "サンプンゴビョー"),
+        ("3分待つ", "サンプンマツ"),
+        ("5分後", "ゴフンゴ"),
+        ("十分間", "ジュップンカン"),
+        ("100分の1", "ヒャクブンノイチ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+    engine.options.modify_numeral_reading = false;
+    assert_eq!(engine.g2k("2割5分").unwrap(), "ニワリゴフン");
+}
+
+#[test]
+fn lower_case_unit_letters_follow_numbers_but_not_formula_operators() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, read) in [
+        ("荷物は四千ｇだった", "ニモツワヨンセングラムダッタ"),
+        ("八十ｍ先の交差点", "ハチジューメートルサキノコーサテン"),
+        ("5ｔ", "ゴトン"),
+        ("2ｌ", "ニリットル"),
+        ("１ｍｍ", "イチミリメートル"),
+        ("５ｍｇ", "ゴミリグラム"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), read, "{text}");
+    }
+    for text in [
+        "ｍサイズ",
+        "ｇ",
+        "検定の結果、ｔ値が大きい",
+        "2m+1",
+        "2ｍ＋1",
+        "x＝2ｔ×3",
+        "5Ｌ判",
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        assert!(
+            features
+                .iter()
+                .filter(|f| matches!(f.string.as_str(), "ｇ" | "ｍ" | "ｔ" | "ｌ" | "Ｌ"))
+                .all(|f| f.pos_group2 != "助数詞"),
+            "{text}: {features:?}"
+        );
+    }
+    for (text, expected) in [
+        ("5ｇ", "^go[gu]ramu$"),
+        ("5ｍ", "^go[me]etoru$"),
+        ("5ｔ", "^go]toN$"),
+        ("2ｌ", "^ni[ri]cltoru$"),
+    ] {
+        assert_eq!(
+            engine
+                .g2p_prosody(text)
+                .unwrap()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<String>(),
+            expected,
+            "{text}"
+        );
+    }
+}

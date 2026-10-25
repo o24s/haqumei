@@ -68,3 +68,14 @@ fn protected_loanwords_do_not_move_the_phrase_nucleus() {
     assert_eq!(word.pron, "イエロー");
     assert_eq!(word.mora_size, 4);
 }
+
+#[test]
+fn protected_unit_letter_keeps_the_registered_symbol_reading() {
+    let (_temp, mut engine) =
+        engine("ｇ,4,4,-10000,記号,アルファベット,*,*,*,*,ｇ,ジー,ジー,0/2,*\n");
+    let features = engine.run_frontend("5ｇ").unwrap();
+    let letter = features.iter().find(|f| f.string == "ｇ").unwrap();
+    assert_eq!(letter.read, "ジー");
+    assert_eq!(letter.pos, "記号");
+    assert_eq!(letter.acc, 0);
+}

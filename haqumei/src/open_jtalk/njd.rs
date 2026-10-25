@@ -370,9 +370,14 @@ pub(crate) fn run_frontend(
             }
         }
     }
+    if modify_numeral_reading {
+        counter::prepare_old_place_characters(&mut nodes, &protected_nodes);
+    }
     counter::restore_counter_features(&mut nodes, &protected_nodes);
     if modify_numeral_reading {
         counter::prepare_fraction_denominators(&mut nodes, &protected_nodes);
+        counter::prepare_ratio_readings(&mut nodes, &protected_nodes);
+        counter::prepare_unit_letters(&mut nodes, &protected_nodes);
     }
     number::mark_identifiers(&mut nodes, &protected_nodes);
     let mut njd = NJD { nodes };

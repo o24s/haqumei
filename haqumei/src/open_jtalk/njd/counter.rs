@@ -5,6 +5,60 @@ use haqumei_jpreprocess_core::{
 };
 use haqumei_jpreprocess_njd::NJDNode;
 
+pub(super) fn prepare_unit_letters(nodes: &mut [NJDNode], protected: &[bool]) {
+    for i in 1..nodes.len() {
+        if protected[i]
+            || !nodes[i - 1].get_pos().is_kazu()
+            || !matches!(nodes[i].get_pos(), POS::Kigou(_))
+        {
+            continue;
+        }
+        // 「2m+1」は数式の変数なので、直後に演算子がある英字は単位へ変えない。
+        if nodes
+            .get(i + 1)
+            .and_then(|n| n.get_string().chars().next())
+            .is_some_and(|c| "＋−－＝×÷＊＜＞+-=*<>".contains(c))
+        {
+            continue;
+        }
+        let (read, accent, rule) = match nodes[i].get_string() {
+            "ｇ" => ("グラム", 1, "C1"),
+            "ｍ" => ("メートル", 0, "C2"),
+            "ｔ" => ("トン", 1, "C3"),
+            "ｌ" => ("リットル", 0, "C2"),
+            _ => continue,
+        };
+        let details = nodes[i].get_details_mut();
+        details.pos = POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi));
+        details.pos_original = None;
+        details.read = Some(read.into());
+        details.pron = Pronunciation::parse(read, accent).unwrap();
+        details.chain_rule = ChainRules::new(rule);
+    }
+}
+
+pub(super) fn prepare_old_place_characters(nodes: &mut [NJDNode], protected: &[bool]) {
+    for i in 0..nodes.len() {
+        if protected[i] || !matches!(nodes[i].get_string(), "拾" | "萬") {
+            continue;
+        }
+        let context = nodes[i].get_pos().is_kazu()
+            || (i > 0 && nodes[i - 1].get_pos().is_kazu())
+            || nodes.get(i + 1).is_some_and(|n| {
+                n.get_pos().is_kazu()
+                    || matches!(n.get_string(), "萬" | "円" | "万円" | "億円" | "兆円")
+            });
+        if context {
+            let feature = if nodes[i].get_string() == "拾" {
+                "十,名詞,数,*,*,*,*,十,ジュウ,ジュー,1/2,*"
+            } else {
+                "万,名詞,数,*,*,*,*,万,マン,マン,1/2,*"
+            };
+            nodes[i].replace_from_csv(feature);
+        }
+    }
+}
+
 pub(super) fn prepare_fraction_denominators(nodes: &mut [NJDNode], protected: &[bool]) {
     for i in 1..nodes.len().saturating_sub(2) {
         if !protected[i]
@@ -21,12 +75,68 @@ pub(super) fn prepare_fraction_denominators(nodes: &mut [NJDNode], protected: &[
     }
 }
 
+pub(super) fn prepare_ratio_readings(nodes: &mut [NJDNode], protected: &[bool]) {
+    for i in 0..nodes.len() {
+        if protected[i] {
+            continue;
+        }
+        let surface = nodes[i].get_string();
+        let separate = surface == "分" && i > 0 && nodes[i - 1].get_pos().is_kazu();
+        let combined = surface.strip_suffix('分').is_some_and(|prefix| {
+            !prefix.is_empty()
+                && prefix
+                    .chars()
+                    .all(|c| "一二三四五六七八九十百千〇零".contains(c))
+        });
+        if !(separate || combined) {
+            continue;
+        }
+        let mut start = i;
+        while start > 0 && nodes[start - 1].get_pos().is_kazu() {
+            start -= 1;
+        }
+        let after_wari = start > 0 && nodes[start - 1].get_string() == "割";
+        let mut end = i + 1;
+        while end < nodes.len() && nodes[end].get_pos().is_kazu() {
+            end += 1;
+        }
+        let before_rin = end > i + 1 && nodes.get(end).is_some_and(|n| n.get_string() == "厘");
+        if !(after_wari || before_rin) {
+            continue;
+        }
+        // 「3分5秒」は時間なので、割合の割・厘がある用例だけをブへ戻す。
+        let old = nodes[i].get_pron().to_pure_string();
+        let pron = if separate {
+            "ブ".to_owned()
+        } else if let Some(prefix) = old
+            .strip_suffix("プン")
+            .or_else(|| old.strip_suffix("フン"))
+        {
+            format!("{prefix}ブ")
+        } else {
+            continue;
+        };
+        let accent = nodes[i].get_pron().accent();
+        nodes[i].set_read(&pron);
+        nodes[i].set_pron(Pronunciation::parse(&pron, accent).unwrap());
+    }
+}
+
 // 数詞と助数詞の間に空白があると、「3 人」の「人」などが一般名詞になる。
 // 助数詞の特徴量へ戻してから既存の数詞処理で音便とアクセントを決める。
 // https://github.com/tsukumijima/open_jtalk/commit/46739160128d471996e878c9617d42cbd918a334
 // https://github.com/tsukumijima/open_jtalk/commit/7ca709eba57f6d8eb73bfeb74f06c007fe2b67b1
 pub(super) fn restore_counter_features(nodes: &mut [NJDNode], protected: &[bool]) {
     for i in 1..nodes.len() {
+        if !protected[i] && calendar_range_month(nodes, i) {
+            let details = nodes[i].get_details_mut();
+            details.pos = POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi));
+            details.pos_original = None;
+            details.read = Some("ガツ".into());
+            details.pron = Pronunciation::parse("ガツ", 2).unwrap();
+            details.chain_rule = ChainRules::new("C1");
+            details.chain_flag = None;
+        }
         let roman_counter = nodes[i - 1].roman_source().is_some()
             && matches!(
                 nodes[i].get_string(),
@@ -108,6 +218,51 @@ pub(super) fn restore_counter_features(nodes: &mut [NJDNode], protected: &[bool]
         details.chain_rule = ChainRules::new(rule);
         details.chain_flag = None;
     }
+}
+
+fn calendar_range_month(nodes: &[NJDNode], i: usize) -> bool {
+    if nodes[i].get_string() != "月" || nodes.get(i + 1).is_none_or(|n| n.get_string() != "の") {
+        return false;
+    }
+    let mut start = i;
+    while start > 0 && nodes[start - 1].get_pos().is_kazu() {
+        start -= 1;
+    }
+    if start < 2
+        || start == i
+        || !matches!(nodes[start - 1].get_string(), "−" | "〜" | "～")
+        || !nodes[start - 2].get_pos().is_kazu()
+    {
+        return false;
+    }
+    let spelling: String = nodes[start..i].iter().map(|n| n.get_string()).collect();
+    // 範囲の終点が暦月である場合に限り、期間の「ツキ」をガツへ戻す。
+    matches!(
+        spelling.as_str(),
+        "一" | "二"
+            | "三"
+            | "四"
+            | "五"
+            | "六"
+            | "七"
+            | "八"
+            | "九"
+            | "十"
+            | "十一"
+            | "十二"
+            | "１"
+            | "２"
+            | "３"
+            | "４"
+            | "５"
+            | "６"
+            | "７"
+            | "８"
+            | "９"
+            | "１０"
+            | "１１"
+            | "１２"
+    )
 }
 
 static COUNTERS: phf::Map<&'static str, (&'static str, &'static str, usize, &'static str)> = phf::phf_map! {
