@@ -104,6 +104,14 @@ fn capsizing_reading_keeps_transitive_covering() {
 }
 
 #[test]
+fn water_master_reading_keeps_adverbial_shutoshite() {
+    check_context_readings(
+        &[("湖の主として恐れられる", "主として", "ヌシトシテ", 5)],
+        &["主として魚を飼う"],
+    );
+}
+
+#[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [

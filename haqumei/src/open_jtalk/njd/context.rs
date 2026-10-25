@@ -240,6 +240,18 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
     {
         return Some(("クツガエッ", "クツガエッ", 3));
     }
+    // 湖の主として北側、の主としては副詞のまま。主の役割を述べる述語を確認する。
+    if node.get_string() == "主として"
+        && matches!(node.get_pos(), POS::Fukushi(_))
+        && via_no
+        && previous_previous.is_some_and(|n| {
+            matches!(n.get_pos(), POS::Meishi(_))
+                && (matches!(n.get_string(), "湖" | "沼" | "池") || n.get_string().ends_with('湖'))
+        })
+        && water_master_predicate(nodes, i)
+    {
+        return Some(("ヌシトシテ", "ヌシトシテ", 1));
+    }
     if !matches!(node.get_pos(), POS::Meishi(_)) {
         return None;
     }
@@ -398,6 +410,24 @@ fn after_auxiliaries(nodes: &[NJDNode], mut at: usize) -> usize {
         }
     }
     at
+}
+
+fn water_master_predicate(nodes: &[NJDNode], i: usize) -> bool {
+    let Some(predicate) = nodes.get(i + 1) else {
+        return false;
+    };
+    let passive = matches!(
+        predicate.get_orig(),
+        Some("恐れる" | "崇める" | "知る" | "語り継ぐ")
+    ) && nodes
+        .get(i + 2)
+        .is_some_and(|n| matches!(n.get_orig(), Some("れる" | "られる")));
+    passive
+        || predicate.get_orig() == Some("祀る")
+        || (predicate.get_string() == "君臨"
+            && nodes
+                .get(i + 2)
+                .is_some_and(|n| n.get_orig() == Some("する")))
 }
 
 fn face_predicate(nodes: &[NJDNode], i: usize) -> bool {
