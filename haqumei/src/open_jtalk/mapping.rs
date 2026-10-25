@@ -520,9 +520,9 @@ fn is_number_block_surface(surface: &str) -> bool {
     is_number_surface(surface) || matches!(surface, "," | "，")
 }
 
-fn is_day_counter_surface(surface: &str) -> bool {
+fn is_contracted_counter_surface(surface: &str) -> bool {
     surface
-        .strip_suffix('日')
+        .strip_suffix(['日', '人'])
         .is_some_and(|number| number.is_empty() || is_number_surface(number))
 }
 
@@ -539,10 +539,15 @@ fn day_number_keys(surface: &str) -> Vec<char> {
     }
 }
 
-fn day_morph_end(morphs: &[MecabMorph], start: usize, surface: &str) -> Option<usize> {
-    if !is_day_counter_surface(surface) || surface == "日" {
+fn contracted_counter_morph_end(
+    morphs: &[MecabMorph],
+    start: usize,
+    surface: &str,
+) -> Option<usize> {
+    if !is_contracted_counter_surface(surface) || matches!(surface, "日" | "人") {
         return None;
     }
+    let counter = surface.chars().next_back()?;
     let expected = day_number_keys(surface);
     let mut number = String::new();
     for (offset, morph) in morphs[start..].iter().enumerate() {
@@ -551,8 +556,10 @@ fn day_morph_end(morphs: &[MecabMorph], start: usize, surface: &str) -> Option<u
         }
         if is_number_surface(&morph.surface) {
             number.push_str(&morph.surface);
-        } else if is_day_counter_surface(&morph.surface) {
-            number.push_str(morph.surface.strip_suffix('日').unwrap());
+        } else if let Some(prefix) = morph.surface.strip_suffix(counter)
+            && is_contracted_counter_surface(&morph.surface)
+        {
+            number.push_str(prefix);
             let keys = day_number_keys(&number);
             let first = keys.iter().position(|&c| c != '〇').unwrap_or(0);
             if keys == expected || keys[first..] == expected {
@@ -579,8 +586,8 @@ fn collect_number_morphs(
             let following = (i + 1..morphs.len())
                 .find(|&j| !morphs[j].is_ignored)
                 .unwrap_or(morphs.len());
-            // 「1 10日」の日付を前の数へ含めると、空白と日付の区間が重なる。
-            if day_morph_end(morphs, following, next_surface).is_some() {
+            // 「1 10日」「1 2人」の後ろの数を前へ含めると、空白と縮約語の区間が重なる。
+            if contracted_counter_morph_end(morphs, following, next_surface).is_some() {
                 stopped_before_day = true;
                 break;
             }
@@ -598,8 +605,8 @@ fn collect_number_morphs(
         .last()
         .and_then(|&last| morphs[last + 1..].iter().find(|m| !m.is_ignored));
     if !stopped_before_day
-        && is_day_counter_surface(next_surface)
-        && next_surface != "日"
+        && is_contracted_counter_surface(next_surface)
+        && !matches!(next_surface, "日" | "人")
         && following.is_none_or(|m| !m.surface.starts_with(next_surface))
     {
         let expected = day_number_keys(next_surface);
@@ -820,7 +827,7 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
             continue;
         };
 
-        if let Some(end) = day_morph_end(morphs, morph_idx, word) {
+        if let Some(end) = contracted_counter_morph_end(morphs, morph_idx, word) {
             spans[idx] = morph.char_span.start..morphs[end - 1].char_span.end;
             morph_idx = end;
             idx += 1;
@@ -1428,7 +1435,7 @@ impl OpenJTalk {
                 if has_odori_chars(&morph.surface) {
                     morph_idx += consume_odori_morphs(&morphs, morph_idx, map.word());
                 } else if is_number_surface(&morph.surface)
-                    && (is_number_surface(map.word()) || is_day_counter_surface(map.word()))
+                    && (is_number_surface(map.word()) || is_contracted_counter_surface(map.word()))
                 {
                     // NJD の区間と同じ境界まで消費し、日付の桁を二度割り当てない。
                     while morphs

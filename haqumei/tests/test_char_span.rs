@@ -1,6 +1,50 @@
 use haqumei::{Haqumei, HaqumeiOptions, njd_char_spans};
 
 #[test]
+fn line_breaks_and_tabs_keep_numbers_separate_in_all_mappings() {
+    let mut engine = Haqumei::new().unwrap();
+    for separator in ["\n", "\r", "\r\n", "\t"] {
+        for (before, after) in [("10", "20円"), ("1", "2人"), ("今日は晴れ。", "明日は雨。")]
+        {
+            let input = format!("{before}{separator}{after}");
+            let reference = format!("{before}{}{after}", " ".repeat(separator.len()));
+            assert_eq!(engine.g2p(&input).unwrap(), engine.g2p(&reference).unwrap());
+            assert_eq!(engine.g2k(&input).unwrap(), engine.g2k(&reference).unwrap());
+            assert_eq!(
+                engine.g2p_prosody(&input).unwrap(),
+                engine.g2p_prosody(&reference).unwrap()
+            );
+            let basic = engine.g2p_mapping(&input).unwrap();
+            let detailed = engine.g2p_mapping_detailed(&input).unwrap();
+            let prosody = engine.g2p_mapping_prosody(&input).unwrap();
+            let spans: Vec<_> = basic.iter().map(|word| word.char_span.clone()).collect();
+            let mut end = 0;
+            for span in &spans {
+                if !span.is_empty() {
+                    assert_eq!(span.start, end, "{input:?}: {basic:?}");
+                    end = span.end;
+                }
+            }
+            assert_eq!(end, input.chars().count(), "{input:?}");
+            assert_eq!(
+                spans,
+                detailed
+                    .iter()
+                    .map(|word| word.char_span.clone())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                spans,
+                prosody
+                    .iter()
+                    .map(|word| word.char_span.clone())
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+}
+
+#[test]
 fn number_and_symbol_boundaries_preserve_all_mapping_variants() {
     use haqumei::Phoneme;
     let mut engine = Haqumei::new().unwrap();

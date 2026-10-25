@@ -1,6 +1,7 @@
 use phf::{Map, phf_map};
 
-/// Open JTalk と同じ変換表で正規化します。ASCII の制御文字は出力しません。
+/// Open JTalk と同じ変換表で正規化します。
+/// 改行とタブは全角空白へ変換し、それ以外の ASCII 制御文字は出力しません。
 pub fn normalize_text_for_open_jtalk(input: &str) -> String {
     normalize_text_for_open_jtalk_with_mapping(input, |_, _| {})
 }
@@ -41,6 +42,10 @@ pub fn normalize_text_for_open_jtalk_with_mapping(
 }
 
 const SINGLE: Map<char, &str> = phf_map! {
+    // 数字の間の改行やタブを消すと、前後が一つの数につながる。
+    '\n' => "　",
+    '\r' => "　",
+    '\t' => "　",
     ' ' => "　",
     '!' => "！",
     '"' => "”",
@@ -238,7 +243,7 @@ mod tests {
     fn mapping_tracks_composed_removed_and_unchanged_characters() {
         let mut spans = Vec::new();
         let normalized =
-            normalize_text_for_open_jtalk_with_mapping("\tｶﾞAﾟ𠮷", |from, to| {
+            normalize_text_for_open_jtalk_with_mapping("\0ｶﾞAﾟ𠮷", |from, to| {
                 spans.push((from, to));
             });
         assert_eq!(normalized, "ガＡ𠮷");
@@ -271,10 +276,29 @@ mod tests {
     }
 
     #[test]
-    fn controls_are_omitted_without_changing_unicode_text() {
+    fn other_controls_are_omitted_without_changing_unicode_text() {
         assert_eq!(
-            normalize_text_for_open_jtalk("\0\tA\r\n\u{7f}𠮷🙂\u{85}Ｂ"),
+            normalize_text_for_open_jtalk("\0\u{1}A\u{7f}𠮷🙂\u{85}Ｂ"),
             "Ａ𠮷🙂\u{85}Ｂ"
         );
+    }
+
+    #[test]
+    fn line_breaks_and_tabs_keep_number_boundaries_and_mapping() {
+        for separator in ["\n", "\r", "\r\n", "\t"] {
+            let input = format!("10{separator}20円");
+            let mut spans = Vec::new();
+            let normalized = normalize_text_for_open_jtalk_with_mapping(&input, |from, to| {
+                spans.push((from, to));
+            });
+            assert_eq!(
+                normalized,
+                format!("１０{}２０円", "　".repeat(separator.len()))
+            );
+            for (i, (from, to)) in spans.iter().enumerate() {
+                assert_eq!(*to, i..i + 1);
+                assert_eq!(input[from.clone()].chars().count(), 1);
+            }
+        }
     }
 }
