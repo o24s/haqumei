@@ -1,6 +1,21 @@
 use haqumei::Haqumei;
 
 #[test]
+fn kilo_units_geminate_with_mixed_case_symbols() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("6kW", "ロッキロワット"),
+        ("6kHz", "ロッキロヘルツ"),
+        ("6kWh", "ロッキロワットアワー"),
+        ("6kw", "ロッキロワット"),
+        ("6キロワット", "ロッキロワット"),
+        ("6.1kW", "ロクテンイチキロワット"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn written_places_have_the_same_accent_as_arabic_numbers() {
     let mut h = Haqumei::new().unwrap();
     for (written, digits) in [

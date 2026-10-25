@@ -105,6 +105,13 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
                 class1::CONV_TABLE_SEVEN.get(prev.get_string())
             }
             ("アンダー", _) if !compound => class1::CONV_TABLE_UNDER.get(prev.get_string()),
+            // ｋＷ・ｋＨｚは小文字の単位表にないが、キロワットと同じ促音化が起きる。
+            (unit, _)
+                if unit.starts_with('ｋ')
+                    && node.get_read().is_some_and(|read| read.starts_with("キロ")) =>
+            {
+                class1::CONV_TABLE1I.get(prev.get_string())
+            }
             _ => find_pron_conv_set(
                 &class1::CONVERSION_TABLE,
                 node.get_string(),
