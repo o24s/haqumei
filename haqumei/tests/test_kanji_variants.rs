@@ -145,3 +145,14 @@ fn options_batch_mapping_and_candidates_agree() {
         }
     }
 }
+#[test]
+fn variation_selectors_do_not_split_words_or_shift_normalized_spans() {
+    let mut engine = haqumei::Haqumei::new().unwrap();
+    for (input, plain) in [("葛󠄀飾区", "葛飾区"), ("葛\u{FE00}飾区", "葛飾区")] {
+        assert_eq!(engine.g2k(input).unwrap(), engine.g2k(plain).unwrap());
+        let actual = engine.g2p_mapping_detailed(input).unwrap();
+        let expected = engine.g2p_mapping_detailed(plain).unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.last().unwrap().char_span.end, plain.chars().count());
+    }
+}

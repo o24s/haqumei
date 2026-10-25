@@ -26,10 +26,12 @@ pub fn normalize_text_for_open_jtalk_with_mapping(
             mapped(start..next + ch.len_utf8(), before..count);
             continue;
         }
+        // 字形だけを指定するセレクターを解析へ渡すと、漢字の連続が未知語で分断される。
+        let is_selector = matches!(current, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}');
         if let Some(replacement) = SINGLE.get(&current) {
             result.push_str(replacement);
             count += replacement.chars().count();
-        } else if !current.is_ascii_control() {
+        } else if !current.is_ascii_control() && !is_selector {
             result.push(current);
             count += 1;
         }
