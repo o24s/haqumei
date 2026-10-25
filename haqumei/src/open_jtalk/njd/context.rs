@@ -1,6 +1,10 @@
 //! 単語の読みと核を、助詞との結合より先に決める。
 
-use haqumei_jpreprocess_core::{pos::POS, pronunciation::Pronunciation};
+use haqumei_jpreprocess_core::{
+    accent_rule::ChainRules,
+    pos::{Meishi, POS},
+    pronunciation::Pronunciation,
+};
 use haqumei_jpreprocess_njd::NJDNode;
 
 pub(super) fn prepare_person_names(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {
@@ -143,6 +147,18 @@ pub(super) fn prepare_readings(nodes: &mut [NJDNode], protected: &[bool]) {
         if protected[i] {
             continue;
         }
+        if let Some((reading, pronunciation, accent)) = lexical_reading(nodes, i) {
+            // 読みの長さや単語の核が変わるため、助詞との結合前に設定する。
+            nodes[i].set_read(reading);
+            nodes[i].set_pron(Pronunciation::parse(pronunciation, accent).unwrap());
+            if nodes[i].get_string() == "際" {
+                // 時を表す非自立名詞のサイと区別し、端を指すキワを独立した句にする。
+                *nodes[i].get_pos_mut() = POS::Meishi(Meishi::General);
+                nodes[i].get_details_mut().pos_original = None;
+                nodes[i].get_details_mut().chain_rule = ChainRules::new("C3");
+                nodes[i].set_chain_flag(false);
+            }
+        }
         let table = nodes[i].get_string() == "表"
             && (nodes
                 .get(i + 1)
@@ -193,4 +209,120 @@ pub(super) fn prepare_readings(nodes: &mut [NJDNode], protected: &[bool]) {
             nodes[i].set_pron(Pronunciation::parse("カメー", 0).unwrap());
         }
     }
+}
+
+fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'static str, usize)> {
+    // 黒白・紅色・水の面は同じ語義でも読みが複数あるので、読みの好みだけを理由に書き換えていない。
+    let node = &nodes[i];
+    let previous = i.checked_sub(1).and_then(|at| nodes.get(at));
+    let previous_previous = i.checked_sub(2).and_then(|at| nodes.get(at));
+    let following = nodes.get(i + 1);
+    let predicate = nodes.get(i + 2);
+    let via_no = previous.is_some_and(|n| {
+        n.get_string() == "の" && n.get_pos().to_string().starts_with("助詞,連体化,")
+    });
+    if !matches!(node.get_pos(), POS::Meishi(_)) {
+        return None;
+    }
+
+    match node.get_string() {
+        // 神の代理・神の代行は別の形態素なので、独立した代だけを対象にする。
+        "代" if matches!(node.get_pos(), POS::Meishi(Meishi::General))
+            && via_no
+            && previous_previous.is_some_and(|n| {
+                n.get_string() == "神" && matches!(n.get_pos(), POS::Meishi(Meishi::General))
+            })
+            && following.is_none_or(|n| {
+                matches!(n.get_pos(), POS::Joshi(_) | POS::Jodoushi | POS::Kigou(_))
+            }) =>
+        {
+            Some(("ヨ", "ヨ", 1))
+        }
+        // 洪水の際・排水の際は、前の形態素が水ではないのでサイを保つ。
+        "際" if via_no
+            && previous_previous.is_some_and(|n| {
+                matches!(n.get_string(), "崖" | "淵" | "水")
+                    && matches!(n.get_pos(), POS::Meishi(_))
+            }) =>
+        {
+            Some(("キワ", "キワ", 2))
+        }
+        // 書物を直す用法まで変えないよう、事の本を正すという連語に限る。
+        "本" if via_no
+            && previous_previous.is_some_and(|n| n.get_string() == "事")
+            && following.is_some_and(|n| n.get_string() == "を")
+            && predicate.is_some_and(|n| n.get_orig() == Some("正す")) =>
+        {
+            Some(("モト", "モト", 2))
+        }
+        "汚れ"
+            if following.is_some_and(|n| n.get_string() == "を")
+                && predicate.is_some_and(|n| n.get_orig() == Some("祓う")) =>
+        {
+            Some(("ケガレ", "ケガレ", 0))
+        }
+        "盲" | "聾" if disability_enumeration(nodes, i) => {
+            if node.get_string() == "盲" {
+                Some(("モウ", "モー", 1))
+            } else {
+                Some(("ロウ", "ロー", 1))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn disability_enumeration(nodes: &[NJDNode], i: usize) -> bool {
+    const TERMS: &[&str] = &[
+        "盲",
+        "聾",
+        "ろう",
+        "盲学校",
+        "聾学校",
+        "ろう学校",
+        "養護学校",
+        "視覚障害",
+        "聴覚障害",
+        "知的障害",
+        "肢体不自由",
+        "病弱",
+    ];
+    for step in [-1isize, 1] {
+        let Some(separator) = i.checked_add_signed(step) else {
+            continue;
+        };
+        if !nodes
+            .get(separator)
+            .is_some_and(|n| matches!(n.get_string(), "・" | "、"))
+        {
+            continue;
+        }
+        let mut cursor = separator.checked_add_signed(step);
+        let mut term = String::new();
+        while let Some(at) = cursor {
+            let Some(node) = nodes.get(at) else { break };
+            if !matches!(node.get_pos(), POS::Meishi(_)) {
+                break;
+            }
+            if step < 0 {
+                term.insert_str(0, node.get_string());
+            } else {
+                term.push_str(node.get_string());
+            }
+            if TERMS.contains(&term.as_str()) {
+                return true;
+            }
+            if !TERMS.iter().any(|candidate| {
+                if step < 0 {
+                    candidate.ends_with(&term)
+                } else {
+                    candidate.starts_with(&term)
+                }
+            }) {
+                break;
+            }
+            cursor = at.checked_add_signed(step);
+        }
+    }
+    false
 }

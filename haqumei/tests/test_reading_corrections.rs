@@ -1,5 +1,51 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
+fn check_context_readings(cases: &[(&str, &str, &str, i32)], preserved: &[&str]) {
+    let mut engine = Haqumei::new().unwrap();
+    for &(text, word, reading, moras) in cases {
+        let features = engine.run_frontend(text).unwrap();
+        let feature = features.iter().find(|f| f.string == word).unwrap();
+        assert_eq!(feature.read, reading, "{text}");
+        assert_eq!(feature.mora_size, moras, "{text}");
+    }
+    for &text in preserved {
+        let with_rules = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        let without_rules = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = true;
+        assert_eq!(with_rules, without_rules, "{text}");
+    }
+}
+
+#[test]
+fn conventional_phrases_select_readings_before_chaining() {
+    check_context_readings(
+        &[
+            ("神の代から続く", "代", "ヨ", 1),
+            ("崖の際に立つ", "際", "キワ", 2),
+            ("淵の際まで進む", "際", "キワ", 2),
+            ("事の本を正す", "本", "モト", 2),
+            ("汚れを祓う", "汚れ", "ケガレ", 3),
+            ("盲・聾・養護学校", "盲", "モウ", 2),
+            ("盲・聾・養護学校", "聾", "ロウ", 2),
+        ],
+        &[
+            "神の代理を務める",
+            "その際に読む",
+            "洪水の際に逃げる",
+            "黒白の写真を撮る",
+            "黒白を争う",
+            "本を読む",
+            "紅色細菌を調べる",
+            "紅色の着物を着る",
+            "町の聾学校",
+            "水の面では問題がある",
+            "水の面に月が映る",
+            "靴の汚れを清める",
+        ],
+    );
+}
+
 #[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
