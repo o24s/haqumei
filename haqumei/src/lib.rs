@@ -1078,7 +1078,15 @@ impl Haqumei {
             modify_acc_after_chaining(&mut njd_features);
         }
         if options.process_odoriji {
-            process_odori_features(&mut njd_features, &mut self.open_jtalk)?;
+            let protected: Vec<bool> = if saved.is_empty() {
+                Vec::new()
+            } else {
+                njd_char_spans(&njd_features, morphs)
+                    .into_iter()
+                    .map(|span| !span.is_empty() && saved.contains_key(&span.start))
+                    .collect()
+            };
+            process_odori_features(&mut njd_features, &mut self.open_jtalk, &protected)?;
         }
         if options.use_read_as_pron | options.revert_long_vowels | options.revert_yotsugana {
             self.revert_pron_to_read(&mut njd_features);

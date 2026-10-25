@@ -891,9 +891,16 @@ pub(crate) fn is_dakuon(c: char) -> bool {
 pub(crate) fn process_odori_features(
     njd_features: &mut Vec<NjdFeature>,
     open_jtalk: &mut OpenJTalk,
+    protected: &[bool],
 ) -> Result<(), HaqumeiError> {
+    let mut protected = protected.to_vec();
+    protected.resize(njd_features.len(), false);
     let mut i = 0;
     while i < njd_features.len() {
+        if protected[i] {
+            i += 1;
+            continue;
+        }
         let orig = &njd_features[i].orig;
         if is_dounojiten(orig) {
             // 踊り字「々」の処理
@@ -914,7 +921,7 @@ pub(crate) fn process_odori_features(
 
                             // 後続が1文字の漢字なら巻き込んで再解析
                             let (target_text, consumed_next) = if let Some(next) = next_token_opt {
-                                if is_single_kanji_feature(next) {
+                                if is_single_kanji_feature(next) && !protected[i + 1] {
                                     (format!("{}{}", last_char, next.orig), true)
                                 } else {
                                     (last_char.to_string(), false)
@@ -943,6 +950,7 @@ pub(crate) fn process_odori_features(
 
                 if range_end <= njd_features.len() {
                     njd_features.splice(i..range_end, analyzed);
+                    protected.splice(i..range_end, std::iter::repeat_n(false, analyzed_len));
 
                     if !consumed_next && analyzed_len > 0 {
                         set_to_noun(&mut njd_features[i]);
@@ -958,7 +966,10 @@ pub(crate) fn process_odori_features(
             let start = i;
             let mut end = i;
             let mut total_odori = 0;
-            while end < njd_features.len() && is_dounojiten(&njd_features[end].orig) {
+            while end < njd_features.len()
+                && !protected[end]
+                && is_dounojiten(&njd_features[end].orig)
+            {
                 total_odori += count_dounojiten(&njd_features[end].orig);
                 end += 1;
             }
