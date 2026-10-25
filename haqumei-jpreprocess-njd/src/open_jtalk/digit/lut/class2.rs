@@ -12,7 +12,7 @@ pub const CONVERSION_TABLE: [(Keys, NumerativeLUT); 5] = [
 const NUMERATIVE_CLASS2B: Keys = phf_set! {
     "分", "版", "敗", "発", "拍", "鉢", "波", "派",
     "泊", "犯", "班", "品", "分間", "片", "篇", "編",
-    "辺", "遍", "歩", "報", "方",
+    "辺", "歩", "報", "方",
 };
 
 const CONV_TABLE2B: NumerativeLUT = phf_map! {
@@ -30,7 +30,7 @@ const CONV_TABLE2B: NumerativeLUT = phf_map! {
 
 const NUMERATIVE_CLASS2C: Keys = phf_set! {
     "本", "匹", "疋", "票", "俵", "箱", "本立て", "杯",
-    "針",
+    "針", "遍",
 };
 
 const CONV_TABLE2C: NumerativeLUT = phf_map! {
