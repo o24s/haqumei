@@ -27,7 +27,7 @@ pub(super) fn convert_day_approximation(njd: &mut NJD) {
     }
 }
 
-fn is_decimal_digit(
+pub(super) fn is_decimal_digit(
     nodes: &[NJDNode],
     mut i: usize,
     decimal_points: &[usize],
@@ -102,10 +102,25 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
             node.set_read("ヘヤ");
             node.set_pron(pron!([He, Ya], node.get_pron().accent()));
         }
+        let reading = match node.get_string() {
+            "里" => Some("リ"),
+            "玉" if node.get_read() == Some("ギョク") => Some("タマ"),
+            "元" if node.get_read() == Some("モト") => Some("ゲン"),
+            _ => None,
+        };
+        if let Some(reading) = reading {
+            let accent = node.get_pron().accent();
+            node.set_read(reading);
+            node.set_pron(
+                haqumei_jpreprocess_core::pronunciation::Pronunciation::parse(reading, accent)
+                    .unwrap(),
+            );
+        }
 
         // 「分袖」「階級」「年生」は、後続語まで見ないと時間や階数の読みになる。
         let conversion = match (node.get_string(), next) {
             ("分", _) if node.get_read() == Some("ブン") => None,
+            ("分", _) if node.get_read() == Some("ブ") && next != "袖" => None,
             ("分", "袖") => {
                 node.set_read("ブ");
                 node.set_pron(pron!([Bu], node.get_pron().accent()));
@@ -154,6 +169,7 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
 
         // ヒト・フタに変わる数詞の後では、箱などを半濁音にしない。
         let native = !compound
+            && !ordinal
             && find_pron_conv_map(
                 &class3::CONVERSION_TABLE,
                 node.get_string(),
@@ -171,7 +187,7 @@ pub(super) fn convert_counters(njd: &mut NJD, decimal_points: &[usize]) {
         } else {
             match node.get_string() {
                 "袋" => (prev.get_string() == "十").then_some(DigitType::SemiVoiced),
-                "寸" => (prev.get_string() == "三").then_some(DigitType::Voiced),
+                "寸" => matches!(prev.get_string(), "三" | "何").then_some(DigitType::Voiced),
                 "把" if node.get_read() == Some("ワ") && prev.get_string() == "十" => {
                     node.set_pron(pron!([Pa], node.get_pron().accent()));
                     None
@@ -206,6 +222,7 @@ pub(super) fn convert_native(njd: &mut NJD, decimal_points: &[usize]) {
     for i in 0..njd.nodes.len().saturating_sub(1) {
         if !njd.nodes[i].get_pos().is_kazu()
             || (i > 0 && njd.nodes[i - 1].get_pos().is_kazu())
+            || (i > 0 && njd.nodes[i - 1].get_string() == "第")
             || njd.nodes[i + 1].get_string().is_empty()
             || !is_counter(&njd.nodes, i + 1, decimal_points)
         {

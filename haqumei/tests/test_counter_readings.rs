@@ -212,3 +212,95 @@ fn teens_join_within_the_verified_range() {
     assert_eq!((&*ordinal[0].string, ordinal[0].acc), ("十四日", 6));
     assert_eq!((&*ordinal[1].string, ordinal[1].chain_flag), ("目", 1));
 }
+
+#[test]
+fn one_geminates_before_selected_kango_suffixes() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("一審判決", "イッシンハンケツ"),
+        ("一国のみ", "イッコクノミ"),
+        ("一体性", "イッタイセー"),
+        ("一生涯", "イッショーガイ"),
+        ("1回転する", "イッカイテンスル"),
+        ("第1譜", "ダイイップ"),
+        ("第1党", "ダイイットー"),
+        ("1食分", "イッショクブン"),
+        ("片側一車線", "カタガワイッシャセン"),
+        ("一科目", "イッカモク"),
+        ("1位", "イチイ"),
+        ("一時", "イチジ"),
+        ("1型", "イチガタ"),
+        ("一部", "イチブ"),
+        ("1キロ", "イチキロ"),
+        ("一単位", "イチタンイ"),
+        ("第一世代", "ダイイチセダイ"),
+        ("一企業", "イチキギョー"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
+fn one_before_honorifics_does_not_geminate() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in ["山田教一様に手紙を届けた。", "全員一様に笑った。"] {
+        assert!(!engine.g2k(text).unwrap().contains("イッサマ"), "{text}");
+    }
+    for text in ["山田一国氏", "山田一生涯の作品"] {
+        assert!(!engine.g2k(text).unwrap().contains("イッ"), "{text}");
+    }
+}
+
+#[test]
+fn ordinal_counters_keep_kanji_number_readings() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("第2日", "ダイニニチ"),
+        ("第3日目", "ダイサンニチメ"),
+        ("第1幕", "ダイイチマク"),
+        ("1幕目", "イチマクメ"),
+        ("1里が必要です", "イチリガヒツヨーデス"),
+        ("何軒", "ナンゲン"),
+        ("何尺", "ナンジャク"),
+        ("何寸", "ナンズン"),
+        ("2日", "フツカ"),
+        ("1幕", "ヒトマク"),
+        ("里に帰る", "サトニカエル"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
+fn counters_distinguish_quantities_suffixes_and_ordinals() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("一試合", "イッシアイ"),
+        ("第一試合", "ダイイチシアイ"),
+        ("一人", "ヒトリ"),
+        ("一人前", "イチニンマエ"),
+        ("七分袖", "シチブソデ"),
+        ("七分", "ナナフン"),
+        ("三階級", "サンカイキュー"),
+        ("三本", "サンボン"),
+        ("三遍", "サンベン"),
+        ("何遍", "ナンベン"),
+        ("千遍", "センベン"),
+        ("一遍", "イッペン"),
+        ("三編", "サンペン"),
+        ("三篇", "サンペン"),
+        ("八課", "ハチカ"),
+        ("六課", "ロッカ"),
+        ("一箱", "ヒトハコ"),
+        ("六箱", "ロッパコ"),
+        ("三柱", "ミハシラ"),
+        ("七夜", "シチヤ"),
+        ("七年生", "ナナネンセー"),
+        ("七アンダー", "セブンアンダー"),
+        ("十七アンダー", "ジューナナアンダー"),
+        ("3石", "サンゼキ"),
+        ("8石", "ハッセキ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+}

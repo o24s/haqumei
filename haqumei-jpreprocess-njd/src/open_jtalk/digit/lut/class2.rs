@@ -66,6 +66,7 @@ const CONV_TABLE2E: NumerativeLUT = phf_map! {
    "三"=>DigitType::Voiced,
    "千"=>DigitType::Voiced,
    "万"=>DigitType::Voiced,
+   "何"=>DigitType::Voiced,
 };
 
 const NUMERATIVE_CLASS2F: Keys = phf_set! {
@@ -74,4 +75,5 @@ const NUMERATIVE_CLASS2F: Keys = phf_set! {
 
 const CONV_TABLE2F: NumerativeLUT = phf_map! {
    "三"=> DigitType::Voiced,
+   "何"=> DigitType::Voiced,
 };

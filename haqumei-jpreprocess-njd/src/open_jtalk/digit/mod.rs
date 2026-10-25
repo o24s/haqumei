@@ -209,8 +209,82 @@ pub fn njd_set_digit(njd: &mut NJD) {
         }
     }
 
+    geminate_one_before_kango(njd, &decimal_points);
     njd.remove_silent_node();
     accent::join_teens(njd);
+}
+
+fn geminate_one_before_kango(njd: &mut NJD, decimal_points: &[usize]) {
+    for i in 0..njd.nodes.len().saturating_sub(1) {
+        let node = &njd.nodes[i];
+        let next = &njd.nodes[i + 1];
+        let suffix = matches!(next.get_pos(),
+            haqumei_jpreprocess_core::pos::POS::Meishi(
+                haqumei_jpreprocess_core::pos::Meishi::Setsubi(kind)
+            ) if *kind != haqumei_jpreprocess_core::pos::Setsubi::Josuushi)
+            && next.get_string().chars().count() == 1
+            && !matches!(next.get_string(), "中" | "小" | "様" | "氏" | "君");
+        let kango = matches!(
+            next.get_string(),
+            "譜" | "党"
+                | "佐"
+                | "体性"
+                | "生涯"
+                | "戸建"
+                | "回転"
+                | "小節"
+                | "食分"
+                | "車線"
+                | "科目"
+                | "課長"
+        );
+        if node.counter_reading_protected()
+            || next.counter_reading_protected()
+            || node.get_string() != "一"
+            || !node.get_pos().is_kazu()
+            || node.get_pron().to_pure_string() != "イチ"
+            || !(suffix || kango)
+            || (i > 0 && njd.nodes[i - 1].get_string() == "第" && next.get_string() == "審")
+            // 固有名詞に直結する一は、語の一部か数量かを区別できない。
+            || (i > 0 && matches!(njd.nodes[i - 1].get_pos(),
+                haqumei_jpreprocess_core::pos::POS::Meishi(
+                    haqumei_jpreprocess_core::pos::Meishi::KoyuMeishi(_))))
+            || (i > 0
+                && (njd.nodes[i - 1].get_pos().is_kazu()
+                    || matches!(njd.nodes[i - 1].get_string(), "−" | "ー" | "‐" | "―")))
+            || counter::is_decimal_digit(&njd.nodes, i, decimal_points, true)
+        {
+            continue;
+        }
+        // 「一単位」「第一世代」まで促音化しないよう、漢語を接尾辞と語彙表に限る。
+        let reading = next.get_pron().to_pure_string();
+        let Some(head) = reading.chars().next() else {
+            continue;
+        };
+        let replacement = match head {
+            'カ' | 'キ' | 'ク' | 'ケ' | 'コ' | 'サ' | 'シ' | 'ス' | 'セ' | 'ソ' | 'タ' | 'チ'
+            | 'ツ' | 'テ' | 'ト' => None,
+            'ハ' => Some('パ'),
+            'ヒ' => Some('ピ'),
+            'フ' => Some('プ'),
+            'ヘ' => Some('ペ'),
+            'ホ' => Some('ポ'),
+            _ => continue,
+        };
+        if let Some(head) = replacement {
+            let pron = format!(
+                "{head}{}",
+                &reading[reading.chars().next().unwrap().len_utf8()..]
+            );
+            let accent = njd.nodes[i + 1].get_pron().accent();
+            njd.nodes[i + 1].set_pron(
+                haqumei_jpreprocess_core::pronunciation::Pronunciation::parse(&pron, accent)
+                    .unwrap(),
+            );
+        }
+        let accent = njd.nodes[i].get_pron().accent();
+        njd.nodes[i].set_pron(pron!([I, Xtsu], accent));
+    }
 }
 
 mod rule {
