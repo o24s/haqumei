@@ -1,6 +1,27 @@
 use haqumei::Haqumei;
 
 #[test]
+fn approximate_days_do_not_use_the_rank_suffix() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("十日位", "トーカクライ"),
+        ("十日位待つ", "トーカクライマツ"),
+        ("二十日位", "ハツカクライ"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+    for text in ["第三位", "地位", "十日町"] {
+        assert!(
+            !h.run_frontend(text)
+                .unwrap()
+                .iter()
+                .any(|n| n.string == "位" && n.pron == "クライ"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
 fn split_numeric_phrases_do_not_keep_nuclei_outside_the_phrase() {
     let mut h = Haqumei::new().unwrap();
     for text in ["０４．４．二十三", "3833759992447475122176通り"] {

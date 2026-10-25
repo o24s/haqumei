@@ -21,6 +21,7 @@ pub fn is_period(s: &str) -> bool {
 }
 
 pub fn njd_set_digit(njd: &mut NJD) {
+    counter::convert_day_approximation(njd);
     let mut decimal_points = Vec::new();
     {
         let mut skipping_decimal_digits = false;

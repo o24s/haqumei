@@ -3,6 +3,30 @@ use haqumei_jpreprocess_core::{pos::*, pron};
 
 use super::{is_period, lut::*, rule};
 
+pub(super) fn convert_day_approximation(njd: &mut NJD) {
+    for i in 1..njd.nodes.len() {
+        let (before, after) = njd.nodes.split_at_mut(i);
+        let prev = &before[i - 1];
+        let node = &mut after[0];
+        if prev.counter_reading_protected()
+            || node.counter_reading_protected()
+            || node.get_string() != "位"
+            || node.get_read() != Some("イ")
+        {
+            continue;
+        }
+        // 「十日」が地名の品詞でも、日数に続く位は順位のイではなくクライになる。
+        let day = prev.get_string().strip_suffix('日').is_some_and(|prefix| {
+            !prefix.is_empty() && prefix.chars().all(|c| matches!(c,
+                '0'..='9' | '０'..='９' | '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '〇' | '零'))
+        });
+        if day {
+            node.set_read("クライ");
+            node.set_pron(pron!([Ku, Ra, I], 0));
+        }
+    }
+}
+
 fn is_decimal_digit(
     nodes: &[NJDNode],
     mut i: usize,
