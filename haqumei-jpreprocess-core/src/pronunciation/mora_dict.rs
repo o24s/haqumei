@@ -12,6 +12,7 @@ pub static MORA_STR_LIST: LazyLock<Vec<&str>> = LazyLock::new(|| {
     result.extend(MORA_HIRAGANA.iter().map(|(from, _to)| from));
     result.extend(MORA_ALPHABET.iter().map(|(from, _to)| from));
     result.extend(MORA_IRREGULAR_KATAKANA.iter().map(|(from, _to)| from));
+    result.extend(MORA_ALIASES.iter().map(|(from, _to)| from));
     result
 });
 
@@ -37,7 +38,13 @@ pub fn get_mora_enum(position: usize) -> &'static [MoraEnum] {
         return moras;
     }
     index -= MORA_ALPHABET.len();
-    std::slice::from_ref(&MORA_IRREGULAR_KATAKANA[index].1)
+    for table in [MORA_IRREGULAR_KATAKANA.as_slice(), MORA_ALIASES.as_slice()] {
+        if let Some((_, mora)) = table.get(index) {
+            return std::slice::from_ref(mora);
+        }
+        index -= table.len();
+    }
+    panic!("unknown mora index: {position}")
 }
 
 pub static INTO_STR: LazyLock<HashMap<MoraEnum, &'static str>> = LazyLock::new(|| {
@@ -482,11 +489,34 @@ const MORA_IRREGULAR_KATAKANA: [(&str, MoraEnum); 4] = [
     ("ヶ", MoraEnum::Xke),
 ];
 
+// 四つ仮名の復元後も拗音を1モーラで読む。通常の出力表記はジャ・ジュ・ジョを保つ。
+const MORA_ALIASES: [(&str, MoraEnum); 6] = [
+    ("ヂャ", MoraEnum::Ja),
+    ("ヂュ", MoraEnum::Ju),
+    ("ヂョ", MoraEnum::Jo),
+    ("ぢゃ", MoraEnum::Ja),
+    ("ぢゅ", MoraEnum::Ju),
+    ("ぢょ", MoraEnum::Jo),
+];
+
 #[cfg(test)]
 mod tests {
-    use crate::pronunciation::MoraEnum;
+    use crate::pronunciation::{MoraEnum, Pronunciation};
 
     use super::{MORA_STR_LIST, get_mora_enum};
+
+    #[test]
+    fn yotsugana_youon_are_single_moras() {
+        for text in ["ヂャヂュヂョ", "ぢゃぢゅぢょ"] {
+            let pron = Pronunciation::parse(text, 0).unwrap();
+            assert_eq!(pron.mora_size(), 3);
+            assert_eq!(pron.to_string(), "ジャジュジョ");
+        }
+        assert_eq!(
+            Pronunciation::parse("ジャジュジョ", 0).unwrap().to_string(),
+            "ジャジュジョ"
+        );
+    }
 
     #[test]
     fn long() {
