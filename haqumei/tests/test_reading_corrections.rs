@@ -207,6 +207,38 @@ fn musashi_needs_an_explicit_name_context() {
 }
 
 #[test]
+fn melodic_fushi_uses_its_dictionary_accent() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in ["歌の節を覚えた", "唄の節も凝っている"] {
+        let features = engine.run_frontend(text).unwrap();
+        let fushi = features.iter().find(|f| f.string == "節").unwrap();
+        assert_eq!(
+            (fushi.read.as_str(), fushi.acc, fushi.mora_size),
+            ("フシ", 2, 2),
+            "{text}"
+        );
+    }
+    let before = engine.g2p_prosody("文書の節を参照した").unwrap();
+    engine.options.modify_context_reading = false;
+    assert_eq!(engine.g2p_prosody("文書の節を参照した").unwrap(), before);
+}
+
+#[test]
+fn yomigana_is_flat_without_merging_its_words() {
+    let mut engine = Haqumei::new().unwrap();
+    let features = engine.run_frontend("読み仮名を記す").unwrap();
+    let head = features.iter().find(|f| f.string == "読み").unwrap();
+    assert_eq!(head.acc, 0);
+    let mapping = engine.g2p_mapping("読み仮名を記す").unwrap();
+    assert_eq!(mapping[0].char_span, 0..2);
+    assert_eq!(mapping[1].char_span, 2..4);
+    assert_eq!(engine.g2k("読み仮名を記す").unwrap(), "ヨミガナヲシルス");
+    let before = engine.g2p_prosody("本を読み、仮名を書く").unwrap();
+    engine.options.modify_context_reading = false;
+    assert_eq!(engine.g2p_prosody("本を読み、仮名を書く").unwrap(), before);
+}
+
+#[test]
 fn ichiban_suki_keeps_compound_zuki_elsewhere() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

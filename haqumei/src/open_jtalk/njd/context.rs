@@ -147,6 +147,17 @@ pub(super) fn prepare_readings(nodes: &mut [NJDNode], protected: &[bool]) {
         if protected[i] {
             continue;
         }
+        if i > 0
+            && !protected[i - 1]
+            && nodes[i].get_string() == "仮名"
+            && nodes[i].get_pos().to_string().starts_with("名詞,接尾,")
+            && nodes[i - 1].get_string() == "読み"
+            && (matches!(nodes[i - 1].get_pos(), POS::Meishi(_))
+                || nodes[i - 1].get_orig() == Some("読む"))
+        {
+            // 読み仮名は平板型。構成語の文字範囲を保ち、結合則だけで核を決める。
+            nodes[i].get_details_mut().chain_rule = ChainRules::new("C4");
+        }
         if let Some((reading, pronunciation, accent)) = lexical_reading(nodes, i) {
             // 読みの長さや単語の核が変わるため、助詞との結合前に設定する。
             nodes[i].set_read(reading);
@@ -257,6 +268,12 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
     }
 
     match node.get_string() {
+        // 歌の旋律を指すフシは尾高型であり、助詞が続くと二モーラ目の後で下がる。
+        "節" if via_no
+            && previous_previous.is_some_and(|n| matches!(n.get_string(), "歌" | "唄")) =>
+        {
+            Some(("フシ", "フシ", 2))
+        }
         // 姓や組織名のアリイエを保ち、宗教の語が直接続く場合だけザイケにする。
         "在家"
             if following.is_some_and(|n| {
