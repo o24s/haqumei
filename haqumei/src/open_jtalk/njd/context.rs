@@ -158,6 +158,13 @@ pub(super) fn prepare_readings(nodes: &mut [NJDNode], protected: &[bool]) {
                 nodes[i].get_details_mut().chain_rule = ChainRules::new("C3");
                 nodes[i].set_chain_flag(false);
             }
+            if nodes[i].get_string() == "面"
+                && nodes[i].get_pos().to_string().starts_with("名詞,接尾,")
+            {
+                *nodes[i].get_pos_mut() = POS::Meishi(Meishi::General);
+                nodes[i].get_details_mut().pos_original = None;
+                nodes[i].set_chain_flag(false);
+            }
         }
         let table = nodes[i].get_string() == "表"
             && (nodes
@@ -288,6 +295,17 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
         {
             Some(("キワ", "キワ", 2))
         }
+        // 号令だけでは剣道の防具も含む。顔の動作と分かる述語の続きか、
+        // 御前で顔を上げる命令に限り、物を伏せて置く動作と区別する。
+        "面" if following.is_some_and(|n| n.get_string() == "を")
+            && !via_no
+            && (matches!(node.get_pos(), POS::Meishi(Meishi::General))
+                || (previous.is_some_and(|n| n.get_string() == "あまり")
+                    && previous_previous.is_some_and(|n| n.get_string() == "の")))
+            && face_predicate(nodes, i) =>
+        {
+            Some(("オモテ", "オモテ", 3))
+        }
         // 書物を直す用法まで変えないよう、事の本を正すという連語に限る。
         "本" if via_no
             && previous_previous.is_some_and(|n| n.get_string() == "事")
@@ -308,6 +326,12 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
                 && predicate.is_some_and(|n| n.get_orig() == Some("祓う")) =>
         {
             Some(("ケガレ", "ケガレ", 0))
+        }
+        "音" if following.is_some_and(|n| n.get_string() == "を")
+            && predicate.is_some_and(|n| n.get_orig() == Some("上げる"))
+            && giving_up_cause(nodes, i) =>
+        {
+            Some(("ネ", "ネ", 0))
         }
         "盲" | "聾" if disability_enumeration(nodes, i) => {
             if node.get_string() == "盲" {
@@ -335,6 +359,51 @@ fn after_auxiliaries(nodes: &[NJDNode], mut at: usize) -> usize {
         }
     }
     at
+}
+
+fn face_predicate(nodes: &[NJDNode], i: usize) -> bool {
+    let Some(predicate) = nodes.get(i + 2) else {
+        return false;
+    };
+    if !matches!(predicate.get_orig(), Some("伏せる" | "上げる")) {
+        return false;
+    }
+    let before: Vec<_> = nodes[..i]
+        .iter()
+        .rev()
+        .take_while(|n| !matches!(n.get_pos(), POS::Kigou(_)))
+        .collect();
+    if predicate.get_orig() == Some("上げる")
+        && predicate.get_cform().to_string() == "命令ｙｏ"
+        && i.checked_sub(1).is_none_or(|at| {
+            !matches!(
+                nodes[at].get_pos(),
+                POS::Doushi(_) | POS::Keiyoushi(_) | POS::Meishi(_)
+            )
+        })
+        && nodes[..i]
+            .iter()
+            .rev()
+            .take_while(|n| !matches!(n.get_string(), "。" | "！" | "？" | "「" | "」"))
+            .any(|n| matches!(n.get_orig(), Some("殿" | "御前" | "将軍" | "平伏" | "跪く")))
+    {
+        return true;
+    }
+    let ashamed = before.iter().any(|n| {
+        matches!(
+            n.get_orig(),
+            Some("恥ずかしい" | "恥ずかしさ" | "恥" | "恥じる" | "恥じらう" | "照れる")
+        )
+    });
+    let end = after_auxiliaries(nodes, i + 3);
+    ashamed
+        && (nodes
+            .get(end)
+            .is_none_or(|n| matches!(n.get_pos(), POS::Kigou(_)) || n.get_string() == "まま")
+            || (nodes.get(end).is_some_and(|n| n.get_string() == "て")
+                && nodes.get(end + 1).is_some_and(|n| {
+                    matches!(n.get_orig(), Some("黙る" | "泣く" | "話す" | "笑う"))
+                })))
 }
 
 fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
@@ -387,6 +456,48 @@ fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
         && nodes
             .get(after_auxiliaries(nodes, at + 3))
             .is_none_or(|n| !matches!(n.get_pos(), POS::Meishi(_)))
+}
+
+fn giving_up_cause(nodes: &[NJDNode], i: usize) -> bool {
+    let Some(previous) = i.checked_sub(1).and_then(|at| nodes.get(at)) else {
+        return false;
+    };
+    // 音を上げた警報器、という連体修飾では、上げるの対象は音量である。
+    let relative_at = after_auxiliaries(nodes, i + 3);
+    let participant = nodes
+        .get(relative_at)
+        .is_some_and(|n| n.get_string() == "参加")
+        && nodes
+            .get(relative_at + 1)
+            .is_some_and(|n| n.get_string() == "者");
+    if !participant
+        && nodes.get(relative_at).is_some_and(|n| {
+            matches!(n.get_pos(), POS::Meishi(_))
+                && !n.get_pos().to_string().starts_with("名詞,接尾,")
+                && !n.get_pos().to_string().starts_with("名詞,非自立,")
+                && !n.get_pos().to_string().starts_with("名詞,固有名詞,人名,")
+                && !matches!(
+                    n.get_string(),
+                    "隊員" | "新兵" | "兵士" | "参加者" | "人" | "者" | "彼" | "彼女"
+                )
+        })
+    {
+        return false;
+    }
+    // 訓練の語が離れた場所にあっても、楽器の音や訓練に使う音はオトである。
+    // 苦痛に音を上げる、という原因の格か、辛いと訴える形を確認する。
+    if previous.get_string() == "に" {
+        let cause: String = nodes[i.saturating_sub(3)..i - 1]
+            .iter()
+            .map(|n| n.get_string())
+            .collect();
+        return ["訓練", "苦痛", "痛み", "寒さ", "暑さ", "重労働"]
+            .iter()
+            .any(|word| cause.ends_with(word));
+    }
+    previous.get_string() == "と"
+        && i >= 2
+        && matches!(nodes[i - 2].get_orig(), Some("辛い" | "苦しい"))
 }
 
 fn cloth_processing(nodes: &[NJDNode], i: usize) -> bool {

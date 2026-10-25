@@ -77,6 +77,21 @@ fn cloth_readings_keep_the_place_name() {
 }
 
 #[test]
+fn idiomatic_face_and_sound_need_local_causes() {
+    check_context_readings(
+        &[
+            ("御前で面を上げよ", "面", "オモテ", 3),
+            ("厳しい訓練に音を上げる", "音", "ネ", 1),
+        ],
+        &[
+            "ラケットの面を上げる",
+            "号令に従い、面を上げよ",
+            "音楽の音を上げる",
+        ],
+    );
+}
+
+#[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [
