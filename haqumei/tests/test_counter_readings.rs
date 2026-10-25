@@ -1,6 +1,27 @@
 use haqumei::Haqumei;
 
 #[test]
+fn split_numeric_phrases_do_not_keep_nuclei_outside_the_phrase() {
+    let mut h = Haqumei::new().unwrap();
+    for text in ["０４．４．二十三", "3833759992447475122176通り"] {
+        let nodes = h.run_frontend(text).unwrap();
+        let mut start = 0;
+        for end in 1..=nodes.len() {
+            if end == nodes.len() || nodes[end].chain_flag != 1 {
+                let head = &nodes[start];
+                let moras: i32 = nodes[start..end].iter().map(|n| n.mora_size).sum();
+                if head.pos_group1 == "数" {
+                    assert!(head.acc <= moras, "{text}: {head:?}, {moras}");
+                }
+                start = end;
+            }
+        }
+    }
+    let compound = h.run_frontend("十三件").unwrap();
+    assert!(compound[0].acc > compound[0].mora_size);
+}
+
+#[test]
 fn kilo_units_geminate_with_mixed_case_symbols() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

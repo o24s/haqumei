@@ -34,6 +34,9 @@ pub fn njd_set_accent_type(njd: &mut NJD) {
     let mut original_top_accent = 0;
     let mut original_top_mora_size = 0;
     for i in 0..njd.nodes.len() {
+        if i > 0 && njd.nodes[i].get_chain_flag() != Some(true) {
+            clear_numeric_accent_outside_phrase(&mut njd.nodes[top_node_i], mora_size);
+        }
         let mut top_node_acc: Option<usize> = None;
         let mut prev_acc: Option<usize> = None;
         let mut current_acc: Option<usize> = None;
@@ -98,6 +101,15 @@ pub fn njd_set_accent_type(njd: &mut NJD) {
                 .get_pron_mut()
                 .set_accent(current_acc);
         }
+    }
+    clear_numeric_accent_outside_phrase(&mut njd.nodes[top_node_i], mora_size);
+}
+
+fn clear_numeric_accent_outside_phrase(top: &mut NJDNode, mora_size: usize) {
+    // 桁読みが短い句に分かれると、前の結合で計算した核が句の外に残る。
+    // 先頭の語の長さではなく、助数詞なども含む句全体の長さと比較する。
+    if top.get_pos().is_kazu() && top.get_pron().accent() > mora_size {
+        top.get_pron_mut().set_accent(0);
     }
 }
 
