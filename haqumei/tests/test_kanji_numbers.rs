@@ -83,6 +83,17 @@ fn a_leading_number_does_not_split_a_place_name() {
 }
 
 #[test]
+fn numeral_reanalysis_keeps_existing_compound_and_unknown_word_readings() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading) in [
+        ("百八景の絵", "ヒャクハッケーノエ"),
+        ("十八試作飛行機", "ジューハチシサクヒコーキ"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+    }
+}
+
+#[test]
 fn old_place_characters_keep_the_number_reading() {
     let mut engine = Haqumei::new().unwrap();
     for (written, usual) in [

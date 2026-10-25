@@ -33,7 +33,7 @@ fn numeric_pronunciation(text: &str, node: &Node) -> bool {
         '七' => &["ナナ", "シチ"],
         '八' => &["ハチ", "ハッ"],
         '九' => &["キュー", "ク"],
-        '十' => &["ジュー", "ジュッ"],
+        '十' => &["ジュー", "ジュッ", "ジッ"],
         _ => &[],
     };
     prefixes.iter().any(|prefix| pron.starts_with(prefix))
@@ -61,6 +61,13 @@ pub(super) fn resolve(
             if adjacent
                 && numeral_word(text, previous)
                 && text[start..].chars().next().is_some_and(numeral)
+                // 未知語の残りまで分けると、後段が使う語のまとまりを失う。
+                && !(node.is_unknown && !numeral_word(text, node))
+                // 一般名詞として登録された数詞始まりの複合語は、辞書の読みを保つ。
+                && !(node.feature.starts_with("名詞,一般,")
+                    && !numeral_word(text, node)
+                    && !text[node.byte_span.clone()].ends_with("時間")
+                    && numeric_pronunciation(text, node))
                 && ((number(previous) && text[node.byte_span.clone()].chars().count() > 1)
                     || (number(node) && text[previous.byte_span.clone()].chars().count() > 1))
             {
@@ -68,12 +75,15 @@ pub(super) fn resolve(
                     .char_indices()
                     .find(|&(_, c)| !numeral(c))
                     .map_or(node.byte_span.end, |(at, _)| start + at);
-                boundaries.extend(
-                    text[chain_begin..end]
-                        .char_indices()
-                        .map(|(at, _)| chain_begin + at),
-                );
-                boundaries.insert(end);
+                // 位取りのない二一・三一は語の一部とも解釈できるので、番号以外では分けない。
+                if text[chain_begin..end].contains(['十', '百', '千', '万', '億', '兆']) {
+                    boundaries.extend(
+                        text[chain_begin..end]
+                            .char_indices()
+                            .map(|(at, _)| chain_begin + at),
+                    );
+                    boundaries.insert(end);
+                }
             }
         }
         if numeral_word(text, node)
