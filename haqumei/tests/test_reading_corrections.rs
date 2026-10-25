@@ -1,6 +1,39 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn dated_suffix_keeps_zuke_instead_of_attached_tsuki() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        (
+            "六月十二日付の通知を送る。",
+            "ロクガツジューニニチズケノツーチヲオクル。",
+        ),
+        (
+            "九月十日付で就任する。",
+            "クガツトーカズケデシューニンスル。",
+        ),
+        (
+            "四月一日付の辞令を受け取る。",
+            "シガツツイタチズケノジレーヲウケトル。",
+        ),
+        (
+            "八月十四日付の公告を読む。",
+            "ハチガツジューヨッカズケノコーコクヲヨム。",
+        ),
+        ("二十日付で異動する。", "ハツカズケデイドースル。"),
+        (
+            "三十日付で就任する。",
+            "サンジューニチズケデシューニンスル。",
+        ),
+        ("条件付の契約を結ぶ。", "ジョーケンツキノケーヤクヲムスブ。"),
+        ("朝食付の宿を探す。", "チョーショクツキノヤドヲサガス。"),
+        ("保証付の商品を選ぶ。", "ホショーツキノショーヒンヲエラブ。"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn restored_pronunciation_updates_the_public_mora_count() {
     for (options, expected) in [
         (

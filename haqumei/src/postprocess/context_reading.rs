@@ -1144,6 +1144,18 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected:
         if protected.get(i) == Some(&true) {
             continue;
         }
+        // 日付の「付」はヅケであり、付属を表す「条件付」などのツキとは異なる。
+        if njd_features[i].string == "付"
+            && i > 0
+            && let Some(day) = njd_features[i - 1].string.strip_suffix('日')
+            && (njd_features[i - 1].pos_group2 == "助数詞"
+                || (!day.is_empty()
+                    && day.chars().all(|c| {
+                        matches!(c, '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '〇' | '零' | '0'..='9' | '０'..='９')
+                    })))
+        {
+            continue;
+        }
         // 「一日」は日数の読みだけを対象にし、十一日や日付のツイタチとは区別する。
         if njd_features[i].string == "中"
             && njd_features[i].read == "チュウ"
