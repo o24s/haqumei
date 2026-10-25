@@ -154,7 +154,7 @@ impl Digit {
             "七" => Some(Self::Digit(7)),
             "八" => Some(Self::Digit(8)),
             "九" => Some(Self::Digit(9)),
-            "〇" | "０" => Some(Self::Digit(0)),
+            "〇" | "０" | "零" => Some(Self::Digit(0)),
             "，" => Some(Self::Comma),
             _ => None,
         }

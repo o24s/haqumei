@@ -53,7 +53,7 @@ pub fn njd_set_digit(njd: &mut NJD) {
                 node.replace_from_csv(rule::TEN_FEATURE);
                 node.set_chain_flag(true);
                 match prev.get_string() {
-                    rule::ZERO1 | rule::ZERO2 => {
+                    rule::ZERO1 | rule::ZERO2 | "零" => {
                         prev.set_pron(pron!([Re, Long], 1));
                     }
                     rule::TWO => {

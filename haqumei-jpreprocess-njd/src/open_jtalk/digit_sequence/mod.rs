@@ -55,6 +55,7 @@ const DIGIT_NORMALIZE: phf::Map<&'static str, &'static str> = phf::phf_map! {
    "きゅう" => "九",
    "〇" => "〇",
    "０" => "０",
+   "零" => "零",
    "壱" => "一",
    "弐" => "二",
    "貳" => "二",
@@ -168,6 +169,8 @@ impl DigitSequence {
             .find_map(NJDNode::digit_sequence_reading)
         {
             self.is_numerical_reading = Some(reading);
+        } else if is_spelled_decimal_fraction(njd, self.start, self.end) {
+            self.is_numerical_reading = Some(false);
         }
         if self.is_numerical_reading.is_none() {
             self.is_numerical_reading = Some(score::score(njd, self.start, self.end) >= 0);
@@ -290,4 +293,39 @@ impl DigitSequence {
 
         offset as i64 - offset_comma
     }
+}
+
+fn is_spelled_decimal_fraction(njd: &NJD, start: usize, end: usize) -> bool {
+    let Some(point_index) = start.checked_sub(1) else {
+        return false;
+    };
+    // 位の字や桁区切りを含む数は、書かれた位取りを保つ。
+    if !njd.nodes[start..=end].iter().all(|node| {
+        matches!(
+            node.get_string(),
+            "〇" | "０" | "零" | "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八" | "九"
+        )
+    }) {
+        return false;
+    }
+    let point = &njd.nodes[point_index];
+    if matches!(
+        (point.get_string(), point.get_read()),
+        ("一点", Some("イッテン")) | ("零点", Some("レイテン"))
+    ) {
+        return true;
+    }
+    if point.get_string() != "点" {
+        return false;
+    }
+    let Some(mut integer_index) = point_index.checked_sub(1) else {
+        return false;
+    };
+    if njd.nodes[integer_index].get_string() == "ー" {
+        let Some(previous) = integer_index.checked_sub(1) else {
+            return false;
+        };
+        integer_index = previous;
+    }
+    njd.nodes[integer_index].get_pos().is_kazu()
 }

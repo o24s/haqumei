@@ -1,6 +1,21 @@
 use haqumei::Haqumei;
 
 #[test]
+fn written_decimal_points_keep_fractional_digits() {
+    let mut h = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("一点六一八", "イッテンロクイチハチ"),
+        ("六点一八", "ロクテンイチハチ"),
+        ("零点零五", "レーテンゼロゴー"),
+        ("三点十五", "サンテンジューゴ"),
+        ("一点を取る", "イッテンヲトル"),
+        ("十点を取る", "ジュッテンヲトル"),
+    ] {
+        assert_eq!(h.g2k(text).unwrap(), expected, "{text}");
+    }
+}
+
+#[test]
 fn multiple_decimals_keep_points_after_units_and_nouns() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [
