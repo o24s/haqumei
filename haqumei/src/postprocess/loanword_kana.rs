@@ -128,8 +128,11 @@ fn restore(surface: &str, pron: &str) -> Option<(String, Vec<RestoredSegment>)> 
 }
 
 /// 辞書が別の仮名に置き換えている外来語表記の仮名を、表層形から復元する。
-pub(crate) fn restore_loanword_kana(njd_features: &mut [NjdFeature]) {
+pub(crate) fn restore_loanword_kana(njd_features: &mut [NjdFeature], protected: &[bool]) {
     for i in 0..njd_features.len() {
+        if protected.get(i) == Some(&true) {
+            continue;
+        }
         let feature = &mut njd_features[i];
         if !is_katakana_word(&feature.string) {
             continue;

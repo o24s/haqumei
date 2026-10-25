@@ -54,3 +54,17 @@ fn protected_iteration_marks_keep_their_registered_readings() {
         "サンプル"
     );
 }
+
+#[test]
+fn protected_loanwords_do_not_move_the_phrase_nucleus() {
+    let (_temp, mut engine) =
+        engine("イェロー,1345,1345,-20000,名詞,一般,*,*,*,*,イェロー,イエロー,イエロー,2/4,C1\n");
+    let restored = engine.run_frontend("累積イェロー").unwrap();
+    engine.options.restore_loanword_kana = false;
+    let unchanged = engine.run_frontend("累積イェロー").unwrap();
+    assert_eq!(restored, unchanged);
+    assert_eq!(restored[0].acc, 6);
+    let word = restored.iter().find(|f| f.string == "イェロー").unwrap();
+    assert_eq!(word.pron, "イエロー");
+    assert_eq!(word.mora_size, 4);
+}

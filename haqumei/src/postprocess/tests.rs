@@ -266,7 +266,7 @@ fn test_restore_loanword_kana() {
         ("ウェイヴ", "ウェーブ", "ウェーヴ"),
     ] {
         let mut v = [f(surface, pron, pron)];
-        restore_loanword_kana(&mut v);
+        restore_loanword_kana(&mut v, &[]);
         assert_eq!(v[0].pron, want, "入力: {surface}");
         let parsed =
             haqumei_jpreprocess_core::pronunciation::Pronunciation::parse(want, 0).unwrap();
@@ -289,13 +289,13 @@ fn test_restore_loanword_kana() {
         ("ウルグァイ", "ウルグアイ"),
     ] {
         let mut v = [f(surface, pron, pron)];
-        restore_loanword_kana(&mut v);
+        restore_loanword_kana(&mut v, &[]);
         assert_eq!(v[0].pron, pron, "入力: {surface}");
     }
 
     // 表層形と発音が途中で食い違う語は、全体を諦める
     let mut v = [f("エヌ・エイチ・ヴィ", "エヌエイチブイ", "エヌエイチブイ")];
-    restore_loanword_kana(&mut v);
+    restore_loanword_kana(&mut v, &[]);
     assert_eq!(v[0].pron, "エヌエイチブイ");
 
     // 復元区間の前・中・後と平板を区別し、複数区間の短縮も数える。
@@ -310,7 +310,7 @@ fn test_restore_loanword_kana() {
     ] {
         let mut features = [f(surface, pron, pron)];
         features[0].acc = accent;
-        restore_loanword_kana(&mut features);
+        restore_loanword_kana(&mut features, &[]);
         assert_eq!(features[0].acc, expected, "{surface}, {accent}");
         assert_eq!(features[0].mora_size, count_mora(&features[0].pron) as i32);
     }
@@ -323,7 +323,7 @@ fn test_restore_loanword_kana() {
         ];
         features[0].acc = accent;
         features[1].chain_flag = 1;
-        restore_loanword_kana(&mut features);
+        restore_loanword_kana(&mut features, &[]);
         assert_eq!(features[0].acc, expected);
     }
 }

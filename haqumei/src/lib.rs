@@ -1005,7 +1005,9 @@ impl Haqumei {
         // 読みを確定させた後、アクセント関連の補正より前に文脈依存の読みを解決する
         // (いずれも mora_size が変わるため)
         let protected_nodes: Vec<bool> = if saved.is_empty()
-            || !(options.modify_context_reading || options.modify_numeral_reading)
+            || !(options.modify_context_reading
+                || options.modify_numeral_reading
+                || options.restore_loanword_kana)
         {
             Vec::new()
         } else {
@@ -1027,7 +1029,7 @@ impl Haqumei {
         // 辞書に無い漢字への読みの付与は、他の補正がすべて読みを決めたあとに行う。
         // ここまでで読みが付かなかったものだけが対象になる
         if options.restore_loanword_kana {
-            restore_loanword_kana(&mut njd_features);
+            restore_loanword_kana(&mut njd_features, &protected_nodes);
         }
         if options.read_unknown_kanji {
             read_unknown_kanji(&mut njd_features);
