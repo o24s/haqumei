@@ -6,6 +6,35 @@ mod tests {
         utils::default_is_non_pause_symbol,
     };
 
+    #[test]
+    fn long_words_drop_after_a_nucleus_beyond_49_moras() {
+        let mut engine = Haqumei::new().unwrap();
+        engine.set_morph_filter(|_, _, morphs| {
+            let mut word = morphs[0].clone();
+            word.surface = "検査".into();
+            word.char_span = 0..2;
+            let pron = "カ".repeat(55);
+            word.feature = format!("検査,名詞,一般,*,*,*,*,検査,{pron},{pron},50/55,C1");
+            morphs[0] = word;
+        });
+        let words = engine.g2p_mapping_prosody("検査").unwrap();
+        let vowels: Vec<_> = words[0]
+            .phonemes
+            .iter()
+            .filter_map(|p| match p {
+                ProsodicPhoneme::Phoneme {
+                    phoneme: Phoneme::A,
+                    pitch,
+                } => *pitch,
+                _ => None,
+            })
+            .collect();
+        assert_eq!(vowels.len(), 55);
+        assert_eq!(vowels[0], PitchAccent::Low);
+        assert!(vowels[1..50].iter().all(|p| *p == PitchAccent::High));
+        assert!(vowels[50..].iter().all(|p| *p == PitchAccent::Low));
+    }
+
     /// ピッチ付きの音素を生成する (High)
     fn h(ph: Phoneme) -> ProsodicPhoneme {
         ProsodicPhoneme::Phoneme {

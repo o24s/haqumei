@@ -1115,12 +1115,17 @@ impl OpenJTalk {
                 .map(|m| m.position_forward as i32)
                 .unwrap_or(0);
 
+            // F2とA2は49で丸められるため、長い句の下降は核からの相対位置で判定する。
+            let after_nucleus = label
+                .mora
+                .as_ref()
+                .is_some_and(|m| m.relative_accent_position > 0);
             let is_high = if f2 == 0 {
                 a2 >= 2 // 平板型
             } else if f2 == 1 {
                 a2 == 1 // 頭高型
             } else {
-                a2 >= 2 && a2 <= f2 // 中高・尾高型
+                a2 >= 2 && !after_nucleus // 中高・尾高型
             };
 
             let pitch = if is_high {
