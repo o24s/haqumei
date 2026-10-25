@@ -27,6 +27,32 @@ fn restored_pronunciation_updates_the_public_mora_count() {
 }
 
 #[test]
+fn karada_uses_its_dictionary_accent_before_chaining() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "身体を鍛える",
+        "身体の調子",
+        "身体が重い",
+        "お身体の調子",
+        "身体 を 鍛える",
+    ] {
+        let expected = text.replace("身体", "体");
+        assert_eq!(
+            engine.g2p_prosody(text).unwrap(),
+            engine.g2p_prosody(&expected).unwrap(),
+            "{text}"
+        );
+    }
+    for text in ["身体を拘束する", "身体の機能", "身体が不自由だ"] {
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(
+            features.iter().find(|f| f.string == "身体").unwrap().read,
+            "シンタイ"
+        );
+    }
+}
+
+#[test]
 fn numeric_boundaries_and_limited_identifiers() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [

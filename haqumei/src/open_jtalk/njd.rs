@@ -261,6 +261,7 @@ pub(crate) fn run_frontend(
     apply_unvoicing: bool,
     split_prefixes: bool,
     split_fillers: bool,
+    modify_body_reading: bool,
 ) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
@@ -353,6 +354,21 @@ pub(crate) fn run_frontend(
     number::restore_numeric_zeros(&mut nodes, &protected_nodes);
     if modify_numeral_reading {
         modify_placeholder_maru(&mut nodes, &protected_nodes);
+    }
+    if modify_body_reading && nodes.iter().any(|node| node.get_string() == "身体") {
+        let features = rust_njd_to_features(&NJD {
+            nodes: nodes.clone(),
+        });
+        for i in 0..nodes.len() {
+            if !protected_nodes[i] && crate::postprocess::body_reading_matches(&features, i) {
+                // 単語の核を変更してから結合することで、助詞や複合語の核を計算し直す。
+                nodes[i].set_read("カラダ");
+                nodes[i].set_pron(
+                    haqumei_jpreprocess_core::pronunciation::Pronunciation::parse("カラダ", 0)
+                        .unwrap(),
+                );
+            }
+        }
     }
     counter::restore_counter_features(&mut nodes, &protected_nodes);
     if modify_numeral_reading {
@@ -666,7 +682,7 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw, false, &[], true, false, false).unwrap();
+        let features = super::run_frontend(&raw, false, &[], true, false, false, false).unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();

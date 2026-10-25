@@ -1,4 +1,5 @@
 mod context_reading;
+pub(crate) use context_reading::body_reading_matches;
 mod english;
 mod loanword_kana;
 mod numeral;

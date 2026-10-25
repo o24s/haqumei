@@ -1127,6 +1127,15 @@ static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static Rule>>> =
         by_surface
     });
 
+pub(crate) fn body_reading_matches(features: &[NjdFeature], i: usize) -> bool {
+    features[i].string == "身体"
+        && RULES_BY_SURFACE.get("身体").is_some_and(|rules| {
+            rules
+                .iter()
+                .any(|rule| rule.reading == "カラダ" && cue_matches(&rule.cue, features, i))
+        })
+}
+
 /// 隣接する形態素で読みが決まる語を補正する。
 pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected: &[bool]) {
     let by_surface = &*RULES_BY_SURFACE;

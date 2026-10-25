@@ -91,6 +91,7 @@ pub struct OpenJTalk {
     pub(crate) defer_unvoicing: bool,
     pub(crate) split_prefix_accent_phrase: bool,
     pub(crate) split_filler_accent_phrase: bool,
+    pub(crate) modify_body_reading: bool,
     pub(crate) dict: Option<Arc<Dictionary>>,
     /// グローバル辞書の更新に追従するかどうか。
     ///
@@ -123,6 +124,7 @@ impl OpenJTalk {
             defer_unvoicing: false,
             split_prefix_accent_phrase: false,
             split_filler_accent_phrase: false,
+            modify_body_reading: false,
         })
     }
 
@@ -157,6 +159,7 @@ impl OpenJTalk {
             defer_unvoicing: false,
             split_prefix_accent_phrase: false,
             split_filler_accent_phrase: false,
+            modify_body_reading: false,
         })
     }
 
@@ -172,6 +175,7 @@ impl OpenJTalk {
             defer_unvoicing: false,
             split_prefix_accent_phrase: false,
             split_filler_accent_phrase: false,
+            modify_body_reading: false,
         })
     }
 
@@ -989,6 +993,7 @@ impl OpenJTalk {
             !self.defer_unvoicing,
             self.split_prefix_accent_phrase,
             self.split_filler_accent_phrase,
+            self.modify_body_reading,
         )
     }
 
@@ -1026,6 +1031,7 @@ impl OpenJTalk {
             !self.defer_unvoicing,
             self.split_prefix_accent_phrase,
             self.split_filler_accent_phrase,
+            self.modify_body_reading,
         )
     }
 
