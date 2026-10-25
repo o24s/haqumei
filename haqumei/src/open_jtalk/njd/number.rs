@@ -374,4 +374,119 @@ pub(super) fn mark_identifiers(nodes: &mut [NJDNode], protected: &[bool]) {
         }
         start = stop;
     }
+    mark_phone_groups(nodes, protected);
+}
+
+fn phone_header(nodes: &[NJDNode], start: usize) -> String {
+    let mut header: String = nodes[start.saturating_sub(4)..start]
+        .iter()
+        .map(|node| node.get_string())
+        .collect();
+    while header.ends_with(['は', '：', ':']) {
+        header.pop();
+    }
+    header
+}
+
+fn mark_phone_groups(nodes: &mut [NJDNode], protected: &[bool]) {
+    let mut start = 0;
+    while start < nodes.len() {
+        if !is_digit(&nodes[start]) || !nodes[start].get_pos().is_kazu() {
+            start += 1;
+            continue;
+        }
+        let mut end = start;
+        let mut total = 0;
+        let mut groups = 0;
+        let mut value = 0;
+        let mut has_hyphen = false;
+        loop {
+            while end < nodes.len() && is_digit(&nodes[end]) && nodes[end].get_pos().is_kazu() {
+                if total < 3 {
+                    value = value * 10
+                        + nodes[end]
+                            .get_string()
+                            .chars()
+                            .next()
+                            .and_then(digit)
+                            .unwrap();
+                }
+                total += 1;
+                end += 1;
+            }
+            groups += 1;
+            if nodes.get(end).is_some_and(|n| {
+                is_separator(n.get_string()) || matches!(n.get_string(), "・" | "の")
+            }) && nodes.get(end + 1).is_some_and(is_digit)
+            {
+                has_hyphen |= is_separator(nodes[end].get_string());
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        let header = phone_header(nodes, start);
+        let phone_header = [
+            "電話番号",
+            "電話",
+            "ファックス",
+            "FAX",
+            "ＦＡＸ",
+            "TEL",
+            "ＴＥＬ",
+            "☎",
+        ]
+        .iter()
+        .any(|word| header.ends_with(word));
+        let quantity_suffix = nodes.get(end).is_some_and(|node| {
+            node.get_pos().to_string().starts_with("名詞,接尾,助数詞,")
+                || matches!(node.get_pos(), POS::Meishi(Meishi::FukushiKanou))
+                || matches!(node.get_orig(), Some("ある" | "届く" | "増える" | "減る"))
+        });
+        // 先頭0・全10〜11桁・複数群という電話の形式を確認する。
+        // 見出しのない中黒や「の」は小数・列挙とも重なるので対象にしない。
+        let grouped = (2..=3).contains(&groups)
+            && (10..=11).contains(&total)
+            && nodes[start].get_string().chars().next().and_then(digit) == Some(0)
+            && (phone_header || has_hyphen)
+            && !quantity_suffix;
+        let known_service = groups == 1
+            && total == 3
+            && matches!(
+                value,
+                104 | 110 | 113 | 115 | 117 | 118 | 119 | 171 | 177 | 184 | 186 | 188 | 189
+            );
+        let service_context = known_service
+            && !quantity_suffix
+            && ([
+                "番号案内",
+                "時報",
+                "伝言ダイヤル",
+                "電話番号",
+                "TEL",
+                "ＴＥＬ",
+                "☎",
+            ]
+            .iter()
+            .any(|word| header.ends_with(word))
+                || (nodes
+                    .get(end)
+                    .is_some_and(|n| matches!(n.get_string(), "に" | "へ" | "で"))
+                    && nodes.get(end + 1).is_some_and(|n| {
+                        matches!(n.get_string(), "通報" | "相談" | "伝言")
+                            || (n.get_string() == "電話"
+                                && nodes.get(end + 2).is_none_or(|next| {
+                                    matches!(next.get_pos(), POS::Joshi(_) | POS::Kigou(_))
+                                        || next.get_orig() == Some("する")
+                                }))
+                    })));
+        if (grouped || service_context) && !protected[start..end].iter().any(|&value| value) {
+            for node in &mut nodes[start..end] {
+                if is_digit(node) {
+                    node.set_digit_sequence_reading(Some(false));
+                }
+            }
+        }
+        start = end;
+    }
 }

@@ -1,6 +1,27 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn explicit_telephone_context_keeps_quantities_and_decimals() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, kana) in [
+        ("119に電話", "イチイチキューニデンワ"),
+        ("番号案内は104です", "バンゴーアンナイワイチゼロヨンデス"),
+        ("時報は117です", "ジホーワイチイチナナデス"),
+        ("171で伝言", "イチナナイチデデンゴン"),
+        (
+            "電話は03の1234の5678",
+            "デンワワゼロサンノイチニーサンヨンノゴーロクナナハチ",
+        ),
+        ("電話は100ある", "デンワワヒャクアル"),
+        ("FAXは100届いた", "ファックスワヒャクトドイタ"),
+        ("得点は117です", "トクテンワヒャクジューナナデス"),
+        ("電話番号は1.5です", "デンワバンゴーワイッテンゴデス"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), kana, "{text}");
+    }
+}
+
+#[test]
 fn punctuation_keeps_written_digit_groups_separate() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [
