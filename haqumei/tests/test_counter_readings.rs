@@ -1,6 +1,22 @@
 use haqumei::Haqumei;
 
 #[test]
+fn written_places_have_the_same_accent_as_arabic_numbers() {
+    let mut h = Haqumei::new().unwrap();
+    for (written, digits) in [
+        ("七百十三件", "713件"),
+        ("二十三円", "23円"),
+        ("三千二百円", "3200円"),
+    ] {
+        assert_eq!(
+            h.g2p_prosody(written).unwrap(),
+            h.g2p_prosody(digits).unwrap(),
+            "{written}"
+        );
+    }
+}
+
+#[test]
 fn written_decimal_points_keep_fractional_digits() {
     let mut h = Haqumei::new().unwrap();
     for (text, expected) in [

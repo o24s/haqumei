@@ -130,6 +130,19 @@ pub fn njd_digit_sequence(njd: &mut NJD) {
         }
     }
 
+    for i in 1..njd.nodes.len() {
+        let previous_is_number = njd.nodes[i - 1].get_pos().is_kazu();
+        let node = &mut njd.nodes[i];
+        if previous_is_number
+            && node.get_pos().is_kazu()
+            && !node.counter_reading_protected()
+            && matches!(node.get_string(), "十" | "百" | "千")
+        {
+            // 算用数字から作る位の字は結合規則を持たないため、漢字表記も揃える。
+            node.unset_chain_rule();
+        }
+    }
+
     let mut sequences = builder::from_njd(njd);
 
     let mut offset = 0;
