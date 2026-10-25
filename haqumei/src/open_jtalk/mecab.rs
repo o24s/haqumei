@@ -24,6 +24,8 @@ impl Mecab {
             .worker
             .analyze(text)
             .map_err(|e| HaqumeiError::MecabError(e.to_string()))?;
+        let original = super::numeral_boundaries::resolve(&mut self.worker, text, original, false)
+            .map_err(|e| HaqumeiError::MecabError(e.to_string()))?;
         if variants {
             super::kanji_variants::resolve(&mut self.worker, text, original, false)
                 .map_err(|e| HaqumeiError::MecabError(e.to_string()))
@@ -40,6 +42,8 @@ impl Mecab {
         let original = self
             .worker
             .analyze_lattice(text)
+            .map_err(|e| HaqumeiError::MecabError(e.to_string()))?;
+        let original = super::numeral_boundaries::resolve(&mut self.worker, text, original, true)
             .map_err(|e| HaqumeiError::MecabError(e.to_string()))?;
         if variants {
             super::kanji_variants::resolve(&mut self.worker, text, original, true)

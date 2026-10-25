@@ -6,6 +6,7 @@ mod mecab;
 mod model;
 pub(crate) mod morph;
 pub(crate) mod njd;
+mod numeral_boundaries;
 pub(crate) mod reading_protection;
 
 #[cfg(test)]
