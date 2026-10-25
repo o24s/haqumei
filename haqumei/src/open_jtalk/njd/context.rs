@@ -268,6 +268,17 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
         {
             Some(("ショウミョウ", "ショーミョー", 1))
         }
+        // 夕日が麻布を染めるという地名の用法もある。染める単独は根拠にせず、
+        // 布の織り方か、織る・染色するという加工を確認する。
+        "麻布"
+            if (via_no
+                && previous_previous.is_some_and(|n| {
+                    n.get_string() == "生成り" || n.get_string().ends_with("織り")
+                }))
+                || cloth_processing(nodes, i) =>
+        {
+            Some(("アサヌノ", "アサヌノ", 0))
+        }
         // 洪水の際・排水の際は、前の形態素が水ではないのでサイを保つ。
         "際" if via_no
             && previous_previous.is_some_and(|n| {
@@ -376,6 +387,26 @@ fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
         && nodes
             .get(after_auxiliaries(nodes, at + 3))
             .is_none_or(|n| !matches!(n.get_pos(), POS::Meishi(_)))
+}
+
+fn cloth_processing(nodes: &[NJDNode], i: usize) -> bool {
+    let at = i + 1 + usize::from(nodes.get(i + 1).is_some_and(|n| n.get_string() == "など"));
+    if !nodes
+        .get(at)
+        .is_some_and(|n| matches!(n.get_string(), "を" | "は"))
+    {
+        return false;
+    }
+    let Some(predicate) = nodes.get(at + 1) else {
+        return false;
+    };
+    matches!(predicate.get_orig(), Some("織る"))
+        || (predicate.get_string() == "染色"
+            && nodes
+                .get(at + 2)
+                .is_some_and(|n| n.get_orig() == Some("する")))
+        || (predicate.get_string() == "漆"
+            && nodes.get(at + 2).is_some_and(|n| n.get_string() == "で"))
 }
 
 fn disability_enumeration(nodes: &[NJDNode], i: usize) -> bool {

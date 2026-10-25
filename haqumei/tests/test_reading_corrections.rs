@@ -66,6 +66,17 @@ fn religious_terms_need_direct_context() {
 }
 
 #[test]
+fn cloth_readings_keep_the_place_name() {
+    check_context_readings(
+        &[
+            ("生成りの麻布を買う", "麻布", "アサヌノ", 4),
+            ("麻布を織る", "麻布", "アサヌノ", 4),
+        ],
+        &["麻布に染色の店がある", "麻布を染める"],
+    );
+}
+
+#[test]
 fn explicit_telephone_context_keeps_quantities_and_decimals() {
     let mut engine = Haqumei::new().unwrap();
     for (text, kana) in [
