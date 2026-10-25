@@ -3,6 +3,7 @@ use rustc_hash::FxHashMap;
 use crate::utils::{is_katakana_word, split_kana_mora};
 use crate::{errors::HaqumeiError, features::NjdFeature};
 
+mod context;
 mod counter;
 mod number;
 pub(super) use number::{is_numeric_identifier_surface, is_numeric_surface};
@@ -261,7 +262,7 @@ pub(crate) fn run_frontend(
     apply_unvoicing: bool,
     split_prefixes: bool,
     split_fillers: bool,
-    modify_body_reading: bool,
+    modify_context_reading: bool,
 ) -> Result<Vec<NjdFeature>, HaqumeiError> {
     use haqumei_jpreprocess_core::word_entry::WordEntry;
     use haqumei_jpreprocess_njd::{
@@ -355,7 +356,7 @@ pub(crate) fn run_frontend(
     if modify_numeral_reading {
         modify_placeholder_maru(&mut nodes, &protected_nodes);
     }
-    if modify_body_reading && nodes.iter().any(|node| node.get_string() == "身体") {
+    if modify_context_reading && nodes.iter().any(|node| node.get_string() == "身体") {
         let features = rust_njd_to_features(&NJD {
             nodes: nodes.clone(),
         });
@@ -369,6 +370,9 @@ pub(crate) fn run_frontend(
                 );
             }
         }
+    }
+    if modify_context_reading {
+        context::prepare_readings(&mut nodes, &protected_nodes);
     }
     if modify_numeral_reading {
         counter::prepare_old_place_characters(&mut nodes, &protected_nodes);
