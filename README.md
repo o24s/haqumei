@@ -75,7 +75,7 @@
 | **Prosody Information Retrieval** | Provides phoneme sequences annotated with prosodic symbols, along with a word-to-phoneme mapping carrying structured prosody information (`g2p_prosody`, `g2p_mapping_prosody`). (For more details, see [Prosody Features](#prosody-features-g2p_prosody--g2p_mapping_prosody).) |
 | **More Detailed Phoneme Labels** | Through allophone resolution for moraic nasals (撥音) and geminate consonants (促音), you can choose from several options for the allophones introduced as dedicated phoneme labels. (See [here](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) for details.) |
 | **Performance** | Enables fast processing through a native Rust implementation. (See [Benchmark](#benchmark)) |
-| **Accuracy** | Successive dictionary and logic improvements reach 0.83% PER on [jsut-label](https://github.com/prj-beatrice/jsut-label) and 0.78% CER on [ROHAN](https://github.com/mmorise/rohan4600). Further changes build on the dictionary and the accuracy techniques of [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy)) |
+| **Accuracy** | Successive dictionary and logic improvements reach 0.81% PER on [jsut-label](https://github.com/prj-beatrice/jsut-label) and 0.71% CER on [ROHAN](https://github.com/mmorise/rohan4600). Further changes build on the dictionary and the accuracy techniques of [`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus). (See [Accuracy](#accuracy)) |
 | **Unknown Word Fallbacks** | Reading estimation for English words that would otherwise be unknown via `haqumei-kanalizer`, an on'yomi fallback for kanji that match no dictionary entry, and accent correction for words written entirely in katakana. |
 | **Concurrency** | Enables concurrent G2P processing across multiple threads using the `*_batch` methods. |
 | **Diverse Options** | Using [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html), you can flexibly customize allophone phoneme label introduction, Unicode normalization, and reading behavior. |
@@ -628,8 +628,8 @@ The figures are the phoneme error rate (PER) on [prj-beatrice/jsut-label](https:
 | G2P | jsut-label (PER) | ROHAN (KER) |
 | :--- | ---: | ---: |
 | pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
-| pyopenjtalk-plus 0.4.1.post9 | 1.09% | 1.60% |
-| **haqumei 0.12.0** | **0.83%** | **0.78%** |
+| pyopenjtalk-plus 0.4.1.post10 | 0.84% | **0.66%** |
+| **haqumei 0.12.3** | **0.81%** | 0.71% |
 
 \* vanilla `pyopenjtalk` has no way to write long vowels and yotsugana in their
 original spelling, so its output cannot be brought to ROHAN's notation. Most of that
@@ -644,20 +644,20 @@ Every combination is listed under "All option combinations" below.
 | G2P | options | jsut-label (PER) | ROHAN (KER) |
 | :--- | :--- | ---: | ---: |
 | pyopenjtalk | - | 1.31% | 5.02% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.62% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.09% | 4.65% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.64% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.11% | 4.66% |
-| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.78% |
-| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.96% | 3.79% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.83% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.84% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.83% | 3.81% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
+| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.94% | 3.73% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.77% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.79% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.74% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.81% | 3.76% |
 
 `-` means it was not measured. The options that restore the original spelling
 (`revert_long_vowels` / `revert_yotsugana`) only mean something for ROHAN, which
@@ -671,12 +671,15 @@ avoids the long vowel mark, so jsut-label is not run on the rows that enable the
 git clone https://github.com/o24s/japanese-g2p-benchmark
 cd japanese-g2p-benchmark
 uv run init.py
+G2P_BENCH_PKG_PYOPENJTALK=pyopenjtalk==0.4.1 \
+G2P_BENCH_PKG_PYOPENJTALK_PLUS='pyopenjtalk-plus[onnxruntime,tsqyomi]==0.4.1.post10' \
+G2P_BENCH_PKG_HAQUMEI=haqumei==0.12.3 \
 uv run python run_all.py --datasets phoneme,no_lvs --sources jsut-label,rohan4600
 ```
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **0.83%** (Substitute=1459, Delete=434, Insert=580, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **0.81%** (Substitute=1430, Delete=438, Insert=557, N=297843)
 
 `HaqumeiOptions`:
 ```rust
@@ -688,7 +691,7 @@ HaqumeiOptions {
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): **0.78%** (Substitute=757, Delete=164, Insert=250, N=150637)
+Katakana Error Rate (S+D+I / N_expected): **0.71%** (Substitute=689, Delete=152, Insert=236, N=150637)
 
 `HaqumeiOptions`:
 ```rust
@@ -735,7 +738,7 @@ If you want to build with your own dictionary embedded in the binary, you can ch
 Disable the default `download-dictionary` feature and enable `build-dictionary`.
 ```toml
 [dependencies]
-haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary"], default-features = false }
+haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary", "inference", "dictionary-compiler"], default-features = false }
 ```
 
 ### Prepare the Dictionary Source and Set the Environment Variable

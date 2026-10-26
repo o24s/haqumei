@@ -76,7 +76,7 @@
 | **プロソディ情報の取得** | プロソディ記号付き音素列と、構造化されたプロソディー情報をもつ単語と音素列マッピング (`g2p_prosody`, `g2p_mapping_prosody`) を得ることができます。 (それらの詳細については、[ここ](#プロソディ機能-g2p_prosody--g2p_mapping_prosody) を参照してください。) |
 | **より詳細な音素ラベル** | 撥音・促音に対する条件異音 (allophone) 解決によって、専用の音素ラベルとして導入された異音の取得をいくつかの選択肢から設定できます。 (詳細は、[ここ](https://docs.rs/haqumei/latest/haqumei/phoneme/index.html) を参照してください。) |
 | **パフォーマンス** | Rustによるネイティブ実装によって高速な処理を実現しています。([ベンチマーク](#ベンチマーク)) |
-| **精度** | 辞書とロジックの改善を重ね、[jsut-label](https://github.com/prj-beatrice/jsut-label) で PER 0.83% と、[ROHAN](https://github.com/mmorise/rohan4600) で CER 0.78% を達成しています。[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書と精度改善手法に基づいてさらなる変更を加えています。([精度](#精度)) |
+| **精度** | 辞書とロジックの改善を重ね、[jsut-label](https://github.com/prj-beatrice/jsut-label) で PER 0.81% と、[ROHAN](https://github.com/mmorise/rohan4600) で CER 0.71% を達成しています。[`pyopenjtalk-plus`](https://github.com/tsukumijima/pyopenjtalk-plus) の辞書と精度改善手法に基づいてさらなる変更を加えています。([精度](#精度)) |
 | **未知語フォールバック** | 通常は未知語となってしまう英単語の `haqumei-kanalizer` による読み推定や、辞書にマッチしなかった漢字を音読みするフォールバック、カタカナによって構成される単語のアクセント補正が実装されています。 |
 | **並行処理** | `*_batch` 系のメソッドを使うことで、複数のスレッドでG2Pが行えます。 |
 | **多様なオプション** | [HaqumeiOptions](https://docs.rs/haqumei/latest/haqumei/options/struct.HaqumeiOptions.html) を用いることで、条件異音の音素ラベル導入、Unicode 正規化、読み方についての柔軟な変更が可能です。 |
@@ -631,8 +631,8 @@ JSUT corpus の basic5000 に対するアノテーションである、jsut-labe
 | G2P | jsut-label (PER) | ROHAN (KER) |
 | :--- | ---: | ---: |
 | pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
-| pyopenjtalk-plus 0.4.1.post9 | 1.09% | 1.60% |
-| **haqumei 0.12.0** | **0.83%** | **0.78%** |
+| pyopenjtalk-plus 0.4.1.post10 | 0.84% | **0.66%** |
+| **haqumei 0.12.3** | **0.81%** | 0.71% |
 
 \* 素の `pyopenjtalk` には長音と四つ仮名を元の表記のまま書き出す手段が無いため、
 出力を ROHAN の表記に揃えられません。この差の大半は読みの誤りではなく表記の違いです。
@@ -646,20 +646,20 @@ JSUT corpus の basic5000 に対するアノテーションである、jsut-labe
 | G2P | options | jsut-label (PER) | ROHAN (KER) |
 | :--- | :--- | ---: | ---: |
 | pyopenjtalk | - | 1.31% | 5.02% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 1.60% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 1.10% | 4.63% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.62% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.09% | 4.65% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 1.64% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 1.11% | 4.66% |
-| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.78% |
-| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.96% | 3.79% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.83% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.84% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.83% | 3.81% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
+| haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.94% | 3.73% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.77% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.79% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.74% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.81% | 3.76% |
 
 `-` は測っていないことを表します。表記を戻す設定 (`revert_long_vowels` /
 `revert_yotsugana`) が意味を持つのは、長音記号を使わない ROHAN だけです。
@@ -673,12 +673,15 @@ JSUT corpus の basic5000 に対するアノテーションである、jsut-labe
 git clone https://github.com/o24s/japanese-g2p-benchmark
 cd japanese-g2p-benchmark
 uv run init.py
+G2P_BENCH_PKG_PYOPENJTALK=pyopenjtalk==0.4.1 \
+G2P_BENCH_PKG_PYOPENJTALK_PLUS='pyopenjtalk-plus[onnxruntime,tsqyomi]==0.4.1.post10' \
+G2P_BENCH_PKG_HAQUMEI=haqumei==0.12.3 \
 uv run python run_all.py --datasets phoneme,no_lvs --sources jsut-label,rohan4600
 ```
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **0.83%** (Substitute=1459, Delete=434, Insert=580, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **0.81%** (Substitute=1430, Delete=438, Insert=557, N=297843)
 
 `HaqumeiOptions`:
 ```rust
@@ -690,7 +693,7 @@ HaqumeiOptions {
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): **0.78%** (Substitute=757, Delete=164, Insert=250, N=150637)
+Katakana Error Rate (S+D+I / N_expected): **0.71%** (Substitute=689, Delete=152, Insert=236, N=150637)
 
 `HaqumeiOptions`:
 ```rust
@@ -751,7 +754,7 @@ HaqumeiOptions {
 
 ```toml
 [dependencies]
-haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary"], default-features = false }
+haqumei = { version = "x.y.z", features = ["embed-dictionary", "build-dictionary", "inference", "dictionary-compiler"], default-features = false }
 ```
 
 ### 辞書ソースの準備と環境変数の設定
