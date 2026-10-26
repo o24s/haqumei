@@ -1,6 +1,205 @@
 use haqumei::{Haqumei, HaqumeiOptions, njd_char_spans};
 
 #[test]
+fn spaced_numeric_groups_keep_expected_word_origins() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        (
+            "01 10円",
+            vec![
+                ("０", 0..1),
+                ("一", 1..2),
+                ("　", 2..3),
+                ("十", 3..5),
+                ("円", 5..6),
+            ],
+        ),
+        (
+            "1200 10円",
+            vec![
+                ("千", 0..1),
+                ("二", 1..3),
+                ("百", 3..4),
+                ("　", 4..5),
+                ("十", 5..7),
+                ("円", 7..8),
+            ],
+        ),
+        (
+            "0 〇二日",
+            vec![("０", 0..1), ("　", 1..2), ("〇", 2..3), ("二日", 3..5)],
+        ),
+    ] {
+        let (features, morphs) = engine.run_frontend_detailed(text).unwrap();
+        assert_eq!(
+            features
+                .iter()
+                .zip(njd_char_spans(&features, &morphs))
+                .map(|(feature, span)| (feature.string.as_str(), span))
+                .collect::<Vec<_>>(),
+            expected
+                .iter()
+                .filter(|(word, _)| *word != "　")
+                .cloned()
+                .collect::<Vec<_>>(),
+            "{text}"
+        );
+        let basic = engine.g2p_mapping(text).unwrap();
+        let detailed = engine.g2p_mapping_detailed(text).unwrap();
+        let prosody = engine.g2p_mapping_prosody(text).unwrap();
+        for actual in [
+            basic
+                .iter()
+                .map(|word| (word.word.as_str(), word.char_span.clone()))
+                .collect::<Vec<_>>(),
+            detailed
+                .iter()
+                .map(|word| (word.word.as_str(), word.char_span.clone()))
+                .collect::<Vec<_>>(),
+            prosody
+                .iter()
+                .map(|word| (word.word.as_str(), word.char_span.clone()))
+                .collect::<Vec<_>>(),
+        ] {
+            assert_eq!(actual, expected, "{text}");
+        }
+    }
+}
+
+#[test]
+fn repeated_digits_do_not_cross_numeric_separators() {
+    let mut engine = Haqumei::new().unwrap();
+    for separator in [" ", "　", "\n", "\t", "\r\n", "  "] {
+        for (first, second) in [
+            ("1", "10"),
+            ("1", "11"),
+            ("10", "100"),
+            ("12", "120"),
+            ("1", "1000"),
+            ("01", "010"),
+            ("01", "10"),
+            ("0", "〇二日"),
+            ("0", "0 2日"),
+        ] {
+            let suffix = if second.ends_with('日') { "" } else { "円" };
+            let text = format!("{first}{separator}{second}{suffix}");
+            let (features, morphs) = engine.run_frontend_detailed(&text).unwrap();
+            let njd_spans = njd_char_spans(&features, &morphs);
+            let mut end = 0;
+            for span in njd_spans.iter().filter(|span| !span.is_empty()) {
+                assert!(
+                    span.start >= end,
+                    "{text:?}: {features:?}, {morphs:?}, {njd_spans:?}"
+                );
+                end = span.end;
+            }
+            assert!(
+                njd_spans[0].end <= first.chars().count(),
+                "{text:?}: {features:?}, {morphs:?}, {njd_spans:?}"
+            );
+
+            let basic = engine.g2p_mapping(&text).unwrap();
+            let detailed = engine.g2p_mapping_detailed(&text).unwrap();
+            let prosody = engine.g2p_mapping_prosody(&text).unwrap();
+            let spans = basic
+                .iter()
+                .map(|word| word.char_span.clone())
+                .collect::<Vec<_>>();
+            let mut end = 0;
+            for span in spans.iter().filter(|span| !span.is_empty()) {
+                assert_eq!(span.start, end, "{text:?}: {basic:?}");
+                end = span.end;
+            }
+            assert_eq!(end, text.chars().count(), "{text:?}: {basic:?}");
+            assert_eq!(
+                spans,
+                detailed
+                    .iter()
+                    .map(|word| word.char_span.clone())
+                    .collect::<Vec<_>>(),
+                "{text:?}"
+            );
+            assert_eq!(
+                spans,
+                prosody
+                    .iter()
+                    .map(|word| word.char_span.clone())
+                    .collect::<Vec<_>>(),
+                "{text:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn numeric_alignment_keeps_group_boundaries_in_the_long_input_fallback() {
+    let mut engine = Haqumei::new().unwrap();
+    for (first, second) in [
+        ("1".repeat(129), "10".into()),
+        ("10".into(), "1".repeat(129)),
+    ] {
+        let text = format!("{first} {second}円");
+        let separator = first.chars().count();
+        let mapping = engine.g2p_mapping_detailed(&text).unwrap();
+        let mut end = 0;
+        for word in mapping.iter().filter(|word| !word.char_span.is_empty()) {
+            assert_eq!(word.char_span.start, end, "{text:?}: {mapping:?}");
+            if !word.is_ignored {
+                assert!(
+                    word.char_span.end <= separator || word.char_span.start > separator,
+                    "{text:?}: {mapping:?}"
+                );
+            }
+            end = word.char_span.end;
+        }
+        assert_eq!(end, text.chars().count(), "{text:?}: {mapping:?}");
+    }
+}
+
+#[test]
+fn a_contracted_number_owns_its_internal_formatting_spaces() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in ["1, 000円", "1 ,000円", "1, 000, 000円"] {
+        assert_eq!(
+            engine.g2k(text).unwrap(),
+            engine.g2k(&text.replace(' ', "")).unwrap()
+        );
+        let (features, morphs) = engine.run_frontend_detailed(text).unwrap();
+        let spans = njd_char_spans(&features, &morphs);
+        let basic = engine.g2p_mapping(text).unwrap();
+        let detailed = engine.g2p_mapping_detailed(text).unwrap();
+        let prosody = engine.g2p_mapping_prosody(text).unwrap();
+        let mut end = 0;
+        for word in detailed.iter().filter(|word| !word.char_span.is_empty()) {
+            assert_eq!(word.char_span.start, end, "{text:?}: {detailed:?}");
+            end = word.char_span.end;
+        }
+        assert_eq!(end, text.chars().count(), "{text:?}: {detailed:?}");
+        assert_eq!(
+            spans,
+            detailed
+                .iter()
+                .map(|word| word.char_span.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            spans,
+            basic
+                .iter()
+                .map(|word| word.char_span.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            spans,
+            prosody
+                .iter()
+                .map(|word| word.char_span.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
 fn line_breaks_and_tabs_keep_numbers_separate_in_all_mappings() {
     let mut engine = Haqumei::new().unwrap();
     for separator in ["\n", "\r", "\r\n", "\t"] {

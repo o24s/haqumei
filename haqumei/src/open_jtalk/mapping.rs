@@ -579,18 +579,8 @@ fn collect_number_morphs(
     next_surface: &str,
 ) -> (Vec<usize>, usize) {
     let mut indices = Vec::new();
-    let mut stopped_before_day = false;
-    for i in start..morphs.len() {
-        let morph = &morphs[i];
+    for (i, morph) in morphs.iter().enumerate().skip(start) {
         if morph.is_ignored {
-            let following = (i + 1..morphs.len())
-                .find(|&j| !morphs[j].is_ignored)
-                .unwrap_or(morphs.len());
-            // 「1 10日」「1 2人」の後ろの数を前へ含めると、空白と縮約語の区間が重なる。
-            if contracted_counter_morph_end(morphs, following, next_surface).is_some() {
-                stopped_before_day = true;
-                break;
-            }
             continue;
         }
         if !is_number_block_surface(&morph.surface)
@@ -604,8 +594,7 @@ fn collect_number_morphs(
     let following = indices
         .last()
         .and_then(|&last| morphs[last + 1..].iter().find(|m| !m.is_ignored));
-    if !stopped_before_day
-        && is_contracted_counter_surface(next_surface)
+    if is_contracted_counter_surface(next_surface)
         && !matches!(next_surface, "日" | "人")
         && following.is_none_or(|m| !m.surface.starts_with(next_surface))
     {
@@ -641,16 +630,48 @@ const MAX_NUMBER_BLOCK: usize = 128;
 /// まとめる。
 ///
 /// 実装は `pyopenjtalk-plus` の `_align_number_block` に倣った。
-fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usize>> {
+fn align_number_block(
+    source: &[Vec<char>],
+    target: &[NjdFeature],
+    group_starts: &[bool],
+) -> Vec<Vec<usize>> {
     let (n, m) = (source.len(), target.len());
+    debug_assert_eq!(n, group_starts.len());
     let mut assignments: Vec<Vec<usize>> = vec![Vec::new(); m];
+    let mut groups: Vec<_> = group_starts
+        .iter()
+        .enumerate()
+        .filter(|(_, start)| **start)
+        .map(|(start, _)| start..n)
+        .collect();
+    for index in 1..groups.len() {
+        let end = groups[index].start;
+        groups[index - 1].end = end;
+    }
+    // 「1, 000」のように NJD が1語へ縮約した表記は、区間全体を1語へ割り当てる。
+    // それ以外では各組の先頭を必ず別の出力へ対応させ、空白を越えた吸収を防ぐ。
+    let preserve_groups = groups.len() > 1
+        && groups.len() <= m
+        && target.iter().skip(1).filter(|f| f.chain_flag == 0).count() >= groups.len() - 1;
 
     // 極端に長い数詞では表を作らず、入力順に 1 対 1 で消費する。
     // NJD 側が少ない場合の余りは最後の形態素へ集約し、入力を取りこぼさない
     if n > MAX_NUMBER_BLOCK || m > MAX_NUMBER_BLOCK {
-        for (i, assignment) in (0..n).zip(0..) {
-            let _ = assignment;
-            assignments[i.min(m.saturating_sub(1))].push(i);
+        if preserve_groups {
+            let mut target_start = 0;
+            for (index, group) in groups.iter().enumerate() {
+                // 後続の各組にも出力を1つ残し、余った入力は同じ組の末尾へ集約する。
+                let remaining_groups = groups.len() - index - 1;
+                let count = group.len().min(m - target_start - remaining_groups).max(1);
+                for (offset, source_index) in group.clone().enumerate() {
+                    assignments[target_start + offset.min(count - 1)].push(source_index);
+                }
+                target_start += count;
+            }
+        } else {
+            for i in 0..n {
+                assignments[i.min(m.saturating_sub(1))].push(i);
+            }
         }
         return assignments;
     }
@@ -665,8 +686,13 @@ fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usi
 
     let mut cost = vec![vec![0usize; m + 1]; n + 1];
     let mut action = vec![vec![Action::None; m + 1]; n + 1];
+    let target_keys = target
+        .iter()
+        .map(|feature| number_keys(&feature.string))
+        .collect::<Vec<_>>();
+    const UNREACHABLE: usize = usize::MAX / 4;
     for i in 1..=n {
-        cost[i][0] = i;
+        cost[i][0] = if preserve_groups { UNREACHABLE } else { i };
         action[i][0] = Action::Delete;
     }
     for j in 1..=m {
@@ -675,10 +701,24 @@ fn align_number_block(source: &[Vec<char>], target: &[Vec<char>]) -> Vec<Vec<usi
     }
     for i in 1..=n {
         for j in 1..=m {
-            let substitution = usize::from(source[i - 1] != target[j - 1]);
+            let substitution = usize::from(source[i - 1] != target_keys[j - 1]);
+            // remove_number_spaces は空白直後の結合フラグを0にする。
+            // 組の途中にも0はあるため、境界の候補として経路全体を比較する。
+            let align_cost =
+                if preserve_groups && i > 1 && group_starts[i - 1] && target[j - 1].chain_flag != 0
+                {
+                    UNREACHABLE
+                } else {
+                    cost[i - 1][j - 1] + substitution
+                };
+            let delete_cost = if preserve_groups && group_starts[i - 1] {
+                UNREACHABLE
+            } else {
+                cost[i - 1][j] + 1
+            };
             let candidates = [
-                (cost[i - 1][j - 1] + substitution, Action::Align),
-                (cost[i - 1][j] + 1, Action::Delete),
+                (align_cost, Action::Align),
+                (delete_cost, Action::Delete),
                 (cost[i][j - 1] + 1, Action::Insert),
             ];
             let (best, best_action) = candidates
@@ -886,16 +926,25 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
                 .iter()
                 .map(|&i| number_keys(&morphs[i].surface))
                 .collect();
-            let target: Vec<Vec<char>> = features[idx..feature_end]
+            let group_starts = source_indices
                 .iter()
-                .map(|f| number_keys(&f.string))
-                .collect();
+                .enumerate()
+                .map(|(index, &source)| {
+                    index == 0
+                        || morphs[source_indices[index - 1]].char_span.end
+                            < morphs[source].char_span.start
+                })
+                .collect::<Vec<_>>();
 
             // 位取りとして差し込まれた形態素は元の文字を持たないので、直前の
             // 形態素の終端に空の区間として置く。並びの先頭に置くと、そこから
             // 始まる形態素と開始位置が同じになる
             let mut at = morph.char_span.start;
-            for (offset, assigned) in align_number_block(&source, &target).into_iter().enumerate() {
+            for (offset, assigned) in
+                align_number_block(&source, &features[idx..feature_end], &group_starts)
+                    .into_iter()
+                    .enumerate()
+            {
                 spans[idx + offset] = match (
                     assigned
                         .first()
@@ -1424,8 +1473,18 @@ impl OpenJTalk {
 
             if map.word() == morph.surface {
                 // 完全一致
+                let number_end = is_number_surface(map.word()).then_some(map.char_span().end);
                 result.push(map.into_exact_match(morph));
-                morph_idx += 1;
+                if let Some(end) = number_end {
+                    while morphs
+                        .get(morph_idx)
+                        .is_some_and(|m| m.char_span.start < end)
+                    {
+                        morph_idx += 1;
+                    }
+                } else {
+                    morph_idx += 1;
+                }
             } else if map.word().starts_with(&morph.surface) {
                 // 先頭一致 (マージ)
                 let mut is_unknown_word = false;
@@ -1466,11 +1525,13 @@ impl OpenJTalk {
             } else {
                 // 不一致 (踊り字展開や数字展開など)
                 let consumed_from = morph_idx;
+                let number_span = (is_number_surface(&morph.surface)
+                    && (is_number_surface(map.word())
+                        || is_contracted_counter_surface(map.word())))
+                .then(|| map.char_span().clone());
                 if has_odori_chars(&morph.surface) {
                     morph_idx += consume_odori_morphs(&morphs, morph_idx, map.word());
-                } else if is_number_surface(&morph.surface)
-                    && (is_number_surface(map.word()) || is_contracted_counter_surface(map.word()))
-                {
+                } else if number_span.is_some() {
                     // NJD の区間と同じ境界まで消費し、日付の桁を二度割り当てない。
                     while morphs
                         .get(morph_idx)
@@ -1492,12 +1553,14 @@ impl OpenJTalk {
 
                 result.push(map.into_mismatch());
 
-                // 数字の縮約は空白をまたぐ (「1　0」の morph は １ / 　 / ０ で、
-                // NJD はこれを「十」1 つに縮約する)。消費した ignored な morph を
-                // ここで出さないと、mapping から空白が消えて入力全体を復元できなくなる。
-                // 縮約後は元の位置が復元できないので、まとめて直後に置く。
+                // 縮約した数詞の区間が内部の空白も含む場合、空白の再出力は区間を重複させる。
+                // 数詞に含まれない ignored な形態素は独立した区間として残す。
                 for m in &morphs[consumed_from..morph_idx] {
-                    if m.is_ignored {
+                    if m.is_ignored
+                        && number_span.as_ref().is_none_or(|span| {
+                            m.char_span.start < span.start || span.end < m.char_span.end
+                        })
+                    {
                         result.push(T::new_ignored(m));
                     }
                 }
