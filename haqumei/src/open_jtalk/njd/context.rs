@@ -483,6 +483,7 @@ fn face_predicate(nodes: &[NJDNode], i: usize) -> bool {
                 POS::Doushi(_) | POS::Keiyoushi(_) | POS::Meishi(_)
             )
         })
+        && !pointed_surface_object(nodes, i)
         && nodes[..i]
             .iter()
             .rev()
@@ -506,6 +507,20 @@ fn face_predicate(nodes: &[NJDNode], i: usize) -> bool {
                 && nodes.get(end + 1).is_some_and(|n| {
                     matches!(n.get_orig(), Some("黙る" | "泣く" | "話す" | "笑う"))
                 })))
+}
+
+fn pointed_surface_object(nodes: &[NJDNode], i: usize) -> bool {
+    let before = sentence_prefix(nodes, i);
+    let end = before.len() - usize::from(before.last().is_some_and(|n| n.get_string() == "、"));
+    let before = &before[..end];
+    let end = before.len() - usize::from(before.last().is_some_and(|n| n.get_string() == "て"));
+    // 防具や板を指して面を上げる命令は、顔の所作ではない。
+    // 物の名前の共起だけでは、道具を片付けてから顔を上げる文まで変わってしまう。
+    matches!(&before[..end], [.., object, particle, predicate]
+        if matches!(object.get_string(), "防具" | "立方体" | "角柱" | "板" | "小道具")
+            && matches!(object.get_pos(), POS::Meishi(Meishi::General))
+            && particle.get_string() == "を"
+            && predicate.get_orig() == Some("指す"))
 }
 
 fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
