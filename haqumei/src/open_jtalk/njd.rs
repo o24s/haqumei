@@ -5,6 +5,7 @@ use crate::{errors::HaqumeiError, features::NjdFeature};
 
 mod context;
 mod counter;
+mod idiom;
 mod number;
 pub(super) use number::{is_numeric_identifier_surface, is_numeric_surface};
 
@@ -375,6 +376,7 @@ pub(crate) fn run_frontend(
         context::prepare_person_names(&mut nodes, &mut protected_nodes);
         context::prepare_explicit_first_day(&mut nodes, &mut protected_nodes);
         context::prepare_readings(&mut nodes, &protected_nodes);
+        idiom::prepare_readings(&mut nodes, &protected_nodes);
     }
     if modify_numeral_reading {
         counter::prepare_old_place_characters(&mut nodes, &protected_nodes);
