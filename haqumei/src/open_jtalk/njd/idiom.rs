@@ -98,10 +98,17 @@ fn noun_entry(nodes: &[NJDNode], i: usize) -> Option<&'static str> {
         {
             Some("風,名詞,一般,*,*,*,*,風,カゼ,カゼ,0/2,C3")
         }
-        // 建物の「造作もなくなった」はゾウサク。仕事の容易さか、できるという述語を確認する。
+        // 作業小屋のような複合語は建物の造作がない文にも続く。
+        // 仕事・作業が単独の名詞であるか、できるという述語を確認する。
         "造作"
-            if after(nodes, i, &["も", "ない", "仕事"])
-                || after(nodes, i, &["も", "ない", "作業"])
+            if ((after(nodes, i, &["も", "ない", "仕事"])
+                || after(nodes, i, &["も", "ない", "作業"]))
+                && nodes.get(i + 4).is_none_or(|node| {
+                    matches!(
+                        node.get_pos(),
+                        POS::Joshi(_) | POS::Jodoushi | POS::Kigou(_)
+                    )
+                }))
                 || (after(nodes, i, &["も", "なく"])
                     && nodes.get(i + 3).is_some_and(is_ability_verb)) =>
         {
