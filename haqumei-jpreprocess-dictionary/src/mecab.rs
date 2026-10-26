@@ -11,6 +11,7 @@ mod backend;
 pub use backend::Worker;
 
 /// MeCab 互換辞書から Haqumei 用の vibrato-rkyv システム辞書を生成します。
+#[cfg(feature = "compiler")]
 pub fn write_system_dictionary(directory: &Path, output: &Path) -> io::Result<()> {
     backend::write_system_dictionary(directory, output)
 }
@@ -43,7 +44,10 @@ struct Lexicon {
 
 impl Lexicon {
     fn open(path: &Path) -> io::Result<Self> {
-        let bytes = fs::read(path)?;
+        Self::from_bytes(fs::read(path)?)
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> io::Result<Self> {
         let header = |at| u32_at(&bytes, at).ok_or_else(|| invalid("辞書のヘッダーが短すぎます"));
         if header(0)? ^ 0xef71_8f77 != bytes.len() as u32 || header(4)? != 102 {
             return Err(invalid("MeCab 辞書の形式またはバージョンが一致しません"));
@@ -185,20 +189,25 @@ impl CharInfo {
     fn category(self) -> usize {
         ((self.0 >> 18) & 0xff) as usize
     }
+    #[cfg(feature = "compiler")]
     fn length(self) -> usize {
         ((self.0 >> 26) & 0xf) as usize
     }
     fn group(self) -> bool {
         self.0 & (1 << 30) != 0
     }
+    #[cfg(feature = "compiler")]
     fn invoke(self) -> bool {
         self.0 & (1 << 31) != 0
     }
 }
 
 fn read_characters(path: &Path) -> io::Result<(Vec<String>, Vec<CharInfo>)> {
-    let bytes = fs::read(path)?;
-    let count = u32_at(&bytes, 0).ok_or_else(|| invalid("文字種のヘッダーがありません"))? as usize;
+    parse_characters(&fs::read(path)?)
+}
+
+fn parse_characters(bytes: &[u8]) -> io::Result<(Vec<String>, Vec<CharInfo>)> {
+    let count = u32_at(bytes, 0).ok_or_else(|| invalid("文字種のヘッダーがありません"))? as usize;
     let names_end = 4usize
         .checked_add(
             count
@@ -234,11 +243,14 @@ fn read_characters(path: &Path) -> io::Result<(Vec<String>, Vec<CharInfo>)> {
 }
 
 fn read_matrix(path: &Path) -> io::Result<(usize, usize, Vec<i16>)> {
-    let bytes = fs::read(path)?;
+    parse_matrix(&fs::read(path)?)
+}
+
+fn parse_matrix(bytes: &[u8]) -> io::Result<(usize, usize, Vec<i16>)> {
     let left_size =
-        u16_at(&bytes, 0).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
+        u16_at(bytes, 0).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
     let right_size =
-        u16_at(&bytes, 2).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
+        u16_at(bytes, 2).ok_or_else(|| invalid("接続行列のヘッダーがありません"))? as usize;
     let expected_length = left_size
         .checked_mul(right_size)
         .and_then(|size| size.checked_mul(2))
@@ -291,9 +303,15 @@ pub struct Analysis {
     pub total_cost: i64,
 }
 
+#[derive(Debug, Clone)]
+enum SystemDictionary {
+    Path(PathBuf),
+    Memory(backend::SharedTokenizer),
+}
+
 #[derive(Debug)]
 struct Data {
-    system_path: PathBuf,
+    system: SystemDictionary,
     user_dictionaries: Vec<Lexicon>,
     #[cfg(test)]
     reference_dictionaries: Vec<Lexicon>,
@@ -338,13 +356,64 @@ impl Model {
         }
         let (_, chars) = read_characters(&directory.join("char.bin"))?;
         let (left_size, right_size, matrix) = read_matrix(&directory.join("matrix.bin"))?;
+        Self::from_parts(
+            SystemDictionary::Path(system_path),
+            users,
+            chars,
+            left_size,
+            right_size,
+            matrix,
+        )
+    }
+
+    /// コンパイル済みの辞書をバイト列から読み込みます。
+    ///
+    /// `system` は `system.bin`、`characters` は `char.bin`、`matrix` は
+    /// `matrix.bin` の内容です。ユーザー辞書は MeCab 互換の `.dic` を指定順に渡します。
+    /// システム辞書の構造と、文字種・行列・ユーザー辞書の形式を検証します。
+    pub fn from_bytes(
+        system: &[u8],
+        characters: &[u8],
+        matrix: &[u8],
+        user_dictionaries: &[&[u8]],
+    ) -> io::Result<Self> {
+        if user_dictionaries.len() >= 255 {
+            return Err(invalid("ユーザー辞書は 254 個まで指定できます"));
+        }
+        let system = backend::SharedTokenizer::from_bytes(system)?;
+        let users = user_dictionaries
+            .iter()
+            .map(|bytes| Lexicon::from_bytes(bytes.to_vec()))
+            .collect::<io::Result<Vec<_>>>()?;
+        let (_, chars) = parse_characters(characters)?;
+        let (left_size, right_size, matrix) = parse_matrix(matrix)?;
+        Self::from_parts(
+            SystemDictionary::Memory(system),
+            users,
+            chars,
+            left_size,
+            right_size,
+            matrix,
+        )
+    }
+
+    fn from_parts(
+        system: SystemDictionary,
+        users: Vec<Lexicon>,
+        chars: Vec<CharInfo>,
+        left_size: usize,
+        right_size: usize,
+        matrix: Vec<i16>,
+    ) -> io::Result<Self> {
         if users.iter().any(|dictionary| {
-            dictionary.left_size != left_size || dictionary.right_size != right_size
+            dictionary.kind != 1
+                || dictionary.left_size != left_size
+                || dictionary.right_size != right_size
         }) {
             return Err(invalid("ユーザー辞書がシステム辞書と互換ではありません"));
         }
         Ok(Self(Arc::new(Data {
-            system_path,
+            system,
             user_dictionaries: users,
             #[cfg(test)]
             reference_dictionaries: Vec::new(),
@@ -358,6 +427,21 @@ impl Model {
             left_size,
             right_size,
         })))
+    }
+
+    /// システム辞書を共有し、ユーザー辞書を指定していない解析器を返します。
+    pub fn without_user_dictionaries(&self) -> io::Result<Self> {
+        if self.0.user_dictionaries.is_empty() {
+            return Ok(self.clone());
+        }
+        Self::from_parts(
+            self.0.system.clone(),
+            Vec::new(),
+            self.0.chars.clone(),
+            self.0.left_size,
+            self.0.right_size,
+            self.0.matrix.clone(),
+        )
     }
 
     #[cfg(test)]
@@ -651,7 +735,7 @@ impl Model {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
@@ -740,7 +824,7 @@ mod tests {
         let unknown = lexicon(&[("DEFAULT", 100, 0, "unknown")], 2);
         let unknown_values = vec![unknown.prefixes(b"DEFAULT").last().unwrap().1];
         Model(Arc::new(Data {
-            system_path: PathBuf::new(),
+            system: SystemDictionary::Path(PathBuf::new()),
             tokenizer: std::sync::OnceLock::new(),
             user_dictionaries: Vec::new(),
             reference_dictionaries: vec![lexicon(entries, 0)],
@@ -944,7 +1028,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "compiler"))]
 mod comparison_tests {
     use super::*;
 
@@ -981,6 +1065,27 @@ mod comparison_tests {
         }
         let system_path = output.join("system.bin");
         let system_before = fs::read(&system_path).unwrap();
+        let characters = fs::read(output.join("char.bin")).unwrap();
+        let matrix = fs::read(output.join("matrix.bin")).unwrap();
+        let user_bytes = users
+            .iter()
+            .map(fs::read)
+            .collect::<io::Result<Vec<_>>>()
+            .unwrap();
+        let user_slices = user_bytes.iter().map(Vec::as_slice).collect::<Vec<_>>();
+        let memory = Model::from_bytes(&system_before, &characters, &matrix, &user_slices).unwrap();
+        let mut memory_worker = memory.worker().unwrap();
+        let mut without_users = memory
+            .without_user_dictionaries()
+            .unwrap()
+            .worker()
+            .unwrap();
+        let mut system_worker = Model::open(&output, &[]).unwrap().worker().unwrap();
+        assert!(Model::from_bytes(b"broken", &characters, &matrix, &[]).is_err());
+        assert!(Model::from_bytes(&system_before, &characters[..4], &matrix, &[]).is_err());
+        assert!(Model::from_bytes(&system_before, &characters, &matrix[..4], &[]).is_err());
+        let invalid_user = fs::read(output.join("sys.dic")).unwrap();
+        assert!(Model::from_bytes(&system_before, &characters, &matrix, &[&invalid_user]).is_err());
         let model = Model::open_with_reference(&output, &users).unwrap();
         let mut worker = model.worker().unwrap();
         assert_eq!(fs::read(&system_path).unwrap(), system_before);
@@ -1010,6 +1115,16 @@ mod comparison_tests {
             let expected = model.analyze_reference(text).unwrap();
             let actual = worker.analyze_lattice(text).unwrap();
             assert_eq!(expected, actual, "{text:?}");
+            assert_eq!(
+                expected,
+                memory_worker.analyze_lattice(text).unwrap(),
+                "{text:?}"
+            );
+            assert_eq!(
+                system_worker.analyze_lattice(text).unwrap(),
+                without_users.analyze_lattice(text).unwrap(),
+                "{text:?}",
+            );
             let best = worker.analyze(text).unwrap();
             assert_eq!(
                 best.nodes,

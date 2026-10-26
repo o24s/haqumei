@@ -1,3 +1,5 @@
+#![cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
+
 use haqumei::open_jtalk::Dictionary;
 use haqumei::{Haqumei, HaqumeiOptions, MecabDictIndexCompiler};
 

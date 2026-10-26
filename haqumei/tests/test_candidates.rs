@@ -120,6 +120,7 @@ fn candidates_are_unique_by_phonemes() {
 /// 両方がラティスに立っていても音素は変わらない。オプションを `false` にすると
 /// 2 件になる。
 #[test]
+#[cfg(feature = "inference")]
 fn a_correction_that_decides_the_reading_collapses_the_branch() {
     let mut haqumei = Haqumei::new().unwrap();
     let text = "何か白いものが見えた。";
@@ -129,13 +130,16 @@ fn a_correction_that_decides_the_reading_collapses_the_branch() {
         "何 が分岐点になっていない"
     );
     assert_eq!(got.candidates.len(), 1, "predict_nani が畳んでいない");
+}
 
+#[test]
+fn without_nani_prediction_the_branch_keeps_both_readings() {
     let mut haqumei = Haqumei::with_options(HaqumeiOptions {
         predict_nani: false,
         ..Default::default()
     })
     .unwrap();
-    let got = haqumei.g2p_candidates(text).unwrap();
+    let got = haqumei.g2p_candidates("何か白いものが見えた。").unwrap();
     assert_eq!(got.candidates.len(), 2);
 }
 

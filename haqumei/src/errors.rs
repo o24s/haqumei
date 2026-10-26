@@ -55,6 +55,12 @@ pub enum HaqumeiError {
     #[error("Global dictionary is not initialized yet")]
     GlobalDictionaryNotInitialized,
 
+    #[error("Option '{option}' requires the '{feature}' Cargo feature")]
+    FeatureDisabled {
+        option: &'static str,
+        feature: &'static str,
+    },
+
     #[error("Phoneme pointer is null")]
     NullPhonemePtr,
 
@@ -79,6 +85,7 @@ pub enum HaqumeiError {
     #[error(transparent)]
     DirError(#[from] walkdir::Error),
 
+    #[cfg(feature = "inference")]
     #[error(transparent)]
     OrtError(#[from] ort::Error),
 }

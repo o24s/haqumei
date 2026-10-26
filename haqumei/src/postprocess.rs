@@ -1,5 +1,6 @@
 mod context_reading;
 pub(crate) use context_reading::body_reading_matches;
+#[cfg(feature = "inference")]
 mod english;
 mod loanword_kana;
 mod numeral;
@@ -10,23 +11,26 @@ mod unknown_kanji;
 mod utils;
 
 use std::borrow::Cow;
+#[cfg(feature = "inference")]
 use std::collections::HashMap;
 use std::ops::Range;
 
+#[cfg(feature = "inference")]
 use haqumei_kanalizer::{ConvertOptions, MaxLength};
 use unicode_normalization::{IsNormalized, UnicodeNormalization as _, is_nfc_quick, is_nfkc_quick};
 
 use crate::{
-    Haqumei, HaqumeiOptions, IuPronunciation, KANALIZER, KANALIZER_CACHE, MecabMorph, NjdFeature,
-    OpenJTalk, Phoneme, ProsodicPhoneme, UnicodeNormalization,
+    Haqumei, HaqumeiOptions, IuPronunciation, NjdFeature, OpenJTalk, Phoneme, ProsodicPhoneme,
+    UnicodeNormalization,
     data::OLD_PROVINCE_NAMES,
     errors::HaqumeiError,
-    open_jtalk::njd_char_spans,
     utils::{
         count_mora, is_kanji, is_kanji_feature, is_single_kanji_feature, is_small_kana,
         split_kana_mora,
     },
 };
+#[cfg(feature = "inference")]
+use crate::{KANALIZER, KANALIZER_CACHE, MecabMorph, open_jtalk::njd_char_spans};
 pub(crate) use context_reading::modify_context_reading;
 pub(crate) use loanword_kana::restore_loanword_kana;
 pub(crate) use numeral::{modify_fraction_denominator, modify_group_reading};
@@ -266,6 +270,7 @@ pub(crate) fn modify_old_province_yomi(njd_features: &mut [NjdFeature]) {
 /// n字アルファベット: A E I O U Y を含まない文字のとき、処理しない
 #[rustfmt::skip]
 #[inline(always)]
+#[cfg(feature = "inference")]
 fn should_use_kanalizer(chars: &[char]) -> bool {
     if chars.len() == 1 {
         return false;
@@ -297,6 +302,7 @@ fn should_use_kanalizer(chars: &[char]) -> bool {
 /// "IT" は辞書に拾われ、pos == "名詞" になる一方で、"it" は "i" と "t" と分かれた
 /// pos_group1 == "アルファベット" の `NjdFeature` になってしまう。
 /// そこで、入力上で隣接するアルファベットを結合し、条件を満たすものを `Kanalizer` に通している。
+#[cfg(feature = "inference")]
 pub(crate) fn predict_kana_english(
     njd_features: &mut Vec<NjdFeature>,
     morphs: &[MecabMorph],
@@ -416,6 +422,7 @@ pub(crate) fn predict_kana_english(
 }
 
 /// 空白に接しておらず、英字に挟まれたハイフンから休止を除く。
+#[cfg(feature = "inference")]
 pub(crate) fn suppress_english_hyphen_pause(
     njd_features: &mut [NjdFeature],
     morphs: &[MecabMorph],
@@ -452,6 +459,7 @@ pub(crate) fn suppress_english_hyphen_pause(
 }
 
 /// 入力上で英字から始まって連続する英数字を 1 つの形態素へ戻す。
+#[cfg(feature = "inference")]
 pub(crate) fn merge_english_alphanumeric_words(
     njd_features: &mut Vec<NjdFeature>,
     morphs: &[MecabMorph],
@@ -569,6 +577,7 @@ pub(crate) fn merge_english_alphanumeric_words(
 }
 
 impl Haqumei {
+    #[cfg(feature = "inference")]
     pub(crate) fn predict_nani_reading(&mut self, njd_features: &mut [NjdFeature]) {
         for i in 0..njd_features.len() {
             if njd_features[i].orig == "何" {
@@ -583,6 +592,7 @@ impl Haqumei {
     }
 }
 
+#[cfg(feature = "inference")]
 pub(crate) fn modify_english_words(text: &str, njd_features: &mut [NjdFeature]) {
     if njd_features.len() < 2 {
         return;

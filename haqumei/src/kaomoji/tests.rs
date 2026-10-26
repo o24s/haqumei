@@ -1,3 +1,5 @@
+#![cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
+
 use crate::{Haqumei, HaqumeiOptions, UnicodeNormalization};
 
 #[test]

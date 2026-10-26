@@ -11,6 +11,7 @@ mod tests {
     static WAGANEKO_PATH: LazyLock<PathBuf> =
         LazyLock::new(|| MANIFEST_DIR.join("../resources/waganeko.txt"));
 
+    #[cfg(feature = "inference")]
     const NIGHTMARE_TEXT: &str = "\
 つまみ出されようとしたが、「「八十５歳」」にもなる 長老ー ー に助けられた。\
 そこで、𰻞𰻞麺。\
@@ -93,6 +94,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_nightmare_case() {
         let mut haqumei = Haqumei::new().unwrap();
         haqumei.options.use_allophones = true;
@@ -448,6 +450,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     /// このとき、先頭一致 (starts_with) 処理が直前の空白 "\u{3000}" を
     /// 単語の後ろへ誤配置しないことを確認する。
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_space_before_merged_alphabet() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "\u{3000}ｉｔ";
@@ -473,6 +476,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 
     /// 英字形態素の結合は入力の空白を越えず、同じ英単語の中では品詞境界を越える。
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_english_word_boundaries_follow_input_spaces() {
         let mut haqumei = Haqumei::new().unwrap();
         let mapping = haqumei.g2p_mapping_detailed("notes So").unwrap();
@@ -503,6 +507,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 
     /// 英字に密着したハイフンだけを無音にし、ほかのマイナス記号には休止を残す。
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_english_hyphen_does_not_pause() {
         let mut haqumei = Haqumei::new().unwrap();
 
@@ -550,6 +555,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     /// "２0" は数字展開によって "二" と "十" に増える。(要素数増)
     /// "ｉｔ" は `predict_kana_english` によってマージされ 1つに減る。(要素数減)
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_digit_adjacent_to_merged_alphabet() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "２0ｉｔ";
@@ -575,6 +581,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_tricky_merges_mixed() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "２0\u{3000}ｉｔ\u{3000}日々";
@@ -604,6 +611,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
 
     // thanks と g が結合しないことを確認する
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_thanks_g2p() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "thanks g2p";
@@ -629,6 +637,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_english_two_english() {
         let mut haqumei = Haqumei::new().unwrap();
 
@@ -680,6 +689,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_mapping_mixed_japanese_and_alphanumeric_words() {
         let mut haqumei = Haqumei::new().unwrap();
         let mapping = haqumei
@@ -729,6 +739,7 @@ CPU it It IT ああ aaー allあ haqumei g2ｐ\
                 ],
             ),
             // 数字ブロックの外側にある空白は元から拾えていた (退行防止)
+            #[cfg(feature = "inference")]
             (
                 "２0　ｉｔ",
                 vec![

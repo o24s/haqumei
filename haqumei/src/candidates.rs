@@ -966,7 +966,7 @@ fn column(feature: &str, n: usize) -> &str {
     feature.split(',').nth(n).unwrap_or("*")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "embed-dictionary", feature = "dictionary-compiler"))]
 mod counter_protection_tests {
     use crate::{Haqumei, HaqumeiOptions, MecabDictIndexCompiler, open_jtalk::Dictionary};
 

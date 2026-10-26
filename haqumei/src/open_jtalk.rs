@@ -32,8 +32,9 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
-pub use dictionary::build_mecab_dictionary;
-pub use dictionary::{Dictionary, MecabDictIndexCompiler};
+pub use dictionary::Dictionary;
+#[cfg(feature = "dictionary-compiler")]
+pub use dictionary::{MecabDictIndexCompiler, build_mecab_dictionary};
 pub use lattice::LatticeNode;
 pub use mapping::njd_char_spans;
 pub use morph::{MecabMorph, NO_DICTIONARY_INDEX};
@@ -71,10 +72,10 @@ pub fn update_global_dictionary(new_dict: Dictionary) {
 
 /// `Haqumei`, `OpenJTalk` から使用されるグローバル辞書のユーザー辞書を外します。
 pub fn unset_user_dictionary() -> Result<(), HaqumeiError> {
-    GLOBAL_MECAB_DICTIONARY.store(Arc::new(Dictionary::from_path(
-        &GLOBAL_MECAB_DICTIONARY.load_full().dict_dir,
-        None,
-    )?));
+    let dictionary = GLOBAL_MECAB_DICTIONARY
+        .load_full()
+        .without_user_dictionaries()?;
+    GLOBAL_MECAB_DICTIONARY.store(Arc::new(dictionary));
     Ok(())
 }
 

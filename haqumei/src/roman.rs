@@ -373,7 +373,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "embed-dictionary", feature = "dictionary-compiler"))]
 mod user_dictionary_tests {
     use crate::{
         Haqumei, HaqumeiOptions, MecabDictIndexCompiler, UnicodeNormalization,

@@ -736,6 +736,7 @@ mod tests {
     }
 
     /// 半角・全角、大文字・小文字を無視してアルファベット比較するヘルパー関数
+    #[cfg(feature = "inference")]
     fn match_word(surface: &str, target: &str) -> bool {
         let normalize = |s: &str| -> String {
             s.chars()
@@ -751,6 +752,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_modify_english_words_a_he_she_positive() {
         let mut haqumei = Haqumei::new().unwrap();
 
@@ -789,6 +791,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_modify_english_words_a_he_she_negative() {
         let mut haqumei = Haqumei::new().unwrap();
 
@@ -826,6 +829,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_modify_english_words_multiple_in_sentence() {
         let mut haqumei = Haqumei::new().unwrap();
         let text = "he is a boy and she is a girl";

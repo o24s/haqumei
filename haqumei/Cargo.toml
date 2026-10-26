@@ -17,14 +17,17 @@ include = [
     "LICENSE-pyopenjtalk",
     "dictionary/COPYING",
     "build.rs",
+    "examples/memory_dictionary.rs",
     "yomi_model/**",
 ]
 
 [features]
-default = ["embed-dictionary", "download-dictionary"]
-embed-dictionary = []
+default = ["embed-dictionary", "download-dictionary", "inference", "dictionary-compiler"]
+embed-dictionary = ["dep:dirs", "dep:fs4", "dep:tar", "dep:zstd"]
 build-dictionary = []
 download-dictionary = ["embed-dictionary", "dep:reqwest", "dep:tempfile"]
+inference = ["dep:haqumei-kanalizer", "dep:moka", "dep:ndarray", "dep:ort"]
+dictionary-compiler = ["haqumei-jpreprocess-dictionary/compiler"]
 serde = ["dep:serde", "haqumei-jlabel/serde", "haqumei-macros/serde"]
 # 既存のビルド設定との互換性のため、空の feature として残す。
 generate-bindings = []
@@ -33,37 +36,36 @@ generate-bindings = []
 [dependencies]
 arc-swap.workspace = true
 daachorse.workspace = true
-dirs.workspace = true
-fs4.workspace = true
+dirs = { workspace = true, optional = true }
+fs4 = { workspace = true, optional = true }
 haqumei-jlabel.workspace = true
 haqumei-jpreprocess.workspace = true
 haqumei-jpreprocess-core.workspace = true
 haqumei-jpreprocess-njd.workspace = true
 haqumei-jpreprocess-jpcommon.workspace = true
-haqumei-jpreprocess-dictionary.workspace = true
-haqumei-kanalizer.workspace = true
+haqumei-jpreprocess-dictionary = { workspace = true, default-features = false }
+haqumei-kanalizer = { workspace = true, optional = true }
 haqumei-macros.workspace = true
 hex.workspace = true
 log.workspace = true
-moka.workspace = true
-ndarray.workspace = true
-ort.workspace = true
+moka = { workspace = true, optional = true }
+ndarray = { workspace = true, optional = true }
+ort = { workspace = true, optional = true }
 phf.workspace = true
 rayon.workspace = true
 rustc-hash.workspace = true
 sha2.workspace = true
-tar.workspace = true
-tempfile.workspace = true
+tar = { workspace = true, optional = true }
 thiserror.workspace = true
 unicode-normalization.workspace = true
 unicode-segmentation.workspace = true
 walkdir.workspace = true
-zstd.workspace = true
+zstd = { workspace = true, optional = true }
 
 serde = { workspace = true, optional = true }
 
 [build-dependencies]
-haqumei-jpreprocess-dictionary.workspace = true
+haqumei-jpreprocess-dictionary = { workspace = true, features = ["compiler"] }
 digest-io.workspace = true
 dirs.workspace = true
 hex.workspace = true
@@ -76,3 +78,8 @@ tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
+
+[[example]]
+name = "memory_dictionary"
+required-features = ["serde"]

@@ -9,6 +9,7 @@ mod macros;
 mod calendar;
 mod identifier;
 pub mod ipa;
+#[cfg(feature = "inference")]
 pub mod nani_predict;
 pub mod open_jtalk;
 pub mod options;
@@ -19,13 +20,14 @@ mod roman;
 pub mod utils;
 pub mod word_phoneme;
 
-use std::{
-    path::Path,
-    sync::{Arc, LazyLock, Mutex},
-};
+#[cfg(feature = "inference")]
+use std::sync::{LazyLock, Mutex};
+use std::{path::Path, sync::Arc};
 
 pub use haqumei_jlabel::Label;
+#[cfg(feature = "inference")]
 use haqumei_kanalizer::Kanalizer;
+#[cfg(feature = "inference")]
 use moka::sync::Cache;
 
 use std::collections::HashMap;
@@ -39,9 +41,11 @@ pub use ipa::{
     IpaBoundary, IpaPhone, IpaToken, IpaTokenProsody, ProsodicIpa, SpecialPhone, WordIpaMap,
     WordIpaProsody,
 };
+#[cfg(feature = "dictionary-compiler")]
+pub use open_jtalk::MecabDictIndexCompiler;
 pub use open_jtalk::{
-    LatticeNode, MecabDictIndexCompiler, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk,
-    njd_char_spans, unset_user_dictionary, update_global_dictionary,
+    LatticeNode, MecabMorph, NO_DICTIONARY_INDEX, OpenJTalk, njd_char_spans, unset_user_dictionary,
+    update_global_dictionary,
 };
 pub use options::*;
 pub use phoneme::Phoneme;
@@ -50,25 +54,35 @@ pub use word_phoneme::{WordPhonemeDetail, WordPhonemeMap, WordPhonemeProsody};
 
 use crate::{
     errors::HaqumeiError,
-    nani_predict::NaniPredictor,
     open_jtalk::{
         Dictionary, GLOBAL_MECAB_DICTIONARY,
         reading_protection::{protected_indices, registered_accent_nuclei},
     },
     postprocess::{
-        merge_english_alphanumeric_words, modify_acc_after_chaining, modify_context_reading,
-        modify_english_words, modify_filler_accent, modify_fraction_denominator,
-        modify_old_province_yomi, predict_kana_english, process_odori_features, read_unknown_kanji,
-        restore_loanword_kana, retreat_acc_nuc, suppress_english_hyphen_pause,
+        modify_acc_after_chaining, modify_context_reading, modify_filler_accent,
+        modify_fraction_denominator, modify_old_province_yomi, process_odori_features,
+        read_unknown_kanji, restore_loanword_kana, retreat_acc_nuc,
+    },
+};
+#[cfg(feature = "inference")]
+use crate::{
+    nani_predict::NaniPredictor,
+    postprocess::{
+        merge_english_alphanumeric_words, modify_english_words, predict_kana_english,
+        suppress_english_hyphen_pause,
     },
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
+#[cfg(feature = "inference")]
 static NANI_PREDICTOR_CACHE: LazyLock<Cache<NjdFeature, bool>> = LazyLock::new(|| Cache::new(1000));
+#[cfg(feature = "inference")]
 static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
     Mutex::new(NaniPredictor::new().expect("Failed to initialize NaniPredictor models"))
 });
+#[cfg(feature = "inference")]
 static KANALIZER_CACHE: LazyLock<Cache<String, String>> = LazyLock::new(|| Cache::new(1000));
+#[cfg(feature = "inference")]
 static KANALIZER: LazyLock<Mutex<Kanalizer>> =
     LazyLock::new(|| Mutex::new(Kanalizer::new().expect("Failed to initialize Kanalizer models")));
 
@@ -109,12 +123,22 @@ impl Haqumei {
         Self::from_open_jtalk(OpenJTalk::new()?, options)
     }
 
+    /// 必要な Cargo feature を検証してから、解析オプションを更新します。
+    ///
+    /// エラーの場合、現在のオプションは変更しません。
+    pub fn set_options(&mut self, options: HaqumeiOptions) -> Result<(), HaqumeiError> {
+        options.validate_features()?;
+        self.options = options;
+        Ok(())
+    }
+
     #[inline]
     /// [OpenJTalk] から [Haqumei] を生成します。
     pub fn from_open_jtalk(
         open_jtalk: OpenJTalk,
         options: HaqumeiOptions,
     ) -> Result<Self, HaqumeiError> {
+        options.validate_features()?;
         Ok(Haqumei {
             open_jtalk,
             options,
@@ -124,6 +148,7 @@ impl Haqumei {
 
     /// 解析に使う辞書とオプションを現在の設定に同期します。
     fn prepare_analysis(&mut self) -> Result<(), HaqumeiError> {
+        self.options.validate_features()?;
         self.open_jtalk.ensure_dictionary_is_latest()?;
         self.open_jtalk.resolve_kanji_variants = self.options.resolve_kanji_variants;
         self.open_jtalk.defer_unvoicing = true;
@@ -973,7 +998,7 @@ impl Haqumei {
 
     fn apply_postprocessing(
         &mut self,
-        text: &str,
+        _text: &str,
         mut njd_features: Vec<NjdFeature>,
         protected: &HashMap<usize, usize>,
         morphs: &[MecabMorph],
@@ -994,12 +1019,14 @@ impl Haqumei {
         if options.modify_filler_accent {
             modify_filler_accent(&mut njd_features);
         }
+        #[cfg(feature = "inference")]
         if options.predict_nani {
             self.predict_nani_reading(&mut njd_features);
         }
+        #[cfg(feature = "inference")]
         if options.predict_kana_english {
             predict_kana_english(&mut njd_features, morphs, protected);
-            modify_english_words(text, &mut njd_features);
+            modify_english_words(_text, &mut njd_features);
             suppress_english_hyphen_pause(&mut njd_features, morphs);
         }
 
@@ -1062,6 +1089,7 @@ impl Haqumei {
         }
 
         // 読みの復元より前に結合すると、GNU2 の 2 など、保護対象に続く読みが消える。
+        #[cfg(feature = "inference")]
         if options.predict_kana_english {
             merge_english_alphanumeric_words(&mut njd_features, morphs);
         }
@@ -1101,6 +1129,7 @@ impl Haqumei {
         Ok(njd_features)
     }
 
+    #[cfg(feature = "inference")]
     pub(crate) fn predict_is_nan(&mut self, prev_node: Option<&NjdFeature>) -> bool {
         let prev_node = match prev_node {
             Some(node) => node,

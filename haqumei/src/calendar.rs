@@ -286,7 +286,7 @@ pub(crate) fn merge(
     accepted
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "embed-dictionary", feature = "dictionary-compiler"))]
 mod tests {
     use crate::{Haqumei, HaqumeiOptions, MecabDictIndexCompiler, open_jtalk::Dictionary};
 

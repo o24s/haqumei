@@ -1,15 +1,24 @@
-use super::{Analysis, Lexicon, Model, Node, invalid, read_characters, read_matrix};
+use super::{Analysis, Lexicon, Model, Node, SystemDictionary, invalid};
+#[cfg(feature = "compiler")]
+use super::{read_characters, read_matrix};
 use std::{
-    fmt, fs,
+    fmt,
     io::{self, Write},
-    path::Path,
     sync::Arc,
 };
 
+#[derive(Clone)]
 pub(super) struct SharedTokenizer(Arc<vibrato::Tokenizer>);
 impl fmt::Debug for SharedTokenizer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SharedTokenizer")
+    }
+}
+
+impl SharedTokenizer {
+    pub(super) fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
+        let dictionary = vibrato::Dictionary::from_bytes(bytes).map_err(io::Error::other)?;
+        Model::tokenizer_from(dictionary)
     }
 }
 
@@ -92,9 +101,15 @@ impl Lexicon {
 
 impl Model {
     fn make_tokenizer(&self) -> io::Result<SharedTokenizer> {
-        let dict = vibrato::Dictionary::from_path(&self.0.system_path, vibrato::LoadMode::Validate)
-            .map_err(io::Error::other)?;
-        let mut tokenizer = Self::tokenizer_from(dict)?.0.as_ref().clone();
+        let base = match &self.0.system {
+            SystemDictionary::Path(path) => {
+                let dict = vibrato::Dictionary::from_path(path, vibrato::LoadMode::Validate)
+                    .map_err(io::Error::other)?;
+                Self::tokenizer_from(dict)?
+            }
+            SystemDictionary::Memory(tokenizer) => tokenizer.clone(),
+        };
+        let mut tokenizer = base.0.as_ref().clone();
         if !self.0.user_dictionaries.is_empty() {
             let mut csv = Vec::new();
             for (index, lexicon) in self.0.user_dictionaries.iter().enumerate().rev() {
@@ -130,7 +145,12 @@ impl Model {
     }
 }
 
-pub(super) fn write_system_dictionary(directory: &Path, path: &Path) -> io::Result<()> {
+#[cfg(feature = "compiler")]
+pub(super) fn write_system_dictionary(
+    directory: &std::path::Path,
+    path: &std::path::Path,
+) -> io::Result<()> {
+    use std::{fs, path::Path};
     let system = Lexicon::open(&directory.join("sys.dic"))?;
     if system.kind != 0 {
         return Err(invalid("システム辞書の種類が不正です"));

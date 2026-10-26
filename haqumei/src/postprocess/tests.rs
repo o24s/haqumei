@@ -23,6 +23,7 @@ fn accent_retreat_counts_moras_without_devoicing_marks_or_small_wa() {
 }
 
 #[test]
+#[cfg(feature = "inference")]
 fn protected_english_words_are_not_merged_into_neighbors() {
     let mut engine = OpenJTalk::new().unwrap();
     let mut original = engine.run_frontend("Ｂ Ｃ Ｄ").unwrap();
@@ -99,6 +100,7 @@ fn test_modify_acc_after_chaining_mut() {
     assert_eq!(参り.acc, 4);
 }
 
+#[cfg(feature = "inference")]
 fn to_fullwidth(s: &str) -> Vec<char> {
     s.chars()
         .map(|c| match c {
@@ -109,6 +111,7 @@ fn to_fullwidth(s: &str) -> Vec<char> {
 }
 
 #[test]
+#[cfg(feature = "inference")]
 fn test_should_use_kanalizer_1char() {
     // 1文字の単語は false
     let words = ["A", "I", "a", "x", "Z"];
@@ -119,6 +122,7 @@ fn test_should_use_kanalizer_1char() {
 }
 
 #[test]
+#[cfg(feature = "inference")]
 fn test_should_use_kanalizer_2chars() {
     // true になるべき一般的な2文字英単語 (V+C, C+V, V+V)
     let words_true = [
@@ -143,6 +147,7 @@ fn test_should_use_kanalizer_2chars() {
 
 #[rustfmt::skip]
 #[test]
+#[cfg(feature = "inference")]
 fn test_should_use_kanalizer_3chars() {
     // 発音可能な3文字英単語
     let words_true = [
@@ -179,6 +184,7 @@ fn test_should_use_kanalizer_3chars() {
 }
 
 #[test]
+#[cfg(feature = "inference")]
 fn test_should_use_kanalizer_n_chars() {
     // 4文字以上の一般的な英単語
     let words_true = [
@@ -202,6 +208,7 @@ fn test_should_use_kanalizer_n_chars() {
 }
 
 #[test]
+#[cfg(feature = "inference")]
 fn test_realistic_sentences() {
     let sentence1 = vec![
         ("This", true),

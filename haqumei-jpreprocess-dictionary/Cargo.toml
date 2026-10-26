@@ -17,7 +17,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-binary = ["dep:clap"]
+default = ["compiler"]
+compiler = ["dep:tempfile"]
+binary = ["dep:clap", "compiler"]
 
 [[bin]]
 name = "dict_tools"
@@ -25,7 +27,7 @@ required-features = ["binary"]
 
 [dependencies]
 vibrato.workspace = true
-tempfile.workspace = true
+tempfile = { workspace = true, optional = true }
 csv.workspace = true
 encoding_rs.workspace = true
 

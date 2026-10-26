@@ -81,8 +81,23 @@ jobs:
       - name: Run tests on ${{ matrix.os }}
         run: cargo test --verbose --workspace --exclude haqumei-python --exclude haqumei-bench --exclude haqumei-eval --exclude haqumei-dict-tool --features "haqumei/embed-dictionary haqumei/download-dictionary"
 
+      # ワークスペース全体を選ぶと、他のクレートが任意 feature を再び有効にする。
+      - name: Check individual optional features
+        if: runner.os == 'Linux'
+        run: |
+          cargo check --locked -p haqumei --tests --no-default-features
+          cargo check --locked -p haqumei --tests --no-default-features --features dictionary-compiler
+          cargo check --locked -p haqumei --tests --no-default-features --features inference
+          cargo check --locked -p haqumei --tests --no-default-features --features "embed-dictionary download-dictionary dictionary-compiler"
+          cargo check --locked -p haqumei --tests --no-default-features --features "embed-dictionary download-dictionary inference"
+          cargo test --locked -p haqumei --test test_core_features --no-default-features
+
+      - name: Run core-only tests
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p haqumei --tests --no-default-features --features "embed-dictionary download-dictionary"
+
       - name: Build and test the source dictionary
         if: runner.os == 'Linux'
         env:
           HAQUMEI_DICT_COMPRESSION_LEVEL: 1
-        run: cargo test -p haqumei --lib --no-default-features --features "embed-dictionary build-dictionary"
+        run: cargo test -p haqumei --lib --no-default-features --features "embed-dictionary build-dictionary inference dictionary-compiler"

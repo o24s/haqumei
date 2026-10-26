@@ -1,10 +1,14 @@
+#[cfg(feature = "dictionary-compiler")]
+use std::ffi::NulError;
+#[cfg(feature = "embed-dictionary")]
+use std::fs;
+#[cfg(any(feature = "embed-dictionary", feature = "dictionary-compiler"))]
+use std::io;
 use std::{
-    ffi::NulError,
-    fs, io,
     path::{Path, PathBuf},
     sync::Arc,
 };
-
+#[cfg(feature = "dictionary-compiler")]
 use thiserror::Error;
 
 use crate::{errors::HaqumeiError, open_jtalk::model::MecabModel};
@@ -32,6 +36,47 @@ fn resolve_path(path: &Path) -> Result<PathBuf, HaqumeiError> {
 }
 
 impl Dictionary {
+    /// コンパイル済みの辞書をバイト列から読み込みます。
+    ///
+    /// `system.bin`、`char.bin`、`matrix.bin` の内容と、0 個以上の
+    /// ユーザー辞書 (`.dic`) を渡します。ファイルシステムは使用しません。
+    /// システム辞書の 3 ファイルは、同じビルドで生成したものを使います。
+    /// 辞書の構造を検証し、不正な形式なら [`HaqumeiError`] を返します。
+    pub fn from_bytes(
+        system: &[u8],
+        characters: &[u8],
+        matrix: &[u8],
+        user_dictionaries: &[&[u8]],
+    ) -> Result<Self, HaqumeiError> {
+        let model = haqumei_jpreprocess_dictionary::mecab::Model::from_bytes(
+            system,
+            characters,
+            matrix,
+            user_dictionaries,
+        )?;
+        Ok(Self {
+            model: Arc::new(MecabModel { model: Some(model) }),
+            dict_dir: PathBuf::new(),
+        })
+    }
+
+    /// システム辞書からユーザー辞書を外した辞書を返します。
+    pub fn without_user_dictionaries(&self) -> Result<Self, HaqumeiError> {
+        if !self.dict_dir.as_os_str().is_empty() {
+            return Self::from_path(&self.dict_dir, None);
+        }
+        let model = self
+            .model
+            .model
+            .as_ref()
+            .ok_or(HaqumeiError::GlobalDictionaryNotInitialized)?
+            .without_user_dictionaries()?;
+        Ok(Self {
+            model: Arc::new(MecabModel { model: Some(model) }),
+            dict_dir: PathBuf::new(),
+        })
+    }
+
     /// システム辞書パス、ユーザー辞書パスから [Dictionary] を生成します。
     ///
     /// ユーザー辞書を複数使う場合は [`Dictionary::from_paths`] を使ってください。
@@ -220,6 +265,7 @@ impl Dictionary {
 
 /// [MecabDictIndexCompiler] が使用するエラー型。
 #[derive(Debug, Error)]
+#[cfg(feature = "dictionary-compiler")]
 pub enum DictCompilerError {
     #[error("Path contains null byte and cannot be converted to CString: {0}")]
     InvalidPath(#[from] NulError),
@@ -242,6 +288,7 @@ pub enum DictCompilerError {
 ///
 /// 出力先を分けたい場合や、ユーザー辞書を作る場合は
 /// [`MecabDictIndexCompiler`] を直接使ってください。
+#[cfg(feature = "dictionary-compiler")]
 pub fn build_mecab_dictionary<P: AsRef<Path>>(path: P) -> Result<(), DictCompilerError> {
     MecabDictIndexCompiler::new()
         .dict_dir(&path)
@@ -251,6 +298,7 @@ pub fn build_mecab_dictionary<P: AsRef<Path>>(path: P) -> Result<(), DictCompile
 
 /// Mecab 辞書をビルドするコンパイラ。
 #[derive(Debug)]
+#[cfg(feature = "dictionary-compiler")]
 pub struct MecabDictIndexCompiler {
     dict_dir: PathBuf,
     out_dir: PathBuf,
@@ -267,6 +315,7 @@ pub struct MecabDictIndexCompiler {
     input_files: Vec<PathBuf>,
 }
 
+#[cfg(feature = "dictionary-compiler")]
 impl MecabDictIndexCompiler {
     /// 新しい [MecabDictIndexCompiler] を生成します。
     pub fn new() -> Self {
@@ -409,6 +458,7 @@ impl MecabDictIndexCompiler {
     }
 }
 
+#[cfg(feature = "dictionary-compiler")]
 impl Default for MecabDictIndexCompiler {
     fn default() -> Self {
         Self::new()
@@ -446,7 +496,7 @@ fn collect_cached_dict_files(dir: &Path) -> Result<Option<Vec<PathBuf>>, Haqumei
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "dictionary-compiler"))]
 mod compiler_tests {
     use super::MecabDictIndexCompiler;
     use std::fs;

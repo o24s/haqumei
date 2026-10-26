@@ -1,6 +1,8 @@
+#[cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
 use std::{env, io::Write};
 
 use crate::open_jtalk::model::MecabModel;
+#[cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
 use tempfile::NamedTempFile;
 
 use super::*;
@@ -27,7 +29,7 @@ fn test_mecab_model_is_shared() {
 }
 
 #[test]
-#[cfg(feature = "embed-dictionary")]
+#[cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
 fn test_analysis_preparation_refreshes_dictionary_and_options() {
     use crate::{Haqumei, HaqumeiOptions};
 
@@ -165,6 +167,7 @@ fn test_split_dictionary_entry_char_spans() {
 }
 
 #[test]
+#[cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
 fn test_userdict() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get MANIFEST_DIR");
     let manifest_dir = Path::new(&manifest_dir);

@@ -395,7 +395,7 @@ pub(crate) fn merge(
     accepted.into_iter().map(|c| c.context).collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "embed-dictionary", feature = "dictionary-compiler"))]
 mod tests {
     use crate::{Haqumei, HaqumeiOptions, MecabDictIndexCompiler, open_jtalk::Dictionary};
 

@@ -72,6 +72,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let has_download = env::var_os("CARGO_FEATURE_DOWNLOAD_DICTIONARY").is_some();
     let has_build = env::var_os("CARGO_FEATURE_BUILD_DICTIONARY").is_some();
+    if !has_download && !has_build && env::var_os("CARGO_FEATURE_EMBED_DICTIONARY").is_none() {
+        return Ok(());
+    }
     if has_download == has_build {
         return Err("Enable exactly one of download-dictionary and build-dictionary".into());
     }

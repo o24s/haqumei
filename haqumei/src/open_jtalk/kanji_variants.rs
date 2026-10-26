@@ -245,7 +245,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(feature = "embed-dictionary")]
+    #[cfg(all(feature = "embed-dictionary", feature = "dictionary-compiler"))]
     fn preserves_registered_variants_and_adjacent_user_words() {
         use crate::open_jtalk::{Dictionary, MecabDictIndexCompiler};
         use crate::{Haqumei, HaqumeiOptions};

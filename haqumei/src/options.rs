@@ -3,6 +3,8 @@ use crate::utils::default_is_non_pause_symbol;
 /// `Haqumei` の設定。
 /// 詳細は、それぞれのフィールドのドキュメントを見てください。
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
 pub struct HaqumeiOptions {
     /// 入力テキストを [UnicodeNormalization] の指定された方法で正規化する。
     /// 「か + 濁点」などの結合文字を1文字の「が」に統合できます。
@@ -101,12 +103,14 @@ pub struct HaqumeiOptions {
 
     /// Nani Predictor を使って、「何」 の読みを修正する。
     ///
-    /// デフォルトで有効になっています。
+    /// `inference` feature が有効なビルドではデフォルトで有効です。
+    /// `inference` が無いビルドで有効にすると、解析時にエラーを返します。
     pub predict_nani: bool,
 
     /// Kanalizer を使って、英語の読みを予測する。
     ///
-    /// デフォルトで有効になっています。
+    /// `inference` feature が有効なビルドではデフォルトで有効です。
+    /// `inference` が無いビルドで有効にすると、解析時にエラーを返します。
     pub predict_kana_english: bool,
 
     /// 隣接する形態素で読みが決まる同形異音語を、語ごとの規則で補正する。
@@ -279,6 +283,7 @@ pub struct HaqumeiOptions {
     ///     default_is_non_pause_symbol(s)
     /// }
     /// ```
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub is_non_pause_symbol: fn(&str) -> bool,
 
     /// 撥音・促音の代表的な異音分類をまとめて有効化します。
@@ -555,6 +560,7 @@ pub struct HaqumeiOptions {
 /// 先頭が0の数字列は、位取りを指定しても桁ごとに読みます。
 /// [`HaqumeiOptions::skip_room_number_leading_zeros`] が有効な号室では、先頭の0を省いてから適用します。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NumberReading {
     /// 十・百・千などの位を付けて読みます。
     Cardinal,
@@ -562,6 +568,24 @@ pub enum NumberReading {
     Digits,
     /// 桁ごとに読み、0はマルとします。
     DigitsWithMaru,
+}
+
+impl HaqumeiOptions {
+    pub(crate) fn validate_features(&self) -> Result<(), crate::errors::HaqumeiError> {
+        #[cfg(not(feature = "inference"))]
+        for (option, enabled) in [
+            ("predict_nani", self.predict_nani),
+            ("predict_kana_english", self.predict_kana_english),
+        ] {
+            if enabled {
+                return Err(crate::errors::HaqumeiError::FeatureDisabled {
+                    option,
+                    feature: "inference",
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for HaqumeiOptions {
@@ -580,8 +604,8 @@ impl Default for HaqumeiOptions {
             revert_yotsugana: false,
             normalize_iu: None,
             modify_filler_accent: true,
-            predict_nani: true,
-            predict_kana_english: true,
+            predict_nani: cfg!(feature = "inference"),
+            predict_kana_english: cfg!(feature = "inference"),
             modify_context_reading: true,
             modify_old_province_yomi: true,
             modify_numeral_reading: true,
@@ -607,6 +631,7 @@ impl Default for HaqumeiOptions {
 
 /// 入力テキストをどのように正規化するかを指定します。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum UnicodeNormalization {
     /// 正規化を行わない (デフォルト)
     #[default]
@@ -619,6 +644,7 @@ pub enum UnicodeNormalization {
 
 /// 動詞「言う」およびその派生語の発音・読みをどのように正規化するかを指定します。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum IuPronunciation {
     /// すべての「言う」「いう」を「イウ」に統一します。
     Iu,

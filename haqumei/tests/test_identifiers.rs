@@ -36,7 +36,14 @@ fn reading_policies_distinguish_rooms_routes_and_models() {
     engine.options.resolve_number_identifiers = false;
     assert_eq!(engine.g2k("802号室").unwrap(), "ハッピャクニゴーシツ");
     assert_eq!(engine.g2k("409号線").unwrap(), "ヨンヒャクキューゴーセン");
-    assert_eq!(engine.g2k("A320型").unwrap(), "Ａ３２０ガタ");
+    assert_eq!(
+        engine.g2k("A320型").unwrap(),
+        if cfg!(feature = "inference") {
+            "Ａ３２０ガタ"
+        } else {
+            "Ａサンビャクニジューガタ"
+        }
+    );
 }
 
 #[test]
@@ -284,6 +291,7 @@ fn identifier_spans_candidates_and_batch_agree() {
             "E231系",
             "E5000形",
             "ｶﾞ E231系",
+            #[cfg(feature = "inference")]
             "EF65 1032号機",
             "(^_^)802号室でⅫ冊読む",
             "2008 年 05 月 05 日に802号室へ行く",

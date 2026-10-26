@@ -216,6 +216,7 @@ fn test_g2ipa_prosody_keeps_boundaries_and_pitch() {
     }));
 
     // 英単語間の空白と英単語内のハイフンは、休止境界に変えない。
+    #[cfg(feature = "inference")]
     for text in ["I have", "end-to-end"] {
         assert!(
             !flatten_prosody(&haqumei.g2ipa_prosody(text).unwrap())

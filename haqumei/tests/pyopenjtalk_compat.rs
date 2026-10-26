@@ -3,9 +3,9 @@
 
 #[cfg(test)]
 mod tests {
-    use haqumei::{
-        Haqumei, HaqumeiOptions, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, phoneme::Phoneme,
-    };
+    #[cfg(feature = "inference")]
+    use haqumei::HaqumeiOptions;
+    use haqumei::{Haqumei, OpenJTalk, WordPhonemeDetail, WordPhonemeMap, phoneme::Phoneme};
 
     #[test]
     fn test_njd_features() {
@@ -84,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "inference")]
     fn test_g2p_nani_model() {
         let mut haqumei = Haqumei::with_options(HaqumeiOptions {
             predict_nani: true,
