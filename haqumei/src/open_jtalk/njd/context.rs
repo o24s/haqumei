@@ -2,7 +2,7 @@
 
 use haqumei_jpreprocess_core::{
     accent_rule::ChainRules,
-    pos::{Meishi, POS},
+    pos::{Meishi, MeishiHijiritsu, POS, Setsubi},
     pronunciation::Pronunciation,
 };
 use haqumei_jpreprocess_njd::NJDNode;
@@ -386,7 +386,12 @@ fn lexical_reading(nodes: &[NJDNode], i: usize) -> Option<(&'static str, &'stati
 }
 
 fn capsizing_predicate(nodes: &[NJDNode], i: usize) -> bool {
-    // 船が主語でも覆うは他動詞になり得る。転覆の原因が述べられた文に限る。
+    let Some(subject) = i.checked_sub(2) else {
+        return false;
+    };
+    let before = sentence_prefix(nodes, subject);
+    // 原因は「大波に襲われた」などとも表す。助詞だけで限定せず、
+    // 原因語の有無と、目的語・主題・連体修飾を組み合わせて判断する。
     if !sentence_nodes(nodes, i).iter().any(|n| {
         matches!(
             n.get_orig(),
@@ -395,13 +400,24 @@ fn capsizing_predicate(nodes: &[NJDNode], i: usize) -> bool {
     }) {
         return false;
     }
-    // 海面を黒い船が覆った、では形容詞を越えた位置に目的語がある。
-    if nodes[..i.saturating_sub(2)]
-        .iter()
-        .rev()
-        .take_while(|n| !matches!(n.get_pos(), POS::Kigou(_)))
-        .any(|n| n.get_string() == "を")
-    {
+    // 「海面は、強風で船が覆った」には主題化された目的語がある。
+    // 昨年は・港では、のような時間や場所の主題と区別し、目的語の可能性を残す文を変えない。
+    if before.iter().enumerate().any(|(at, n)| {
+        n.get_string() == "を"
+            || (n.get_string() == "は"
+                && at.checked_sub(1).is_none_or(|previous| {
+                    let previous = &before[previous];
+                    !matches!(
+                        previous.get_pos(),
+                        POS::Meishi(
+                            Meishi::FukushiKanou
+                                | Meishi::Hijiritsu(MeishiHijiritsu::FukushiKanou)
+                                | Meishi::Setsubi(Setsubi::FukushiKanou)
+                        )
+                    ) && !(matches!(previous.get_string(), "で" | "に")
+                        && matches!(previous.get_pos(), POS::Joshi(_)))
+                }))
+    }) {
         return false;
     }
     let end = after_auxiliaries(nodes, i + 1);
@@ -594,6 +610,12 @@ fn sentence_nodes(nodes: &[NJDNode], i: usize) -> &[NJDNode] {
         .position(boundary)
         .map_or(nodes.len(), |at| i + 1 + at);
     &nodes[start..end]
+}
+
+fn sentence_prefix(nodes: &[NJDNode], i: usize) -> &[NJDNode] {
+    let boundary = |node: &NJDNode| matches!(node.get_string(), "。" | "？" | "！" | "「" | "」");
+    let start = nodes[..i].iter().rposition(boundary).map_or(0, |at| at + 1);
+    &nodes[start..i]
 }
 
 fn cloth_processing(nodes: &[NJDNode], i: usize) -> bool {
