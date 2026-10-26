@@ -537,8 +537,22 @@ fn shrine_context(nodes: &[NJDNode], i: usize) -> bool {
     {
         return true;
     }
+    let verb_at = i
+        + 3
+        + usize::from(
+            nodes
+                .get(i + 3)
+                .is_some_and(|n| matches!(n.get_pos(), POS::Joshi(_))),
+        );
     if matches!(particle.get_string(), "を" | "に")
-        && matches!(next.get_orig(), Some("参拝" | "拝む"))
+        // 参拝客の送迎を依頼する相手は会社でもある。
+        // 参拝はサ変動詞、拝むは動詞として続く場合に限る。
+        && ((next.get_orig() == Some("拝む") && matches!(next.get_pos(), POS::Doushi(_)))
+            || (next.get_orig() == Some("参拝")
+                && nodes.get(verb_at).is_some_and(|n| {
+                    matches!(n.get_orig(), Some("する" | "いたす" | "致す" | "なさる" | "できる" | "出来る"))
+                        && matches!(n.get_pos(), POS::Doushi(_))
+                })))
     {
         return true;
     }
