@@ -1,5 +1,7 @@
 mod context_reading;
-pub(crate) use context_reading::body_reading_matches;
+pub(crate) use context_reading::{
+    prepare_context_segments, prepare_context_words, prepare_word_readings,
+};
 #[cfg(feature = "inference")]
 mod english;
 mod loanword_kana;

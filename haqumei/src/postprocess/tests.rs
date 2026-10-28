@@ -1,4 +1,7 @@
 use super::*;
+use haqumei_jpreprocess_core::pos::{
+    Daimeishi, Doushi, Keiyoushi, KoyuMeishi, Meishi, MeishiHijiritsu, POS, Setsubi,
+};
 
 #[test]
 fn accent_retreat_counts_moras_without_devoicing_marks_or_small_wa() {
@@ -342,13 +345,15 @@ fn test_restore_loanword_kana() {
 /// 規則そのものに直接あてる。
 #[test]
 fn test_modify_context_reading_nado() {
-    fn f(string: &str, pos: &str, pos_group1: &str, pron: &str) -> NjdFeature {
+    fn f(string: &str, pos: POS, pron: &str) -> NjdFeature {
+        let columns = pos.to_string();
+        let mut columns = columns.split(',');
         NjdFeature {
             string: string.to_string(),
-            pos: pos.to_string(),
-            pos_group1: pos_group1.to_string(),
-            pos_group2: "*".to_string(),
-            pos_group3: "*".to_string(),
+            pos: columns.next().unwrap().into(),
+            pos_group1: columns.next().unwrap().into(),
+            pos_group2: columns.next().unwrap().into(),
+            pos_group3: columns.next().unwrap().into(),
             ctype: "*".to_string(),
             cform: "*".to_string(),
             orig: string.to_string(),
@@ -361,30 +366,33 @@ fn test_modify_context_reading_nado() {
         }
     }
 
-    for (pos, pos_group1, expected) in [
+    for (pos, expected) in [
         // 代名詞の後は ラ
-        ("名詞", "代名詞", "ラ"),
+        (POS::Meishi(Meishi::Daimeishi(Daimeishi::General)), "ラ"),
         // 自立した名詞の後は トー
-        ("名詞", "一般", "トー"),
-        ("名詞", "サ変接続", "トー"),
-        ("名詞", "固有名詞", "トー"),
-        ("名詞", "接尾", "トー"),
+        (POS::Meishi(Meishi::General), "トー"),
+        (POS::Meishi(Meishi::SahenSetsuzoku), "トー"),
+        (POS::Meishi(Meishi::KoyuMeishi(KoyuMeishi::General)), "トー"),
+        (POS::Meishi(Meishi::Setsubi(Setsubi::General)), "トー"),
         // 非自立名詞は句を名詞化しているだけなので ナド のまま
-        ("名詞", "非自立", "ナド"),
+        (
+            POS::Meishi(Meishi::Hijiritsu(MeishiHijiritsu::General)),
+            "ナド",
+        ),
         // 活用語の後も ナド のまま
-        ("動詞", "自立", "ナド"),
-        ("助動詞", "*", "ナド"),
-        ("形容詞", "自立", "ナド"),
+        (POS::Doushi(Doushi::Jiritsu), "ナド"),
+        (POS::Jodoushi, "ナド"),
+        (POS::Keiyoushi(Keiyoushi::Jiritsu), "ナド"),
         // 数詞は 一等 / 三等 の助数詞なので触らない
-        ("名詞", "数", "ナド"),
+        (POS::Meishi(Meishi::Kazu), "ナド"),
     ] {
         let mut features = [
-            f("前", pos, pos_group1, "マエ"),
-            f("等", "名詞", "一般", "ナド"),
+            f("前", pos, "マエ"),
+            f("等", POS::Meishi(Meishi::General), "ナド"),
         ];
         modify_context_reading(&mut features, &[]);
 
-        let label = format!("{pos}-{pos_group1}");
+        let label = pos.to_string();
         assert_eq!(features[1].pron, expected, "直前が {label}");
         assert_eq!(features[1].read, expected, "直前が {label}");
         // ナド は 2 モーラ、ラ は 1 モーラなので数え直されていること
@@ -396,15 +404,19 @@ fn test_modify_context_reading_nado() {
     }
 
     // 文頭の「等」は直前が無いので触らない
-    let mut features = [f("等", "名詞", "一般", "ナド")];
+    let mut features = [f("等", POS::Meishi(Meishi::General), "ナド")];
     modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].pron, "ナド");
 
     // 辞書の版によっては「等」が 名詞-接尾 として現れる。規則の対象を
     // 名詞-一般 に限ると適用されなくなるので、接尾でも適用されること
     let mut features = [
-        f("これ", "名詞", "代名詞", "コレ"),
-        f("等", "名詞", "接尾", "トー"),
+        f(
+            "これ",
+            POS::Meishi(Meishi::Daimeishi(Daimeishi::General)),
+            "コレ",
+        ),
+        f("等", POS::Meishi(Meishi::Setsubi(Setsubi::General)), "トー"),
     ];
     modify_context_reading(&mut features, &[]);
     assert_eq!(features[1].pron, "ラ");
@@ -475,13 +487,15 @@ fn test_unvoicing_after_reading_correction() {
 
 #[test]
 fn test_modify_context_reading_shifts_accent_nucleus() {
-    fn f(string: &str, pos_group1: &str, pron: &str, acc: i32, chain_flag: i32) -> NjdFeature {
+    fn f(string: &str, pos: Meishi, pron: &str, acc: i32, chain_flag: i32) -> NjdFeature {
+        let columns = POS::Meishi(pos).to_string();
+        let mut columns = columns.split(',');
         NjdFeature {
             string: string.to_string(),
-            pos: "名詞".to_string(),
-            pos_group1: pos_group1.to_string(),
-            pos_group2: "*".to_string(),
-            pos_group3: "*".to_string(),
+            pos: columns.next().unwrap().into(),
+            pos_group1: columns.next().unwrap().into(),
+            pos_group2: columns.next().unwrap().into(),
+            pos_group3: columns.next().unwrap().into(),
             ctype: "*".to_string(),
             cform: "*".to_string(),
             orig: string.to_string(),
@@ -497,10 +511,10 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
     // 「唐詩選余師」。`njd_set_accent_type` が 9 モーラの句に核 8 を書いた後に
     // `余` が アマリ から ヨ になるので、核は 6 (= ヨ の上) に下がる
     let mut features = [
-        f("唐詩", "一般", "トーシ", 8, -1),
-        f("選", "接尾", "セン", 1, 1),
-        f("余", "接尾", "アマリ", 1, 1),
-        f("師", "接尾", "シ", 1, 1),
+        f("唐詩", Meishi::General, "トーシ", 8, -1),
+        f("選", Meishi::Setsubi(Setsubi::General), "セン", 1, 1),
+        f("余", Meishi::Setsubi(Setsubi::General), "アマリ", 1, 1),
+        f("師", Meishi::Setsubi(Setsubi::General), "シ", 1, 1),
     ];
     // 保護された読みは書き換えないので、句頭の核も動かない。
     let mut protected = features.clone();
@@ -514,10 +528,10 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
 
     // 核が書き換えた形態素より前にあるときは動かさない
     let mut features = [
-        f("唐詩", "一般", "トーシ", 2, -1),
-        f("選", "接尾", "セン", 1, 1),
-        f("余", "接尾", "アマリ", 1, 1),
-        f("師", "接尾", "シ", 1, 1),
+        f("唐詩", Meishi::General, "トーシ", 2, -1),
+        f("選", Meishi::Setsubi(Setsubi::General), "セン", 1, 1),
+        f("余", Meishi::Setsubi(Setsubi::General), "アマリ", 1, 1),
+        f("師", Meishi::Setsubi(Setsubi::General), "シ", 1, 1),
     ];
     modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].acc, 2);
@@ -526,10 +540,10 @@ fn test_modify_context_reading_shifts_accent_nucleus() {
     // その形態素の末尾のモーラに置く。核 7 は アマリ の 2 モーラ目だが、
     // ヨ は 1 モーラしかないので 6 になる
     let mut features = [
-        f("唐詩", "一般", "トーシ", 7, -1),
-        f("選", "接尾", "セン", 1, 1),
-        f("余", "接尾", "アマリ", 1, 1),
-        f("師", "接尾", "シ", 1, 1),
+        f("唐詩", Meishi::General, "トーシ", 7, -1),
+        f("選", Meishi::Setsubi(Setsubi::General), "セン", 1, 1),
+        f("余", Meishi::Setsubi(Setsubi::General), "アマリ", 1, 1),
+        f("師", Meishi::Setsubi(Setsubi::General), "シ", 1, 1),
     ];
     modify_context_reading(&mut features, &[]);
     assert_eq!(features[0].acc, 6);

@@ -573,6 +573,48 @@ fn contracted_counter_morph_end(
     None
 }
 
+fn exact_number_spans(
+    morphs: &[MecabMorph],
+    start: usize,
+    target: &[NjdFeature],
+) -> Option<(Vec<Range<usize>>, usize)> {
+    if target.is_empty() || target.iter().any(|f| f.string.is_empty()) {
+        return None;
+    }
+    let wanted = target.iter().map(|f| f.string.as_str()).collect::<String>();
+    let mut matched = 0;
+    let mut characters = Vec::new();
+    let mut end = start;
+    while matched < wanted.len() {
+        let morph = morphs.get(end)?;
+        end += 1;
+        if morph.is_ignored {
+            continue;
+        }
+        if !is_number_block_surface(&morph.surface)
+            || morph.surface.chars().count() != morph.char_span.len()
+        {
+            return None;
+        }
+        if !wanted[matched..].starts_with(&morph.surface) {
+            return None;
+        }
+        matched += morph.surface.len();
+        characters.extend(morph.char_span.clone());
+    }
+    let mut cursor = 0;
+    let spans = target
+        .iter()
+        .map(|feature| {
+            let length = feature.string.chars().count();
+            let span = characters[cursor]..characters[cursor + length - 1] + 1;
+            cursor += length;
+            span
+        })
+        .collect();
+    Some((spans, end))
+}
+
 fn collect_number_morphs(
     morphs: &[MecabMorph],
     start: usize,
@@ -920,6 +962,16 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
                 feature_end += 1;
             }
             let next_surface = features.get(feature_end).map_or("", |f| f.string.as_str());
+            // 十三を十・三へ分けても文字列は変わらない。位取りの挿入と区別し、
+            // 表記と文字数が保たれた数詞列には、空白を除いた各文字の位置を割り当てる。
+            if let Some((exact, morph_end)) =
+                exact_number_spans(morphs, morph_idx, &features[idx..feature_end])
+            {
+                spans[idx..feature_end].clone_from_slice(&exact);
+                idx = feature_end;
+                morph_idx = morph_end;
+                continue;
+            }
             let (source_indices, morph_end) =
                 collect_number_morphs(morphs, morph_idx, next_surface);
             let source: Vec<Vec<char>> = source_indices
@@ -1470,6 +1522,29 @@ impl OpenJTalk {
             }
 
             let morph = &morphs[morph_idx];
+
+            // 一つの辞書形態素を分割した場合、末尾の文字まで割り当てる間は
+            // 元の形態素を共有する。最初の語で消費すると後続語の未知語情報がずれる。
+            let span = map.char_span();
+            if map.word() != morph.surface
+                && !span.is_empty()
+                && morph.char_span.start <= span.start
+                && span.end <= morph.char_span.end
+                && morph.surface.chars().count() == morph.char_span.len()
+                && morph
+                    .surface
+                    .chars()
+                    .skip(span.start - morph.char_span.start)
+                    .take(span.len())
+                    .eq(map.word().chars())
+            {
+                let at_end = span.end == morph.char_span.end;
+                result.push(map.into_exact_match(morph));
+                if at_end {
+                    morph_idx += 1;
+                }
+                continue;
+            }
 
             if map.word() == morph.surface {
                 // 完全一致

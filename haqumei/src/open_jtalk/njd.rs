@@ -345,6 +345,9 @@ pub(crate) fn run_frontend(
         }
         protected_nodes.resize(nodes.len(), is_protected);
     }
+    if modify_context_reading {
+        crate::postprocess::prepare_context_segments(&mut nodes, &mut protected_nodes);
+    }
     number::retain_number_spaces(&mut nodes, &mut protected_nodes);
     if has_roman {
         for i in 1..nodes.len() {
@@ -357,24 +360,11 @@ pub(crate) fn run_frontend(
     if modify_numeral_reading {
         modify_placeholder_maru(&mut nodes, &protected_nodes);
     }
-    if modify_context_reading && nodes.iter().any(|node| node.get_string() == "身体") {
-        let features = rust_njd_to_features(&NJD {
-            nodes: nodes.clone(),
-        });
-        for i in 0..nodes.len() {
-            if !protected_nodes[i] && crate::postprocess::body_reading_matches(&features, i) {
-                // 単語の核を変更してから結合することで、助詞や複合語の核を計算し直す。
-                nodes[i].set_read("カラダ");
-                nodes[i].set_pron(
-                    haqumei_jpreprocess_core::pronunciation::Pronunciation::parse("カラダ", 0)
-                        .unwrap(),
-                );
-            }
-        }
-    }
     if modify_context_reading {
+        crate::postprocess::prepare_word_readings(&mut nodes, &protected_nodes);
         context::prepare_person_names(&mut nodes, &mut protected_nodes);
         context::prepare_explicit_first_day(&mut nodes, &mut protected_nodes);
+        crate::postprocess::prepare_context_words(&mut nodes, &mut protected_nodes);
         context::prepare_readings(&mut nodes, &protected_nodes);
         idiom::prepare_readings(&mut nodes, &protected_nodes);
     }

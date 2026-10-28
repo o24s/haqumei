@@ -1,6 +1,108 @@
 use haqumei::{Haqumei, HaqumeiOptions, njd_char_spans};
 
 #[test]
+fn split_source_keeps_raw_features_and_following_unknown_words() {
+    let mut engine = Haqumei::new().unwrap();
+    for unknown in ["プニャモン", "𰻞"] {
+        let text = format!("十三駅先に{unknown}がある。");
+        engine.options.modify_context_reading = false;
+        let before_basic = engine.g2p_mapping(&text).unwrap();
+        let before_details = engine.g2p_mapping_detailed(&text).unwrap();
+        let before_prosody = engine.g2p_mapping_prosody(&text).unwrap();
+        engine.options.modify_context_reading = true;
+        let basic = engine.g2p_mapping(&text).unwrap();
+        let details = engine.g2p_mapping_detailed(&text).unwrap();
+        let prosody = engine.g2p_mapping_prosody(&text).unwrap();
+        let original = before_basic
+            .iter()
+            .find(|word| word.word == unknown)
+            .unwrap();
+        let corrected = basic.iter().find(|word| word.word == unknown).unwrap();
+        assert!(original.is_unknown && corrected.is_unknown, "{text}");
+        assert_eq!(corrected.phonemes, original.phonemes, "{text}");
+        let original = before_prosody
+            .iter()
+            .find(|word| word.word == unknown)
+            .unwrap();
+        let corrected = prosody.iter().find(|word| word.word == unknown).unwrap();
+        assert_eq!(corrected.is_unknown, original.is_unknown, "{text}");
+        for original in before_details.iter().filter(|word| word.word != "十三") {
+            let corrected = details
+                .iter()
+                .find(|word| word.word == original.word)
+                .unwrap();
+            assert_eq!(
+                corrected.features, original.features,
+                "{text}: {}",
+                original.word
+            );
+            assert_eq!(
+                corrected.is_unknown, original.is_unknown,
+                "{text}: {}",
+                original.word
+            );
+            assert_eq!(
+                corrected.phonemes, original.phonemes,
+                "{text}: {}",
+                original.word
+            );
+        }
+        let source = &before_details[0].features;
+        assert_eq!(&details[0].features, source);
+        assert_eq!(&details[1].features, source);
+    }
+}
+
+#[test]
+fn station_name_splitting_and_merging_keep_each_written_character() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "十三駅先には十三駅がある。",
+        "十三駅は、十三駅先にある。",
+        "阪急十三駅で乗り換える。",
+        "十 十三駅先にある。",
+    ] {
+        let chars = text.chars().collect::<Vec<_>>();
+        let (features, morphs) = engine.run_frontend_detailed(text).unwrap();
+        for (feature, span) in features.iter().zip(njd_char_spans(&features, &morphs)) {
+            assert_eq!(
+                chars[span].iter().collect::<String>(),
+                feature.string,
+                "{text}"
+            );
+        }
+        let basic = engine.g2p_mapping(text).unwrap();
+        let detailed = engine.g2p_mapping_detailed(text).unwrap();
+        let prosody = engine.g2p_mapping_prosody(text).unwrap();
+        for words in [
+            basic
+                .iter()
+                .filter(|w| !w.is_ignored)
+                .map(|w| (&w.word, &w.char_span))
+                .collect::<Vec<_>>(),
+            detailed
+                .iter()
+                .filter(|w| !w.is_ignored)
+                .map(|w| (&w.word, &w.char_span))
+                .collect::<Vec<_>>(),
+            prosody
+                .iter()
+                .filter(|w| !w.is_ignored)
+                .map(|w| (&w.word, &w.char_span))
+                .collect::<Vec<_>>(),
+        ] {
+            for (word, span) in words {
+                assert_eq!(
+                    chars[span.clone()].iter().collect::<String>(),
+                    *word,
+                    "{text}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn spaced_numeric_groups_keep_expected_word_origins() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [

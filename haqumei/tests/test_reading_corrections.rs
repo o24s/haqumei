@@ -1,5 +1,139 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
+#[test]
+fn kata_suffix_readings_survive_a_following_copula() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("典型的な歪み方", "テンケーテキナユガミカタ"),
+        ("典型的な歪み方です。", "テンケーテキナユガミカタデス。"),
+        ("妙な歪み方ですね。", "ミョーナユガミカタデスネ。"),
+        ("特徴的な転び方です。", "トクチョーテキナコロビカタデス。"),
+        ("激しい捻れ方です。", "ハゲシイネジレカタデス。"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+        let features = engine.run_frontend(text).unwrap();
+        let suffix = features.iter().find(|f| f.string == "方").unwrap();
+        assert_eq!(suffix.read, "カタ", "{text}");
+        assert_eq!(suffix.mora_size, 2, "{text}");
+    }
+    for text in [
+        "歪みの方が大きい。",
+        "典型的には歪む方です。",
+        "強く歪んだ方を選ぶ。",
+    ] {
+        assert_eq!(
+            engine
+                .run_frontend(text)
+                .unwrap()
+                .iter()
+                .find(|f| f.string == "方")
+                .unwrap()
+                .read,
+            "ホウ",
+            "{text}"
+        );
+    }
+    engine.options.modify_context_reading = false;
+    assert!(
+        engine
+            .g2k("典型的な歪み方です。")
+            .unwrap()
+            .contains("ユガミホー")
+    );
+}
+
+#[test]
+fn station_distance_keeps_the_count_separate_from_the_place_name() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        (
+            "十三駅先には十三駅がある。",
+            "ジューサンエキサキニワジューソーエキガアル。",
+        ),
+        (
+            "十三駅は、十三駅先にある。",
+            "ジューソーエキワ、ジューサンエキサキニアル。",
+        ),
+        (
+            "阪急十三駅で乗り換える。",
+            "ハンキュージューソーエキデノリカエル。",
+        ),
+        ("十三駅の先にある。", "ジューソーエキノサキニアル。"),
+        ("二十三駅先にある。", "ニジューサンエキサキニアル。"),
+        ("全部で十三駅ある。", "ゼンブデジューサンエキアル。"),
+        ("十三駅目で降りる。", "ジューサンエキメデオリル。"),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), expected, "{text}");
+    }
+    for (kanji, digits) in [
+        ("十三駅先にある。", "13駅先にある。"),
+        ("十三駅目で降りる。", "13駅目で降りる。"),
+    ] {
+        assert_eq!(
+            engine.g2p_prosody(kanji).unwrap(),
+            engine.g2p_prosody(digits).unwrap(),
+            "{kanji}"
+        );
+    }
+    engine.options.modify_context_reading = false;
+    assert!(
+        engine
+            .g2k("十三駅先にある。")
+            .unwrap()
+            .starts_with("ジューソー")
+    );
+}
+
+#[test]
+fn a_station_pair_keeps_juso_instead_of_counting_thirteen_stations() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "大阪梅田駅・十三駅間の線路。",
+        "大阪梅田・十三駅間を走る。",
+        "大阪梅田駅―十三駅間の線路。",
+        "阪急十三駅間の線路。",
+    ] {
+        assert!(
+            engine.g2k(text).unwrap().contains("ジューソーエキカン"),
+            "{text}"
+        );
+    }
+    for text in [
+        "全十三駅間の運賃。",
+        "計十三駅間を走る。",
+        "十三駅間を走った。",
+    ] {
+        assert!(
+            engine.g2k(text).unwrap().contains("ジューサンエキカン"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn registered_kata_and_station_readings_are_preserved() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs
+            .iter_mut()
+            .filter(|m| matches!(m.surface.as_str(), "方" | "十三" | "十" | "三"))
+        {
+            morph.dictionary_index = 1;
+        }
+    });
+    engine.options.protect_user_dict_readings = true;
+    for text in [
+        "典型的な歪み方です。",
+        "十三駅先にある。",
+        "阪急十三駅で乗り換える。",
+    ] {
+        let protected = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        assert_eq!(engine.g2k(text).unwrap(), protected, "{text}");
+        engine.options.modify_context_reading = true;
+    }
+}
+
 fn check_context_readings(cases: &[(&str, &str, &str, i32)], preserved: &[&str]) {
     let mut engine = Haqumei::new().unwrap();
     for &(text, word, reading, moras) in cases {

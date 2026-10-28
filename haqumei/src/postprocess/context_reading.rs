@@ -39,10 +39,186 @@
 
 use std::sync::LazyLock;
 
+use haqumei_jpreprocess_core::{
+    accent_rule::AccentType,
+    cform::CForm,
+    ctype::{CType, Five, One},
+    pos::{
+        Doushi, Fukushi, Joshi, Keiyoushi, Kigou, KoyuMeishi, Meishi, POS, Region, Setsubi,
+        Settoushi,
+    },
+    pronunciation::Pronunciation,
+};
+use haqumei_jpreprocess_njd::NJDNode;
 use rustc_hash::FxHashMap;
 
 use crate::NjdFeature;
 use crate::utils::count_mora;
+
+mod prepare;
+use prepare::{NodeSpec, RewriteRule, Stage};
+pub(crate) use prepare::{prepare_context_segments, prepare_context_words};
+
+// 品詞と分割は句の結合結果を変えるため、PREPARE_RULES は結合前に実行する。
+// RULES は word_accent を持つ規則を結合前に、読みだけを変える規則を結合後に実行する。
+const KATA_SUFFIX: NodeSpec = NodeSpec::new(
+    "方",
+    POS::Meishi(Meishi::Setsubi(Setsubi::Special)),
+    "カタ",
+    "カタ",
+    1,
+    Some(AccentType::C4),
+);
+
+#[rustfmt::skip]
+const PREPARE_RULES: &[RewriteRule] = &[
+    // 十三駅の先・十三駅前は地名にもなる。駅に直結する距離・序数か、
+    // 数量の提示があるときだけ、地名の十三を数詞へ分ける。
+    RewriteRule {
+        surface: "十三",
+        stage: Stage::Segmentation,
+        context: prepare::station_count,
+        replacement: &[
+            NodeSpec::new("十", POS::Meishi(Meishi::Kazu), "ジュウ", "ジュー", 1, Some(AccentType::C3)),
+            NodeSpec::new("三", POS::Meishi(Meishi::Kazu), "サン", "サン", 0, Some(AccentType::C3)),
+        ],
+    },
+    // 数詞のまま核を計算してから読みを変えると、駅名の結合核にならない。
+    // 鉄道名・目的地・乗降の手がかりを確認し、数詞処理前に地名へまとめる。
+    RewriteRule {
+        surface: "十",
+        stage: Stage::Segmentation,
+        context: prepare::station_name,
+        replacement: &[
+            NodeSpec::new("十三", POS::Meishi(Meishi::KoyuMeishi(KoyuMeishi::Region(Region::General))),
+                "ジュウソウ", "ジューソー", 0, Some(AccentType::C2)),
+        ],
+    },
+    // 方法の接尾辞は連用形に付く。歪み・転び・捻れには名詞の候補もあるため、
+    // ですの有無でホウへ戻らないよう、動詞と接尾辞の結合を先に決める。
+    RewriteRule {
+        surface: "歪み",
+        stage: Stage::Lexical,
+        context: |nodes, i| prepare::nominal_kata_stem(nodes, i, "ユガミ"),
+        replacement: &[
+            NodeSpec::new("歪み", POS::Doushi(Doushi::Jiritsu), "ユガミ", "ユガミ", 0, None)
+                .conjugation(CType::Five(Five::Ma), CForm::Renyou, "歪む"),
+            KATA_SUFFIX,
+        ],
+    },
+    RewriteRule {
+        surface: "転び",
+        stage: Stage::Lexical,
+        context: |nodes, i| prepare::nominal_kata_stem(nodes, i, "コロビ"),
+        replacement: &[
+            NodeSpec::new("転び", POS::Doushi(Doushi::Jiritsu), "コロビ", "コロビ", 0, None)
+                .conjugation(CType::Five(Five::Ba), CForm::Renyou, "転ぶ"),
+            KATA_SUFFIX,
+        ],
+    },
+    RewriteRule {
+        surface: "捻れ",
+        stage: Stage::Lexical,
+        context: |nodes, i| prepare::nominal_kata_stem(nodes, i, "ネジレ"),
+        replacement: &[
+            NodeSpec::new("捻れ", POS::Doushi(Doushi::Jiritsu), "ネジレ", "ネジレ", 3, None)
+                .conjugation(CType::One(One::None), CForm::Renyou, "捻れる"),
+            KATA_SUFFIX,
+        ],
+    },
+    RewriteRule {
+        surface: "方",
+        stage: Stage::Lexical,
+        context: prepare::verb_kata_suffix,
+        replacement: &[KATA_SUFFIX],
+    },
+];
+
+/// 文脈判定に使う文字列と、判定前に解析した品詞・活用形。
+struct ContextWord<'a> {
+    surface: &'a str,
+    orig: &'a str,
+    pos: Option<POS>,
+    cform: Option<CForm>,
+}
+
+impl<'a> ContextWord<'a> {
+    fn from_node(node: &'a NJDNode) -> Self {
+        Self {
+            surface: node.get_string(),
+            orig: node.get_orig().unwrap_or(node.get_string()),
+            pos: Some(*node.get_pos()),
+            cform: Some(*node.get_cform()),
+        }
+    }
+
+    fn from_feature(feature: &'a NjdFeature) -> Self {
+        let pos = POS::from_strs(
+            &feature.pos,
+            &feature.pos_group1,
+            &feature.pos_group2,
+            &feature.pos_group3,
+        )
+        .map_err(|error| {
+            log::warn!(
+                "文脈読みの品詞を解析できません: {}: {error}",
+                feature.string
+            )
+        })
+        .ok();
+        let cform = feature
+            .cform
+            .parse()
+            .map_err(|error| {
+                log::warn!(
+                    "文脈読みの活用形を解析できません: {}: {error}",
+                    feature.string
+                )
+            })
+            .ok();
+        Self {
+            surface: &feature.string,
+            orig: &feature.orig,
+            pos,
+            cform,
+        }
+    }
+
+    fn surface(&self) -> &str {
+        self.surface
+    }
+    fn orig(&self) -> &str {
+        self.orig
+    }
+    fn pos_matches(&self, predicate: PosPredicate) -> bool {
+        self.pos.is_some_and(predicate)
+    }
+}
+
+type PosPredicate = fn(POS) -> bool;
+
+fn is_suffix(pos: POS) -> bool {
+    matches!(
+        pos,
+        POS::Meishi(Meishi::Setsubi(_))
+            | POS::Doushi(Doushi::Setsubi)
+            | POS::Keiyoushi(Keiyoushi::Setsubi)
+    )
+}
+
+fn is_general(pos: POS) -> bool {
+    matches!(
+        pos,
+        POS::Meishi(Meishi::General) | POS::Fukushi(Fukushi::General) | POS::Kigou(Kigou::General)
+    )
+}
+
+fn is_independent(pos: POS) -> bool {
+    matches!(
+        pos,
+        POS::Doushi(Doushi::Jiritsu) | POS::Keiyoushi(Keiyoushi::Jiritsu)
+    )
+}
 
 /// 規則が発火する条件。
 enum Cue {
@@ -59,14 +235,11 @@ enum Cue {
     /// 「〜の下」のように連体助詞を挟む構造のために用意している。
     PrevViaNo(&'static [&'static str]),
 
-    /// 指定した語を 1 つ飛ばして遡った形態素の品詞が、いずれかに一致する。
+    /// 指定した語を 1 つ飛ばして遡った形態素の品詞が、条件を満たす。
     ///
     /// 例えば、「そう思うより外にない」の `思う` を見るためにあり、
-    /// `より` が挟まるので [`Cue::PrevPosIn`] では前の形態素を見られない。
-    PrevPosVia(&'static [&'static str], &'static [&'static str]),
-
-    /// 指定した語を 1 つ飛ばして遡った形態素の品詞細分類 1 が、いずれかに一致する。
-    PrevPosGroup1Via(&'static [&'static str], &'static [&'static str]),
+    /// `より` が挟まるので [`Cue::PrevPos`] では前の形態素を見られない。
+    PrevPosVia(&'static [&'static str], PosPredicate),
 
     /// この形態素より後ろ、文が終わるまでに打ち消しの語がある。
     ///
@@ -74,17 +247,17 @@ enum Cue {
     /// [`NEGATIVE_ORIGS`] の原形を持つ形態素を探し、句点に当たったところで止める。
     Negated,
 
-    /// 直前の形態素の品詞が、いずれかに一致する。
+    /// 直前の形態素の品詞が、条件を満たす。
     ///
     /// 連濁は「直前に語が直接くっついているか」で決まるので、表層形を列挙する
     /// のではなく品詞で見る。助詞を挟む場合は複合語ではないので発火しない。
-    PrevPosIn(&'static [&'static str]),
+    PrevPos(PosPredicate),
 
     /// 直前の形態素の活用形が、いずれかに一致する。
-    PrevCformIn(&'static [&'static str]),
+    PrevCform(&'static [CForm]),
 
-    /// 直後の形態素の品詞が、いずれかに一致する。
-    NextPosIn(&'static [&'static str]),
+    /// 直後の形態素の品詞が、条件を満たす。
+    NextPos(PosPredicate),
 
     /// 直後の形態素の表層形が前者のいずれかで、その 1 つ後の形態素の原形が
     /// 後者のいずれかに一致する。
@@ -92,13 +265,6 @@ enum Cue {
     /// 「身体を鍛える」のように、助詞の先の述語で読みが決まるときに使う。
     /// 活用する語は表層形が変わるので、原形で照合する。
     NextViaOrig(&'static [&'static str], &'static [&'static str]),
-
-    /// 直前の形態素の品詞細分類 1 が、いずれかに一致する。
-    ///
-    /// 名詞のうち代名詞だけを分けたい、のように品詞では粗すぎるときに使う。
-    /// `一般` が 名詞-一般 にも 副詞-一般 にも付くように品詞までは絞られないので、
-    /// 名詞に限りたいときは [`Cue::All`] で [`Cue::PrevPosIn`] と組み合わせる。
-    PrevPosGroup1In(&'static [&'static str]),
 
     /// 直前の形態素の表層形が、指定した文字数以上である。
     PrevMinChars(usize),
@@ -114,11 +280,13 @@ enum Cue {
 struct Rule {
     /// 対象の形態素の表層形。
     surface: &'static str,
-    /// 対象の形態素の品詞細分類 1。`None` なら問わない。
-    pos_group1: Option<&'static str>,
+    /// 対象の形態素の品詞条件。`None` なら問わない。
+    pos: Option<PosPredicate>,
     cue: Cue,
     /// 与える読み。読みと発音が異なる語が出てきたら分けること。
     reading: &'static str,
+    /// 単語の核を指定した規則は、句の結合前に読みと核を確定する。
+    word_accent: Option<usize>,
 }
 
 /// 語ごとの規則。上から順に評価し、最初に一致したものを適用する。
@@ -130,36 +298,40 @@ const RULES: &[Rule] = &[
     // ズキのコストを変えると旅好きも清音化するため、一番に続く接尾辞だけを直す。
     Rule {
         surface: "好き",
-        pos_group1: Some("接尾"),
+        pos: Some(is_suffix),
         cue: Cue::PrevIn(&["一番"]),
         reading: "スキ",
+        word_accent: None,
     },
     // 「何にも知らない」はナンニモ、「何にも似ていない」はナニニモと読む。
     // 辞書で副詞を優先すると格助詞の用法も変わるため、述語と打ち消しを確認する。
     // https://github.com/tsukumijima/pyopenjtalk-plus/commit/17aa989573807971094af00fad6a22227ba90c82
     Rule {
         surface: "何",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NegativeNannimo,
         reading: "ナン",
+        word_accent: None,
     },
     // 「一見さん」の 一見 は イチゲン と読む。(初めての客のこと)
     // 負の対照: 「一見して分かる」は直後が「し」なので発火しない。
     // [0 / 0]
     Rule {
         surface: "一見",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["さん"]),
         reading: "イチゲン",
+        word_accent: None,
     },
     // 「一声かける」= ヒトコエかける。
     // 負の対照: 「一声も出ない」は直後が「も」なので発火しない。
     // [0 / 0]
     Rule {
         surface: "一声",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["かけ", "掛け", "かける", "掛ける"]),
         reading: "ヒトコエ",
+        word_accent: None,
     },
     // 「一行ごと」は詩や文章の行を単位とする言い方なので イチギョウ。
     // 一行 (イッコウ = 同行者の集団) は「ごと」を伴わない。
@@ -167,18 +339,20 @@ const RULES: &[Rule] = &[
     // [0 / 0]
     Rule {
         surface: "一行",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["ごと", "毎"]),
         reading: "イチギョウ",
+        word_accent: None,
     },
     // 「兵ども」= ツワモノども。
     // 負の対照: 「兵の数」は直後が「の」なので発火しない。
     // [1 / 0]
     Rule {
         surface: "兵",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["ども", "共"]),
         reading: "ツワモノ",
+        word_accent: None,
     },
     // 人を指す名詞に付く接尾辞「方」は複数の敬称なので ガタ。
     // 「読み方」「夕方」のように 1 形態素として解析される語は対象外になる。
@@ -186,7 +360,7 @@ const RULES: &[Rule] = &[
     // [19 / 0]
     Rule {
         surface: "方",
-        pos_group1: Some("接尾"),
+        pos: Some(is_suffix),
         cue: Cue::PrevIn(&[
             "皆様",
             "皆",
@@ -199,6 +373,7 @@ const RULES: &[Rule] = &[
             "殿",
         ]),
         reading: "ガタ",
+        word_accent: None,
     },
     // 「X の下」で X が抽象名詞・権威を表す語のとき、「下」は モト。
     //
@@ -211,7 +386,7 @@ const RULES: &[Rule] = &[
     // [7 / 0]
     Rule {
         surface: "下",
-        pos_group1: Some("一般"),
+        pos: Some(is_general),
         cue: Cue::PrevViaNo(&[
             // 権威・統制
             "支配", "統治", "指導", "指揮", "監督", "管理", "監視", "命令", "号令",
@@ -225,6 +400,7 @@ const RULES: &[Rule] = &[
             "恩師", "陛下", "殿下", "親方",
         ]),
         reading: "モト",
+        word_accent: None,
     },
     // 名詞に直接続く「不足」は連濁して ブソク になる。(栄養不足 / 資金不足 / 経験不足)
     //
@@ -238,9 +414,10 @@ const RULES: &[Rule] = &[
     // [19 / 0]
     Rule {
         surface: "不足",
-        pos_group1: Some("サ変接続"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(|pos| matches!(pos, POS::Meishi(Meishi::SahenSetsuzoku))),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ブソク",
+        word_accent: None,
     },
     // 名詞に直接続く後部要素は、単独のときと読みが変わる。単独用法の読みが
     // 必要なので単語コストでは分けられず (山 は単独なら ヤマ)、複合語かどうかで
@@ -252,25 +429,28 @@ const RULES: &[Rule] = &[
     // [10 / 2]
     Rule {
         surface: "焼",
-        pos_group1: Some("接尾"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_suffix),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ヤキ",
+        word_accent: None,
     },
     // 「〜峡」は渓谷の名である。 (匹見峡 / 寒霞渓) カイ は単独の訓読み。
     // [0 / 0]
     Rule {
         surface: "峡",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "キョー",
+        word_accent: None,
     },
     // 「分屯」「駐屯」の 屯 は トン。タムロ は「屯する」の訓読み。
     // [0 / 0]
     Rule {
         surface: "屯",
-        pos_group1: Some("サ変接続"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(|pos| matches!(pos, POS::Meishi(Meishi::SahenSetsuzoku))),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "トン",
+        word_accent: None,
     },
     // 「九角形」「多角形」の 角形 は カクケー。
     //
@@ -282,17 +462,19 @@ const RULES: &[Rule] = &[
     // [0 / 0]
     Rule {
         surface: "角形",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "カクケー",
+        word_accent: None,
     },
     // 「軍艦旗」「連隊旗」の 旗 は キ。単独の 旗 は ハタ のまま。
     // [0 / 0]
     Rule {
         surface: "旗",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "キ",
+        word_accent: None,
     },
     // サ変接続の名詞 + 「前」+ 助詞 は マエ と読む。複合語の内側ではなく句の頭に立つ形で、
     // 日本語としては 就学 + 前の と切れる。直後が名詞なら複合語なので ゼン のままに
@@ -306,13 +488,14 @@ const RULES: &[Rule] = &[
     // [0 / 785]
     Rule {
         surface: "前",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["名詞"]),
-            Cue::PrevPosGroup1In(&["サ変接続"]),
-            Cue::NextPosIn(&["助詞"]),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::SahenSetsuzoku))),
+            Cue::NextPos(|pos| matches!(pos, POS::Joshi(_))),
         ]),
         reading: "マエ",
+        word_accent: None,
     },
     // 「〜前」は直前の語で読みが決まる。171 件を見ると、ゼン になる語と
     // マエ になる語で直前語がまったく重ならなかったので、集合で書ける。
@@ -331,12 +514,13 @@ const RULES: &[Rule] = &[
     // [29 / 0]
     Rule {
         surface: "前",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&[
             "紀元", "門", "生", "就学", "出生", "公判", "産", "術", "食",
             "陸", "膝蓋", "祝典", "患難", "停滞", "閉塞", "寒帯", "温暖", "暴露",
         ]),
         reading: "ゼン",
+        word_accent: None,
     },
     // 「〜橋」は バシ 68% / キョー 17% / ハシ 13%。キョー になるのは橋梁の
     // 構造や種別を表す語のときで、そこは閉じた集合になる。それ以外で名詞に
@@ -349,20 +533,22 @@ const RULES: &[Rule] = &[
     // [0 / 7]
     Rule {
         surface: "橋",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&[
             "高架", "可動", "水管", "人道", "跨道", "跨線", "連絡", "斜張", "張",
             "河口", "併用", "吊", "桁", "鉄道", "歩道", "陸", "仮設", "道路", "段",
             "アーチ", "トラス", "ラーメン", "ＰＣ",
         ]),
         reading: "キョー",
+        word_accent: None,
     },
     // [24 / 0]
     Rule {
         surface: "橋",
-        pos_group1: Some("接尾"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_suffix),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "バシ",
+        word_accent: None,
     },
     // 「〜寺」は ジ 83% / デラ 11%。デラ になるのは和語が前に来るときだが
     // 開いた集合なので、観測された分だけ例外に置いて残りは ジ にする。
@@ -370,9 +556,10 @@ const RULES: &[Rule] = &[
     // [0 / 0]
     Rule {
         surface: "寺",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&["縁切", "猫", "だるま", "隠れ", "峯", "山", "花"]),
         reading: "デラ",
+        word_accent: None,
     },
     // 直前が副詞的な名詞なら、その「寺」は複合語の後部要素ではなく独立した名詞
     // なので テラ になる。「翌日寺へ出かけて」「毎日寺へ通う」「そのまま寺へ転げこんだ」
@@ -384,107 +571,120 @@ const RULES: &[Rule] = &[
     // [0 / 74]
     Rule {
         surface: "寺",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["副詞可能", "非自立"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::FukushiKanou) | POS::Meishi(Meishi::Hijiritsu(_)) | POS::Doushi(Doushi::Hijiritsu) | POS::Keiyoushi(Keiyoushi::Hijiritsu))),
         reading: "テラ",
+        word_accent: None,
     },
     // [34 / 0]
     Rule {
         surface: "寺",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ジ",
+        word_accent: None,
     },
     // 「叙事詩環」「循環」の 環 は カン になる。単独は タマキ / ワ。
     // [6 / 3]
     Rule {
         surface: "環",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "カン",
+        word_accent: None,
     },
     // 「諏訪洞」「鍾乳洞」の 洞 は ドー になる。単独は ホラ。
     // [12 / 0]
     Rule {
         surface: "洞",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ドー",
+        word_accent: None,
     },
     // 「宮沢湖」「琵琶湖」の 湖 は コ になる。単独は ミズウミ。
     // [3 / 9]
     Rule {
         surface: "湖",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "コ",
+        word_accent: None,
     },
     // 「唇歯音」「小陰唇」の 唇 は シン になる。単独は クチビル。
     // [0 / 0]
     Rule {
         surface: "唇",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "シン",
+        word_accent: None,
     },
     // 「風景印」「消印」の 印 は イン になる。単独は シルシ。
     // [7 / 0]
     Rule {
         surface: "印",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "イン",
+        word_accent: None,
     },
     // 「筆子塚」「一里塚」の 塚 は連濁して ズカ になる。単独は ツカ。
     // [9 / 0]
     Rule {
         surface: "塚",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ズカ",
+        word_accent: None,
     },
     // 「水晶小屋」「山小屋」の 小屋 は連濁して ゴヤになる。単独は コヤ。
     // 「寺小屋」は テラコヤ で連濁しない。寺子屋 の異表記である。
     // [0 / 21]
     Rule {
         surface: "小屋",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&["寺"]),
         reading: "コヤ",
+        word_accent: None,
     },
     // [23 / 0]
     Rule {
         surface: "小屋",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ゴヤ",
+        word_accent: None,
     },
     // 「貴乃花部屋」「子供部屋」の 部屋 は連濁して ベヤ になる。単独は ヘヤ。
     // [18 / 0]
     Rule {
         surface: "部屋",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["名詞"]),
-            Cue::Not(&Cue::PrevPosGroup1In(&["数"])),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
+            Cue::Not(&Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::Kazu) | POS::Kigou(Kigou::Kazu)))),
         ]),
         reading: "ベヤ",
+        word_accent: None,
     },
     // 「お年玉付郵便はがき」の 付 は ツキ になる。ズケ は 日付 などの別エントリ。
     // [26 / 0]
     Rule {
         surface: "付",
-        pos_group1: Some("接尾"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_suffix),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ツキ",
+        word_accent: None,
     },
     // 「金車」のような複合語の 金 は キン になる。単独は カネ。
     // [0 / 112]
     Rule {
         surface: "金",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "キン",
+        word_accent: None,
     },
     // 「公同書簡」「公文書」の 公 は コー になる。単独は オーヤケ。
     // 直前が副詞的な名詞なら、その「公」は複合語の後部要素ではないので オーヤケ である。
@@ -493,32 +693,36 @@ const RULES: &[Rule] = &[
     // [0 / 16]
     Rule {
         surface: "公",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosGroup1In(&["副詞可能"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::FukushiKanou))),
         reading: "オーヤケ",
+        word_accent: None,
     },
     // [8 / 30]
     Rule {
         surface: "公",
-        pos_group1: Some("一般"),
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: Some(is_general),
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "コー",
+        word_accent: None,
     },
     // 「歯茎硬口蓋音」の 硬 は コー になる。辞書には形容詞の カタ しか無い。
     // [1 / 0]
     Rule {
         surface: "硬",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "コー",
+        word_accent: None,
     },
     // 「如何ですか」の 如何 は イカガ になる。「如何なる」「如何にも」は イカ。
     // [3 / 0]
     Rule {
         surface: "如何",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["で", "です", "でし", "でしょ"]),
         reading: "イカガ",
+        word_accent: None,
     },
 
     // 形容動詞語幹 + 「物」は ブツ と読む。(危険物・不要物・貴重物)
@@ -526,21 +730,23 @@ const RULES: &[Rule] = &[
     // [13 / 239]
     Rule {
         surface: "物",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["形容動詞語幹"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::KeiyoudoushiGokan))),
         reading: "ブツ",
+        word_accent: None,
     },
     // 名詞 + 「尼」は接尾辞の ニ と読む。(修道尼・恵信尼)
     // 「翌日尼に会う」のような副詞的な名詞の後では、独立した アマ を残す。
     // [10 / 0]
     Rule {
         surface: "尼",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["名詞"]),
-            Cue::Not(&Cue::PrevPosGroup1In(&["副詞可能", "非自立"])),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
+            Cue::Not(&Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::FukushiKanou) | POS::Meishi(Meishi::Hijiritsu(_)) | POS::Doushi(Doushi::Hijiritsu) | POS::Keiyoushi(Keiyoushi::Hijiritsu)))),
         ]),
         reading: "ニ",
+        word_accent: None,
     },
     // 活用語 + 「者」は モノ と読む。(成り上がり者・若い者・働く者)
     // 医者・記者 は 1 形態素なので 者 が単独で現れない。
@@ -548,28 +754,31 @@ const RULES: &[Rule] = &[
     // [8 / 407]
     Rule {
         surface: "者",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosGroup1In(&["自立"]),
+            Cue::PrevPos(is_independent),
             Cue::PrevMinChars(2),
         ]),
         reading: "モノ",
+        word_accent: None,
     },
     // 活用語 + 「処」は トコロ と読む。(たべる処・住む処)
     // [19 / 18]
     Rule {
         surface: "処",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["自立"]),
+        pos: None,
+        cue: Cue::PrevPos(is_independent),
         reading: "トコロ",
+        word_accent: None,
     },
     // 「に於て」「に於ける」の 於 は オイ と読む。
     // [26 / 0]
     Rule {
         surface: "於",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["て", "ては", "ても"]),
         reading: "オイ",
+        word_accent: None,
     },
     // 名詞 + 「茶屋」は連濁して ジャヤ と読む。(料理茶屋・芝居茶屋・三日月茶屋)
     // 副詞的な名詞を外すのは 寺 と同じ理由で、`きょう茶屋町へ` の 茶屋 は
@@ -577,12 +786,13 @@ const RULES: &[Rule] = &[
     // [9 / 0]
     Rule {
         surface: "茶屋",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["名詞"]),
-            Cue::PrevPosGroup1In(&["一般", "固有名詞", "サ変接続"]),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::General) | POS::Fukushi(Fukushi::General) | POS::Kigou(Kigou::General) | POS::Meishi(Meishi::KoyuMeishi(_)) | POS::Meishi(Meishi::SahenSetsuzoku))),
         ]),
         reading: "ジャヤ",
+        word_accent: None,
     },
     // 「視入った」「駈け入った」など、前の動詞が連用形の複合動詞を イッ と読む。
     // 「ひがみ入っている」の ひがみ も動詞の連用形と解析されるが、
@@ -590,37 +800,41 @@ const RULES: &[Rule] = &[
     // [12 / 0]
     Rule {
         surface: "入っ",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["動詞"]),
-            Cue::PrevCformIn(&["連用形"]),
+            Cue::PrevPos(|pos| matches!(pos, POS::Doushi(_))),
+            Cue::PrevCform(&[CForm::Renyou]),
             Cue::Not(&Cue::PrevIn(&["ひがみ", "僻み"])),
         ]),
         reading: "イッ",
+        word_accent: None,
     },
     // 「何で」「何でも」の 何 は ナン と読む。
     // [31 / 364]
     Rule {
         surface: "何",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["で", "でも"]),
         reading: "ナン",
+        word_accent: None,
     },
     // 「傍へ」「傍に」の 傍 は ソバ と読む。
     // [22 / 0]
     Rule {
         surface: "傍",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["へ", "に"]),
         reading: "ソバ",
+        word_accent: None,
     },
     // 助詞の後の「此処」は ココ と読む。
     // [30 / 1]
     Rule {
         surface: "此処",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["助詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Joshi(_))),
         reading: "ココ",
+        word_accent: None,
     },
     // 「〜するより外にない」「君より外にない」の 外 は ホカ と読む。
     //
@@ -630,19 +844,21 @@ const RULES: &[Rule] = &[
     // [9 / 0]
     Rule {
         surface: "外",
-        pos_group1: None,
-        cue: Cue::All(&[Cue::PrevPosVia(&["より"], &["動詞"]), Cue::Negated]),
+        pos: None,
+        cue: Cue::All(&[Cue::PrevPosVia(&["より"], |pos| matches!(pos, POS::Doushi(_))), Cue::Negated]),
         reading: "ホカ",
+        word_accent: None,
     },
     // [9 / 0]
     Rule {
         surface: "外",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosGroup1Via(&["より"], &["代名詞"]),
+            Cue::PrevPosVia(&["より"], |pos| matches!(pos, POS::Meishi(Meishi::Daimeishi(_)))),
             Cue::Negated,
         ]),
         reading: "ホカ",
+        word_accent: None,
     },
     // 接頭詞の 大 は、後ろが和語なら オー になる。漢語なら ダイ で、
     // 「大企業」「大部分」は触らない。和語かどうかは形態素の特徴に無いので、
@@ -653,12 +869,13 @@ const RULES: &[Rule] = &[
     // [12 / 0]
     Rule {
         surface: "大",
-        pos_group1: Some("名詞接続"),
+        pos: Some(|pos| matches!(pos, POS::Settoushi(Settoushi::MeishiSetsuzoku))),
         cue: Cue::NextIn(&[
             "にぎわい", "丸髷", "地主", "旦那", "泥坊", "津波", "掃除",
             "番狂わせ", "番頭", "違い",
         ]),
         reading: "オー",
+        word_accent: None,
     },
     // 接頭詞の 御 は、後ろが和語なら オ になる。漢語なら ゴ で、
     // 「御住所」「御多忙」は触らない。「御粗末」は漢語だが オソマツ が慣用である。
@@ -666,28 +883,31 @@ const RULES: &[Rule] = &[
     // [18 / 0]
     Rule {
         surface: "御",
-        pos_group1: Some("名詞接続"),
+        pos: Some(|pos| matches!(pos, POS::Settoushi(Settoushi::MeishiSetsuzoku))),
         cue: Cue::NextIn(&[
             "仕置", "屋敷", "帰り", "急ぎ", "手際", "支払い", "楽しみ",
             "気の毒", "田植祭", "神籤", "粗末", "言葉", "近く", "隣", "嬢",
         ]),
         reading: "オ",
+        word_accent: None,
     },
     // 「〜町史」の 町 は チョー と読む。
     // [6 / 0]
     Rule {
         surface: "町",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["史"]),
         reading: "チョー",
+        word_accent: None,
     },
     // 名詞 + 「余」は接尾辞の ヨ と読む。(万余・十余)
     // [8 / 80]
     Rule {
         surface: "余",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
         reading: "ヨ",
+        word_accent: None,
     },
     // 「前期」「前段階」と、役職が直後に来る「前会長」の 前 は ゼン と読む。
     // 役職は収集データで 会長 280 / 社長 165 / 首相 129 / 理事長 71 / 大統領 56 と
@@ -696,11 +916,12 @@ const RULES: &[Rule] = &[
     // [29 / 0]
     Rule {
         surface: "前",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&[
             "会長", "大統領", "段階", "理事長", "社長", "総裁", "期", "首相",
         ]),
         reading: "ゼン",
+        word_accent: None,
     },
 
     // 「金型」の 金 は カナ と読む。
@@ -708,96 +929,107 @@ const RULES: &[Rule] = &[
     // [10 / 0]
     Rule {
         surface: "金",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
             Cue::NextIn(&["型"]),
             Cue::Not(&Cue::PrevIn(&["返戻"])),
         ]),
         reading: "カナ",
+        word_accent: None,
     },
     // 「一目で」の 一目 は ヒトメ と読む。
     // [5 / 0]
     Rule {
         surface: "一目",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["で"]),
         reading: "ヒトメ",
+        word_accent: None,
     },
     // 格助詞の後の「叩き」は タタキ と読む。
     // [5 / 3]
     Rule {
         surface: "叩き",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["格助詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Joshi(Joshi::KakuJoshi(_)))),
         reading: "タタキ",
+        word_accent: None,
     },
     // 「此処に」「此処へ」の 此処 は ココ と読む。
     // [30 / 1]
     Rule {
         surface: "此処",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["に", "へ", "で", "が", "は", "を"]),
         reading: "ココ",
+        word_accent: None,
     },
     // 活用語 + 「処」は トコロ と読む。助動詞のあとも同じである。(落ち込んでいた処)
     // [19 / 18]
     Rule {
         surface: "処",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["助動詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Jodoushi)),
         reading: "トコロ",
+        word_accent: None,
     },
     // 副詞 + 「間」は マ と読む。(少し間をおいて)
     // [7 / 0]
     Rule {
         surface: "間",
-        pos_group1: None,
-        cue: Cue::PrevPosIn(&["副詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Fukushi(_))),
         reading: "マ",
+        word_accent: None,
     },
     // 「この間の」の この間 は コノアイダ と読む。
     // [6 / 0]
     Rule {
         surface: "この間",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["の"]),
         reading: "コノアイダ",
+        word_accent: None,
     },
     // 「識って」は シッテ と読む。(知って の異表記)
     // [7 / 0]
     Rule {
         surface: "識",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["って", "った", "り"]),
         reading: "シ",
+        word_accent: None,
     },
     // 名詞 + 「翁」は オー と読む。(芭蕉翁・計算翁)
     // 「明日翁が来る」のような副詞的な名詞の後では、独立した オキナ を残す。
     // [8 / 8]
     Rule {
         surface: "翁",
-        pos_group1: None,
+        pos: None,
         cue: Cue::All(&[
-            Cue::PrevPosIn(&["名詞"]),
-            Cue::Not(&Cue::PrevPosGroup1In(&["副詞可能", "非自立"])),
+            Cue::PrevPos(|pos| matches!(pos, POS::Meishi(_))),
+            Cue::Not(&Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::FukushiKanou) | POS::Meishi(Meishi::Hijiritsu(_)) | POS::Doushi(Doushi::Hijiritsu) | POS::Keiyoushi(Keiyoushi::Hijiritsu)))),
         ]),
         reading: "オー",
+        word_accent: None,
     },
     // 「仰しゃる」は オッシャル と読む。
     // [6 / 0]
     Rule {
         surface: "仰",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["しゃっ", "しゃる", "しゃい", "しゃら", "しゃり"]),
         reading: "オッ",
+        word_accent: None,
     },
     // 「〜て了った」は テシマッタ と読む。
     // [28 / 0]
     Rule {
         surface: "了",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&["て", "で"]),
         reading: "シマ",
+        word_accent: None,
     },
     // 日常の手入れや運動の動詞が「身体を」に続くとき、「身体」は カラダ。
     // 助詞だけでは「身体を拘束する」の シンタイと分けられないので、助詞を飛ばして
@@ -808,7 +1040,7 @@ const RULES: &[Rule] = &[
     // [14 / 0]
     Rule {
         surface: "身体",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextViaOrig(
             &["を"],
             &[
@@ -819,6 +1051,7 @@ const RULES: &[Rule] = &[
             ],
         ),
         reading: "カラダ",
+        word_accent: Some(0),
     },
     // からだの調子や手入れを表す述語が「身体に」に続くとき、「身体」は カラダ。
     // 「身体に障害が」の シンタイとは、助詞の先の語で分かれる。
@@ -827,12 +1060,13 @@ const RULES: &[Rule] = &[
     // [2 / 0]
     Rule {
         surface: "身体",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextViaOrig(
             &["に"],
             &["気", "合う", "障る", "残る", "良い", "持つ", "かなう", "触る"],
         ),
         reading: "カラダ",
+        word_accent: Some(0),
     },
     // 「身体の調子」のように、からだの状態を表す名詞が続くとき、「身体」は カラダ。
     // 「身体の機能」の シンタイとは、続く名詞で分かれる。
@@ -842,9 +1076,10 @@ const RULES: &[Rule] = &[
     // [1 / 0]
     Rule {
         surface: "身体",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextViaOrig(&["の"], &["調子", "ため", "具合"]),
         reading: "カラダ",
+        word_accent: Some(0),
     },
     // 「身体が丈夫だ」のように、からだの状態を表す語が「身体が」に続くときは カラダ。
     // 「身体が不自由だ」の シンタイとは、続く語で分かれる。
@@ -853,7 +1088,7 @@ const RULES: &[Rule] = &[
     // [3 / 0]
     Rule {
         surface: "身体",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextViaOrig(
             &["が"],
             &[
@@ -862,23 +1097,26 @@ const RULES: &[Rule] = &[
             ],
         ),
         reading: "カラダ",
+        word_accent: Some(0),
     },
     // 「一しょ」は イッショ と読む。(一緒 の異表記)
     // [15 / 144]
     Rule {
         surface: "一",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["しょ"]),
         reading: "イッ",
+        word_accent: None,
     },
     // 格助詞・係助詞の前の 貴女 は アナタ と読む。
     // 「の」を入れないのは、`若い貴女のために` の キジョ と割れるためである。
     // [21 / 0]
     Rule {
         surface: "貴女",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["が", "は", "を", "に", "も", "から", "と"]),
         reading: "アナタ",
+        word_accent: None,
     },
 
     // 「等」の読みは直前が何かで三分される。収集データでの内訳は
@@ -900,16 +1138,18 @@ const RULES: &[Rule] = &[
     // [20 / 0]
     Rule {
         surface: "等",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["代名詞"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::Daimeishi(_)))),
         reading: "ラ",
+        word_accent: None,
     },
     // [88 / 153]
     Rule {
         surface: "等",
-        pos_group1: None,
-        cue: Cue::PrevPosGroup1In(&["一般", "サ変接続", "固有名詞", "接尾"]),
+        pos: None,
+        cue: Cue::PrevPos(|pos| matches!(pos, POS::Meishi(Meishi::General) | POS::Fukushi(Fukushi::General) | POS::Kigou(Kigou::General) | POS::Meishi(Meishi::SahenSetsuzoku) | POS::Meishi(Meishi::KoyuMeishi(_)) | POS::Meishi(Meishi::Setsubi(_)) | POS::Doushi(Doushi::Setsubi) | POS::Keiyoushi(Keiyoushi::Setsubi))),
         reading: "トー",
+        word_accent: None,
     },
 
     // 学位を指す「博士」は ハクシ で、人を指す「〜博士」の ハカセ と割れる。
@@ -925,20 +1165,22 @@ const RULES: &[Rule] = &[
     // [18 / 0]
     Rule {
         surface: "博士",
-        pos_group1: None,
+        pos: None,
         cue: Cue::NextIn(&["学位", "論文", "号", "課程"]),
         reading: "ハクシ",
+        word_accent: None,
     },
     // 直前が学位の分野名か 大学院 のとき。収集データで裏付けがあるのは
     // 医学・工学・理学と 大学院 で、残りは同じ形の分野名として足した。
     // [18 / 0]
     Rule {
         surface: "博士",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevIn(&[
             "医学", "工学", "理学", "農学", "薬学", "文学", "法学", "経済学", "大学院",
         ]),
         reading: "ハクシ",
+        word_accent: None,
     },
     // 道具の「〜の柄」は エ、刀剣の「〜の柄」は ツカ と読む。
     // 直前は「の」で潰れるので、その 1 つ前の語を見る。
@@ -949,22 +1191,24 @@ const RULES: &[Rule] = &[
     // [4 / 0]
     Rule {
         surface: "柄",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevViaNo(&[
             "うちわ", "やり", "傘", "剃刀", "団扇", "提灯", "斧", "柄杓", "槍", "洋傘",
             "箒", "薙刀", "鋏", "鋤", "鋸", "鍬", "錫杖",
         ]),
         reading: "エ",
+        word_accent: None,
     },
     // [2 / 0]
     Rule {
         surface: "柄",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevViaNo(&[
             "刀", "剣", "大刀", "太刀", "小剣", "懐剣", "木剣", "短刀", "短剣", "脇差",
             "軍刀", "長脇差", "鎧通し",
         ]),
         reading: "ツカ",
+        word_accent: None,
     },
     // 器物の「〜の縁」は フチ。既定の エン は 縁がある / 縁側 の意味で、
     // 「の」を挟んで器物が来る形では出てこない。
@@ -972,26 +1216,29 @@ const RULES: &[Rule] = &[
     // [15 / 0]
     Rule {
         surface: "縁",
-        pos_group1: None,
+        pos: None,
         cue: Cue::PrevViaNo(&[
             "カップ", "器", "堀", "崖", "径", "屏風", "内側", "口", "皿", "模様",
             "火鉢", "金",
         ]),
         reading: "フチ",
+        word_accent: None,
     },
 ];
 
 /// [`Cue::Negated`] が探す打ち消しの語の原形。
 const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
 
-fn negative_nannimo(features: &[NjdFeature], i: usize) -> bool {
-    if features[i].pos != "名詞"
-        || !features
-            .get(i + 1)
-            .is_some_and(|f| f.string == "に" && f.pos_group1 == "格助詞")
-        || !features
-            .get(i + 2)
-            .is_some_and(|f| f.string == "も" && f.pos_group1 == "係助詞")
+fn negative_nannimo(features: &[ContextWord<'_>], i: usize) -> bool {
+    if !features[i].pos_matches(|pos| matches!(pos, POS::Meishi(_)))
+        || !features.get(i + 1).is_some_and(|f| {
+            f.surface() == "に"
+                && f.pos_matches(|pos| matches!(pos, POS::Joshi(Joshi::KakuJoshi(_))))
+        })
+        || !features.get(i + 2).is_some_and(|f| {
+            f.surface() == "も"
+                && f.pos_matches(|pos| matches!(pos, POS::Joshi(Joshi::KakariJoshi)))
+        })
     {
         return false;
     }
@@ -1000,65 +1247,75 @@ fn negative_nannimo(features: &[NjdFeature], i: usize) -> bool {
     let mut predicate_found = false;
     while let Some(feature) = features.get(index) {
         if !predicate_found {
-            if index == start && feature.string == "しない" && feature.pos == "名詞" {
+            if index == start
+                && feature.surface() == "しない"
+                && feature.pos_matches(|pos| matches!(pos, POS::Meishi(_)))
+            {
                 return true;
             }
-            if feature.pos == "副詞" {
+            if feature.pos_matches(|pos| matches!(pos, POS::Fukushi(_))) {
                 index += 1;
                 continue;
             }
             // 「返事がない」は打ち消しの用法だが、名詞全般を飛ばすと別の主語へ進む。
             if index == start
-                && feature.string == "返事"
-                && features.get(index + 1).is_some_and(|f| f.string == "が")
+                && feature.surface() == "返事"
+                && features.get(index + 1).is_some_and(|f| f.surface() == "が")
             {
                 index += 2;
                 continue;
             }
-            if !matches!(feature.pos.as_str(), "動詞" | "形容詞" | "助動詞")
-                || !matches!(
-                    feature.orig.as_str(),
-                    "知る"
-                        | "わかる"
-                        | "分かる"
-                        | "分る"
-                        | "する"
-                        | "出来る"
-                        | "できる"
-                        | "なる"
-                        | "言う"
-                        | "やる"
-                        | "食べる"
-                        | "聞く"
-                        | "答える"
-                        | "ある"
-                        | "ない"
-                        | "無い"
-                        | "面白い"
-                )
-            {
+            if !feature.pos_matches(|pos| {
+                matches!(pos, POS::Doushi(_) | POS::Keiyoushi(_) | POS::Jodoushi)
+            }) || !matches!(
+                feature.orig(),
+                "知る"
+                    | "わかる"
+                    | "分かる"
+                    | "分る"
+                    | "する"
+                    | "出来る"
+                    | "できる"
+                    | "なる"
+                    | "言う"
+                    | "やる"
+                    | "食べる"
+                    | "聞く"
+                    | "答える"
+                    | "ある"
+                    | "ない"
+                    | "無い"
+                    | "面白い"
+            ) {
                 return false;
             }
             predicate_found = true;
-        } else if matches!(feature.string.as_str(), "こと" | "事")
-            && feature.pos_group1 == "非自立"
-            && features.get(index + 1).is_some_and(|f| f.string == "が")
+        } else if matches!(feature.surface(), "こと" | "事")
+            && feature.pos_matches(|pos| {
+                matches!(
+                    pos,
+                    POS::Meishi(Meishi::Hijiritsu(_))
+                        | POS::Doushi(Doushi::Hijiritsu)
+                        | POS::Keiyoushi(Keiyoushi::Hijiritsu)
+                )
+            })
+            && features.get(index + 1).is_some_and(|f| f.surface() == "が")
             && features
                 .get(index + 2)
-                .is_some_and(|f| matches!(f.string.as_str(), "でき" | "出来"))
+                .is_some_and(|f| matches!(f.surface(), "でき" | "出来"))
         {
             predicate_found = false;
             index += 2;
             continue;
-        } else if !(feature.pos == "助動詞"
-            || (feature.pos == "動詞" && feature.pos_group1 == "非自立")
-            || (feature.pos == "助詞"
-                && matches!(feature.string.as_str(), "て" | "で" | "は" | "も")))
+        } else if !(feature
+            .pos_matches(|pos| matches!(pos, POS::Jodoushi | POS::Doushi(Doushi::Hijiritsu)))
+            || (feature.pos_matches(|pos| matches!(pos, POS::Joshi(_)))
+                && matches!(feature.surface(), "て" | "で" | "は" | "も")))
         {
             return false;
         }
-        if matches!(feature.pos.as_str(), "助動詞" | "形容詞")
-            && NEGATIVE_ORIGS.contains(&feature.orig.as_str())
+        if feature.pos_matches(|pos| matches!(pos, POS::Jodoushi | POS::Keiyoushi(_)))
+            && NEGATIVE_ORIGS.contains(&feature.orig())
         {
             return true;
         }
@@ -1068,57 +1325,48 @@ fn negative_nannimo(features: &[NjdFeature], i: usize) -> bool {
 }
 
 /// [`Cue::All`] が手がかりを入れ子にできるので、判定は再帰で書く。
-fn cue_matches(cue: &Cue, njd_features: &[NjdFeature], i: usize) -> bool {
+fn cue_matches(cue: &Cue, njd_features: &[ContextWord<'_>], i: usize) -> bool {
     match cue {
         Cue::NegativeNannimo => negative_nannimo(njd_features, i),
         Cue::NextIn(candidates) => njd_features
             .get(i + 1)
-            .is_some_and(|next| candidates.contains(&next.string.as_str())),
-        Cue::PrevIn(candidates) => {
-            i > 0 && candidates.contains(&njd_features[i - 1].string.as_str())
-        }
+            .is_some_and(|next| candidates.contains(&next.surface())),
+        Cue::PrevIn(candidates) => i > 0 && candidates.contains(&njd_features[i - 1].surface()),
         Cue::PrevViaNo(candidates) => {
             i > 1
-                && njd_features[i - 1].string == "の"
-                && candidates.contains(&njd_features[i - 2].string.as_str())
+                && njd_features[i - 1].surface() == "の"
+                && candidates.contains(&njd_features[i - 2].surface())
         }
-        Cue::PrevPosVia(via, candidates) => {
+        Cue::PrevPosVia(via, predicate) => {
             i >= 2
-                && via.contains(&njd_features[i - 1].string.as_str())
-                && candidates.contains(&njd_features[i - 2].pos.as_str())
-        }
-        Cue::PrevPosGroup1Via(via, candidates) => {
-            i >= 2
-                && via.contains(&njd_features[i - 1].string.as_str())
-                && candidates.contains(&njd_features[i - 2].pos_group1.as_str())
+                && via.contains(&njd_features[i - 1].surface())
+                && njd_features[i - 2].pos_matches(*predicate)
         }
         Cue::Negated => njd_features
             .get(i + 1..)
             .unwrap_or_default()
             .iter()
-            .take_while(|f| !matches!(f.string.as_str(), "。" | "．" | "！" | "？"))
-            .any(|f| NEGATIVE_ORIGS.contains(&f.orig.as_str())),
-        Cue::PrevPosIn(candidates) => {
-            i > 0 && candidates.contains(&njd_features[i - 1].pos.as_str())
+            .take_while(|f| !matches!(f.surface(), "。" | "．" | "！" | "？"))
+            .any(|f| NEGATIVE_ORIGS.contains(&f.orig())),
+        Cue::PrevPos(predicate) => i > 0 && njd_features[i - 1].pos_matches(*predicate),
+        Cue::PrevCform(candidates) => {
+            i > 0
+                && njd_features[i - 1]
+                    .cform
+                    .is_some_and(|form| candidates.contains(&form))
         }
-        Cue::PrevCformIn(candidates) => {
-            i > 0 && candidates.contains(&njd_features[i - 1].cform.as_str())
-        }
-        Cue::PrevPosGroup1In(candidates) => {
-            i > 0 && candidates.contains(&njd_features[i - 1].pos_group1.as_str())
-        }
-        Cue::PrevMinChars(min) => i > 0 && njd_features[i - 1].string.chars().count() >= *min,
+        Cue::PrevMinChars(min) => i > 0 && njd_features[i - 1].surface().chars().count() >= *min,
         Cue::Not(cue) => !cue_matches(cue, njd_features, i),
-        Cue::NextPosIn(candidates) => njd_features
+        Cue::NextPos(predicate) => njd_features
             .get(i + 1)
-            .is_some_and(|next| candidates.contains(&next.pos.as_str())),
+            .is_some_and(|next| next.pos_matches(*predicate)),
         Cue::NextViaOrig(via, candidates) => {
             njd_features
                 .get(i + 1)
-                .is_some_and(|next| via.contains(&next.string.as_str()))
+                .is_some_and(|next| via.contains(&next.surface()))
                 && njd_features
                     .get(i + 2)
-                    .is_some_and(|head| candidates.contains(&head.orig.as_str()))
+                    .is_some_and(|head| candidates.contains(&head.orig()))
         }
         Cue::All(cues) => cues.iter().all(|c| cue_matches(c, njd_features, i)),
     }
@@ -1135,72 +1383,97 @@ static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static Rule>>> =
         by_surface
     });
 
-pub(crate) fn body_reading_matches(features: &[NjdFeature], i: usize) -> bool {
-    features[i].string == "身体"
-        && RULES_BY_SURFACE.get("身体").is_some_and(|rules| {
-            rules
-                .iter()
-                .any(|rule| rule.reading == "カラダ" && cue_matches(&rule.cue, features, i))
-        })
+fn first_matching_rule<'a>(
+    mut rules: impl Iterator<Item = &'a Rule>,
+    words: &[ContextWord<'_>],
+    i: usize,
+) -> Option<&'a Rule> {
+    rules.find(|rule| {
+        rule.pos
+            .is_none_or(|predicate| words[i].pos_matches(predicate))
+            && cue_matches(&rule.cue, words, i)
+    })
 }
 
-/// 隣接する形態素で読みが決まる語を補正する。
-pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected: &[bool]) {
-    let by_surface = &*RULES_BY_SURFACE;
-    for i in 0..njd_features.len() {
-        // 後から読みだけを復元すると、モーラ数に合わせて動かした句の核が戻らない。
+fn matching_rule(words: &[ContextWord<'_>], i: usize) -> Option<&'static Rule> {
+    RULES_BY_SURFACE
+        .get(words[i].surface())
+        .and_then(|rules| first_matching_rule(rules.iter().copied(), words, i))
+}
+
+pub(crate) fn prepare_word_readings(nodes: &mut [NJDNode], protected: &[bool]) {
+    let rules: Vec<_> = {
+        let words: Vec<_> = nodes.iter().map(ContextWord::from_node).collect();
+        (0..words.len()).map(|i| matching_rule(&words, i)).collect()
+    };
+    for (i, rule) in rules.into_iter().enumerate() {
         if protected.get(i) == Some(&true) {
             continue;
         }
-        // 日付の「付」はヅケであり、付属を表す「条件付」などのツキとは異なる。
-        if njd_features[i].string == "付"
-            && i > 0
-            && let Some(day) = njd_features[i - 1].string.strip_suffix('日')
-            && (njd_features[i - 1].pos_group2 == "助数詞"
-                || (!day.is_empty()
-                    && day.chars().all(|c| {
-                        matches!(c, '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '〇' | '零' | '0'..='9' | '０'..='９')
-                    })))
+        if let Some(rule) = rule
+            && let Some(accent) = rule.word_accent
         {
-            continue;
+            nodes[i].set_read(rule.reading);
+            nodes[i].set_pron(Pronunciation::parse(rule.reading, accent).unwrap());
         }
-        // 「一日」は日数の読みだけを対象にし、十一日や日付のツイタチとは区別する。
-        if njd_features[i].string == "中"
-            && njd_features[i].read == "チュウ"
-            && i > 0
-            && njd_features[i - 1].string == "一日"
-            && njd_features[i - 1].read == "イチニチ"
-            && (i < 2 || njd_features[i - 2].pos_group1 != "数")
-        {
-            njd_features[i].read = "ジュウ".into();
-            njd_features[i].pron = "ジュー".into();
-            njd_features[i].mora_size = 2;
-            continue;
-        }
-        let Some(rules) = by_surface.get(njd_features[i].string.as_str()) else {
-            continue;
-        };
-        let Some(rule) = rules.iter().copied().find(|rule| {
-            let node = &njd_features[i];
-            if let Some(pos_group1) = rule.pos_group1
-                && node.pos_group1 != pos_group1
-            {
-                return false;
-            }
-            cue_matches(&rule.cue, njd_features, i)
-        }) else {
-            continue;
-        };
+    }
+}
 
-        let node = &mut njd_features[i];
+fn phrase_reading(
+    features: &[NjdFeature],
+    words: &[ContextWord<'_>],
+    i: usize,
+) -> Option<(&'static str, &'static str)> {
+    // 日付の「付」はヅケであり、付属を表すツキとは異なる。
+    if features[i].string == "付" && i > 0
+        && let Some(day) = features[i - 1].string.strip_suffix('日')
+        && (words[i - 1].pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi))))
+            || (!day.is_empty() && day.chars().all(|c| matches!(c,
+                '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '〇' | '零' | '0'..='9' | '０'..='９'))))
+    { return None; }
+    // 日数の一日を対象とし、十一日や日付のツイタチとは区別する。
+    if features[i].string == "中"
+        && features[i].read == "チュウ"
+        && i > 0
+        && features[i - 1].string == "一日"
+        && features[i - 1].read == "イチニチ"
+        && (i < 2 || !words[i - 2].pos_matches(|pos| pos.is_kazu()))
+    {
+        return Some(("ジュウ", "ジュー"));
+    }
+    let rule = matching_rule(words, i)?;
+    rule.word_accent
+        .is_none()
+        .then_some((rule.reading, rule.reading))
+}
+
+/// 隣接する形態素で読みが決まる語を補正する。
+pub(crate) fn modify_context_reading(features: &mut [NjdFeature], protected: &[bool]) {
+    // 条件は読み・発音・句の核を参照しないため、判定を終えてから値を書き換えられる。
+    let changes: Vec<_> = {
+        let words: Vec<_> = features.iter().map(ContextWord::from_feature).collect();
+        (0..features.len())
+            .map(|i| {
+                if protected.get(i) == Some(&true) {
+                    None
+                } else {
+                    phrase_reading(features, &words, i)
+                }
+            })
+            .collect()
+    };
+    for (i, change) in changes.into_iter().enumerate() {
+        let Some((reading, pronunciation)) = change else {
+            continue;
+        };
+        let node = &mut features[i];
         // 同じ発音を書き直すと、NJD が付けた無声化の記号が消える。
-        // read には無声化を含めず、pron が変わらない場合はそのまま残す。
-        node.read = rule.reading.to_string();
+        node.read = reading.into();
         if node
             .pron
             .chars()
             .filter(|&c| c != '’')
-            .eq(rule.reading.chars())
+            .eq(pronunciation.chars())
         {
             continue;
         }
@@ -1210,12 +1483,11 @@ pub(crate) fn modify_context_reading(njd_features: &mut [NjdFeature], protected:
                 .chars()
                 .filter(|&c| c != '’')
                 .eq("ミズウミ".chars())
-            && rule.reading == "コ";
-        node.pron = rule.reading.to_string();
-        // 読みが変わるとモーラ数も変わりうるため数え直す
+            && pronunciation == "コ";
         let old_mora = node.mora_size;
-        node.mora_size = count_mora(rule.reading) as i32;
-        shift_accent_nucleus(njd_features, i, old_mora, shortened_lake);
+        node.pron = pronunciation.into();
+        node.mora_size = count_mora(pronunciation) as i32;
+        shift_accent_nucleus(features, i, old_mora, shortened_lake);
     }
 }
 
@@ -1284,6 +1556,53 @@ mod tests {
             chain_rule: "C1".into(),
             chain_flag,
         }
+    }
+
+    #[test]
+    fn invalid_grammar_is_distinct_from_a_valid_unknown_pos() {
+        let mut feature = noun("前", "マエ", 0, 0);
+        feature.pos_group1 = "未定義の品詞".into();
+        feature.cform = "未定義の活用形".into();
+        let invalid = ContextWord::from_feature(&feature);
+        assert_eq!(invalid.pos, None);
+        assert_eq!(invalid.cform, None);
+        assert!(!invalid.pos_matches(|pos| matches!(pos, POS::Meishi(_))));
+        feature.pos = "*".into();
+        let unknown = ContextWord::from_feature(&feature);
+        assert_eq!(unknown.pos, Some(POS::Unknown));
+    }
+
+    #[test]
+    fn word_accents_use_the_first_rule_with_matching_pos_and_context() {
+        let nodes = [
+            NJDNode::new_single("身体,名詞,一般,*,*,*,*,身体,シンタイ,シンタイ,1/4,C2"),
+            NJDNode::new_single("を,助詞,格助詞,一般,*,*,*,を,ヲ,ヲ,0/1,*"),
+        ];
+        let words: Vec<_> = nodes.iter().map(ContextWord::from_node).collect();
+        let preserve = Rule {
+            surface: "身体",
+            pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+            cue: Cue::NextIn(&["を"]),
+            reading: "シンタイ",
+            word_accent: Some(1),
+        };
+        let change = Rule {
+            surface: "身体",
+            pos: None,
+            cue: Cue::NextIn(&["を"]),
+            reading: "カラダ",
+            word_accent: Some(0),
+        };
+        let selected = first_matching_rule([&preserve, &change].into_iter(), &words, 0).unwrap();
+        assert_eq!(selected.reading, "シンタイ");
+        assert_eq!(selected.word_accent, Some(1));
+        let incompatible = Rule {
+            pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+            ..preserve
+        };
+        let selected =
+            first_matching_rule([&incompatible, &change].into_iter(), &words, 0).unwrap();
+        assert_eq!(selected.reading, "カラダ");
     }
 
     #[test]
