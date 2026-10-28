@@ -6,7 +6,7 @@ use haqumei_jpreprocess_core::{
     accent_rule::{AccentType, ChainRule, ChainRules},
     cform::CForm,
     ctype::CType,
-    pos::{Meishi, POS},
+    pos::{Meishi, POS, Setsubi},
     pronunciation::Pronunciation,
     word_details::WordDetails,
 };
@@ -157,6 +157,60 @@ fn apply_rules(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>, stage: Stage
 
 fn kata_suffix_candidate(node: &NJDNode) -> bool {
     node.get_string() == "方" && node.get_read() == Some("ホウ")
+}
+
+pub(super) fn 住所の字(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i > 0
+        && matches!(nodes[i].get_pos(), POS::Meishi(_))
+        && matches!(nodes[i - 1].get_string(), "市" | "区" | "町" | "村")
+        && matches!(
+            nodes[i - 1].get_pos(),
+            POS::Meishi(Meishi::Setsubi(Setsubi::Region))
+        )
+        && nodes.get(i + 1).is_some_and(|word| {
+            matches!(
+                word.get_pos(),
+                POS::Meishi(Meishi::General | Meishi::KoyuMeishi(_))
+            )
+        }))
+    .then(|| RewriteMatch {
+        replace: i..i + 1,
+        protect: i - 1..i + 2,
+    })
+}
+
+pub(super) fn 敬称の方(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    if !matches!(nodes[i].get_pos(), POS::Meishi(_)) {
+        return None;
+    }
+    let next = nodes.get(i + 1)?;
+    let 世話になった相手 = i >= 4
+        && matches!(next.get_string(), "に" | "へ" | "を")
+        && nodes[i - 1].get_string() == "た"
+        && nodes[i - 2].get_orig() == Some("なる")
+        && nodes[i - 3].get_string() == "に"
+        && nodes[i - 4].get_string() == "お世話";
+    let mut predicate = i + 2;
+    if nodes
+        .get(predicate)
+        .is_some_and(|word| matches!(word.get_string(), "どちら" | "どこ"))
+        && nodes
+            .get(predicate + 1)
+            .is_some_and(|word| word.get_string() == "に")
+    {
+        predicate += 2;
+    }
+    let 人の所在 = i >= 2
+        && nodes[i - 1].get_string() == "の"
+        && matches!(nodes[i - 2].get_string(), "担当" | "受付" | "係")
+        && matches!(next.get_string(), "は" | "が")
+        && nodes
+            .get(predicate)
+            .is_some_and(|word| word.get_orig() == Some("いらっしゃる"));
+    (世話になった相手 || 人の所在).then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i.saturating_sub(4)..(i + 5).min(nodes.len()),
+    })
 }
 
 /// 数詞の直後で「タケ」と解析された「丈」の置換区間を返す。
@@ -597,6 +651,31 @@ mod tests {
     use haqumei_jpreprocess_njd::{NJD, accent_phrase, accent_type};
 
     use super::*;
+
+    #[test]
+    fn 敬称の方は名詞と単語の核を結合前に確定する() {
+        let nodes = vec![
+            NJDNode::new_single("受付,名詞,サ変接続,*,*,*,*,受付,ウケツケ,ウケツケ,0/4,C2"),
+            NJDNode::new_single("の,助詞,連体化,*,*,*,*,の,ノ,ノ,1/1,*"),
+            NJDNode::new_single("方,名詞,非自立,一般,*,*,*,方,ホウ,ホー,1/2,F2@1"),
+            NJDNode::new_single("が,助詞,格助詞,一般,*,*,*,が,ガ,ガ,0/1,*"),
+            NJDNode::new_single(
+                "いらっしゃる,動詞,自立,*,*,五段・ラ行特殊,基本形,いらっしゃる,イラッシャル,イラッシャル,4/5,*",
+            ),
+        ];
+        let mut protected_nodes = nodes.clone();
+        let mut protection = vec![false; nodes.len()];
+        protection[2] = true;
+        prepare_context_words(&mut protected_nodes, &mut protection);
+        assert_eq!(protected_nodes, nodes);
+
+        let mut corrected = nodes;
+        prepare_context_words(&mut corrected, &mut vec![false; 5]);
+        assert_eq!(corrected[2].get_pos(), &POS::Meishi(Meishi::General));
+        assert_eq!(corrected[2].get_read(), Some("カタ"));
+        assert_eq!(corrected[2].get_pron().accent(), 2);
+        assert_eq!(corrected[2].get_chain_rule().to_string(), "C3");
+    }
 
     #[test]
     fn word_accents_and_suffix_rule_precede_phrase_accent() {
