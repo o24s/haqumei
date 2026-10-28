@@ -10,7 +10,7 @@
 //!   (ルビ付きテキストなど) は「読みが自明でないとき」に注記される性質上、
 //!   少数派の読みに偏っており、既定の読みを壊す方向に働く
 //! - 規則そのものが説明になるので、1 規則ずつ検証・修正できる
-//! - 追加の実行コストも依存も要らない
+//! - 学習済みモデルを読み込まず、形態素列だけで判定できる
 //!
 //! よって、まず決定リストで取れるところを取る方針にしている。
 //!
@@ -44,8 +44,8 @@ use haqumei_jpreprocess_core::{
     cform::CForm,
     ctype::{CType, Five, One},
     pos::{
-        Doushi, Fukushi, Joshi, Keiyoushi, Kigou, KoyuMeishi, Meishi, POS, Region, Setsubi,
-        Settoushi,
+        Doushi, Fukushi, Joshi, KakuJoshi, Keiyoushi, Kigou, KoyuMeishi, Meishi, POS, Region,
+        Setsubi, Settoushi,
     },
     pronunciation::Pronunciation,
 };
@@ -70,8 +70,172 @@ const KATA_SUFFIX: NodeSpec = NodeSpec::new(
     Some(AccentType::C4),
 );
 
+const 従の接頭辞: NodeSpec = NodeSpec::new(
+    "従",
+    POS::Settoushi(Settoushi::SuuSetsuzoku),
+    "ジュ",
+    "ジュ",
+    1,
+    Some(AccentType::P2),
+);
+
 #[rustfmt::skip]
 const PREPARE_RULES: &[RewriteRule] = &[
+    // 話や台詞の間を取る・置くはマ。話の間に移動するなど、時間の範囲とは区別する。
+    RewriteRule {
+        surface: "間",
+        stage: Stage::Lexical,
+        context: prepare::話の間,
+        replacement: &[
+            NodeSpec::new("間", POS::Meishi(Meishi::General), "マ", "マ", 0, Some(AccentType::C2)),
+        ],
+    },
+    // 文末で動詞の連用形に続く候は、丁寧の補助動詞。時候を表す名詞のコウは残す。
+    RewriteRule {
+        surface: "候",
+        stage: Stage::Lexical,
+        context: prepare::候,
+        replacement: &[
+            NodeSpec::new("候", POS::Doushi(Doushi::Hijiritsu), "ソウロウ", "ソーロー", 3, None)
+                .conjugation(CType::Five(Five::WaDouble), CForm::Basic, "候う"),
+        ],
+    },
+    // 植物の根本は根元と同じネモト。根本的・根本原因などの複合語は変更しない。
+    RewriteRule {
+        surface: "根本",
+        stage: Stage::Lexical,
+        context: prepare::根本,
+        replacement: &[
+            NodeSpec::new("根本", POS::Meishi(Meishi::General), "ネモト", "ネモト", 3, Some(AccentType::C2)),
+        ],
+    },
+    // カムリも辞書にあるが、恩情や被害を受ける連用形にはコウムリを使う。
+    RewriteRule {
+        surface: "被り",
+        stage: Stage::Lexical,
+        context: prepare::被り,
+        replacement: &[
+            NodeSpec::new("被り", POS::Doushi(Doushi::Jiritsu), "コウムリ", "コームリ", 3, None)
+                .conjugation(CType::Five(Five::Ra), CForm::Renyou, "被る"),
+        ],
+    },
+    // 鬼の居ぬ間は慣用句。否定節に続く間を一律にマへ変えることはしない。
+    RewriteRule {
+        surface: "間",
+        stage: Stage::Lexical,
+        context: prepare::鬼の居ぬ間,
+        replacement: &[
+            NodeSpec::new("間", POS::Meishi(Meishi::General), "マ", "マ", 0, Some(AccentType::C2)),
+        ],
+    },
+    // 長さの単位は数詞に続く。単独の丈や、人名の丈夫には適用しない。
+    RewriteRule {
+        surface: "丈",
+        stage: Stage::Lexical,
+        context: prepare::丈,
+        replacement: &[
+            NodeSpec::new("丈", POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi)), "ジョウ", "ジョー", 1, Some(AccentType::C3)),
+        ],
+    },
+    // 部数を示す動詞かサ変動詞に続く五部は、数詞と助数詞へ分ける。会社名は変更しない。
+    RewriteRule {
+        surface: "五部",
+        stage: Stage::Segmentation,
+        context: prepare::五部,
+        replacement: &[
+            NodeSpec::new("五", POS::Meishi(Meishi::Kazu), "ゴ", "ゴ", 1, Some(AccentType::C3)),
+            NodeSpec::new("部", POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi)), "ブ", "ブ", 1, Some(AccentType::C3)),
+        ],
+    },
+    // 十重に囲む・重なるはトエ。十重奏と、層数を数える十重は変更しない。
+    RewriteRule {
+        surface: "十",
+        stage: Stage::Segmentation,
+        context: prepare::十重,
+        replacement: &[
+            NodeSpec::new("十重", POS::Meishi(Meishi::General), "トエ", "トエ", 1, Some(AccentType::C3)),
+        ],
+    },
+    // 位階の従はジュ。三位には連声したサンミを使い、順位のサンイと区別する。
+    RewriteRule {
+        surface: "従",
+        stage: Stage::Segmentation,
+        context: prepare::従三位,
+        replacement: &[
+            従の接頭辞,
+            NodeSpec::new("三位", POS::Meishi(Meishi::General), "サンミ", "サンミ", 1, Some(AccentType::C1)),
+        ],
+    },
+    RewriteRule {
+        surface: "従",
+        stage: Stage::Segmentation,
+        context: prepare::従,
+        replacement: &[従の接頭辞],
+    },
+    // 位階の四・七はシ・シチ。助数詞の処理がヨン・ナナへ戻さないよう、位までまとめる。
+    RewriteRule {
+        surface: "四",
+        stage: Stage::Segmentation,
+        context: prepare::位階の数詞,
+        replacement: &[
+            NodeSpec::new("四位", POS::Meishi(Meishi::General), "シイ", "シイ", 1, Some(AccentType::C1)),
+        ],
+    },
+    RewriteRule {
+        surface: "七",
+        stage: Stage::Segmentation,
+        context: prepare::位階の数詞,
+        replacement: &[
+            NodeSpec::new("七位", POS::Meishi(Meishi::General), "シチイ", "シチイ", 2, Some(AccentType::C1)),
+        ],
+    },
+    // 金額の前置きはキン。円まで数の表記が続く場合に限り、助詞や読点を越えない。
+    RewriteRule {
+        surface: "金",
+        stage: Stage::Lexical,
+        context: prepare::金額の金,
+        replacement: &[
+            NodeSpec::new("金", POS::Settoushi(Settoushi::SuuSetsuzoku), "キン", "キン", 1, Some(AccentType::P2)),
+        ],
+    },
+    // 地理上の大字はオオアザ。正書法と発音を分けて持つ。
+    RewriteRule {
+        surface: "大字",
+        stage: Stage::Lexical,
+        context: prepare::大字,
+        replacement: &[
+            NodeSpec::new("大字", POS::Meishi(Meishi::General), "オオアザ", "オーアザ", 1, Some(AccentType::C1)),
+        ],
+    },
+    // 五分前・五分後は時間を表す。割合の五分五分や五分の入りは変更しない。
+    RewriteRule {
+        surface: "五分",
+        stage: Stage::Lexical,
+        context: prepare::五分,
+        replacement: &[
+            NodeSpec::new("五分", POS::Meishi(Meishi::FukushiKanou), "ゴフン", "ゴフン", 1, Some(AccentType::C1)),
+        ],
+    },
+
+    // 断ると断つでは活用型が違うため、読みだけでなく原形と活用型も結合前に直す。
+    RewriteRule {
+        surface: "断っ",
+        stage: Stage::Lexical,
+        context: prepare::断つ,
+        replacement: &[
+            NodeSpec::new("断っ", POS::Doushi(Doushi::Jiritsu), "タッ", "タッ", 1, None)
+                .conjugation(CType::Five(Five::Ta), CForm::RenyouConjunctionTa, "断つ"),
+        ],
+    },
+    // 国名として解析された仏は、教え・慈悲・加護の用法では一般名詞に戻す。
+    RewriteRule {
+        surface: "仏",
+        stage: Stage::Lexical,
+        context: prepare::仏,
+        replacement: &[
+            NodeSpec::new("仏", POS::Meishi(Meishi::General), "ホトケ", "ホトケ", 0, Some(AccentType::C2)),
+        ],
+    },
     // 十三駅の先・十三駅前は地名にもなる。駅に直結する距離・序数か、
     // 数量の提示があるときだけ、地名の十三を数詞へ分ける。
     RewriteRule {
@@ -134,64 +298,64 @@ const PREPARE_RULES: &[RewriteRule] = &[
     },
 ];
 
-/// 文脈判定に使う文字列と、判定前に解析した品詞・活用形。
-struct ContextWord<'a> {
-    surface: &'a str,
-    orig: &'a str,
-    pos: Option<POS>,
-    cform: Option<CForm>,
+/// 文脈判定に使う文字列と型付きの品詞・活用形。
+trait ContextWord {
+    fn surface(&self) -> &str;
+    fn orig(&self) -> &str;
+    fn pos(&self) -> Option<POS>;
+    fn cform(&self) -> Option<CForm>;
+
+    fn pos_matches(&self, predicate: PosPredicate) -> bool {
+        self.pos().is_some_and(predicate)
+    }
 }
 
-impl<'a> ContextWord<'a> {
-    fn from_node(node: &'a NJDNode) -> Self {
-        Self {
-            surface: node.get_string(),
-            orig: node.get_orig().unwrap_or(node.get_string()),
-            pos: Some(*node.get_pos()),
-            cform: Some(*node.get_cform()),
-        }
+impl ContextWord for NJDNode {
+    fn surface(&self) -> &str {
+        self.get_string()
     }
 
-    fn from_feature(feature: &'a NjdFeature) -> Self {
-        let pos = POS::from_strs(
-            &feature.pos,
-            &feature.pos_group1,
-            &feature.pos_group2,
-            &feature.pos_group3,
+    fn orig(&self) -> &str {
+        self.get_orig().unwrap_or(self.get_string())
+    }
+
+    fn pos(&self) -> Option<POS> {
+        Some(*self.get_pos())
+    }
+
+    fn cform(&self) -> Option<CForm> {
+        Some(*self.get_cform())
+    }
+}
+
+impl ContextWord for NjdFeature {
+    fn surface(&self) -> &str {
+        &self.string
+    }
+
+    fn orig(&self) -> &str {
+        &self.orig
+    }
+
+    fn pos(&self) -> Option<POS> {
+        // 表層形で規則が見つかり、品詞を条件にする場合だけ解析する。
+        POS::from_strs(
+            &self.pos,
+            &self.pos_group1,
+            &self.pos_group2,
+            &self.pos_group3,
         )
-        .map_err(|error| {
-            log::warn!(
-                "文脈読みの品詞を解析できません: {}: {error}",
-                feature.string
-            )
-        })
-        .ok();
-        let cform = feature
-            .cform
+        .map_err(|error| log::warn!("文脈読みの品詞を解析できません: {}: {error}", self.string))
+        .ok()
+    }
+
+    fn cform(&self) -> Option<CForm> {
+        self.cform
             .parse()
             .map_err(|error| {
-                log::warn!(
-                    "文脈読みの活用形を解析できません: {}: {error}",
-                    feature.string
-                )
+                log::warn!("文脈読みの活用形を解析できません: {}: {error}", self.string)
             })
-            .ok();
-        Self {
-            surface: &feature.string,
-            orig: &feature.orig,
-            pos,
-            cform,
-        }
-    }
-
-    fn surface(&self) -> &str {
-        self.surface
-    }
-    fn orig(&self) -> &str {
-        self.orig
-    }
-    fn pos_matches(&self, predicate: PosPredicate) -> bool {
-        self.pos.is_some_and(predicate)
+            .ok()
     }
 }
 
@@ -222,10 +386,15 @@ fn is_independent(pos: POS) -> bool {
 
 /// 規則が発火する条件。
 enum Cue {
+    /// 対象の原形が、いずれかに一致する。
+    OrigIn(&'static [&'static str]),
     /// 「何にも」に続く述語が、ナンニモと読む打ち消しの用法である。
     NegativeNannimo,
     /// 直後の形態素の表層形が、いずれかに一致する。
     NextIn(&'static [&'static str]),
+
+    /// 直後から並ぶ形態素の表層形が、指定した列と一致する。
+    NextSequence(&'static [&'static str]),
 
     /// 直前の形態素の表層形が、いずれかに一致する。
     PrevIn(&'static [&'static str]),
@@ -234,6 +403,14 @@ enum Cue {
     ///
     /// 「〜の下」のように連体助詞を挟む構造のために用意している。
     PrevViaNo(&'static [&'static str]),
+
+    /// 指定した助詞を挟む前の語が、候補に含まれる。
+    /// 「完全に」「ぴたりと」などの副詞を4形態素まで飛ばす。
+    /// 他の助詞・述語・記号は越えない。
+    PrevViaParticle(&'static [&'static str], &'static [&'static str]),
+
+    /// 対象の形態素の活用形が、いずれかに一致する。
+    CformIn(&'static [CForm]),
 
     /// 指定した語を 1 つ飛ばして遡った形態素の品詞が、条件を満たす。
     ///
@@ -289,11 +466,355 @@ struct Rule {
     word_accent: Option<usize>,
 }
 
+const KABURU_OBJECTS: &[&str] = &[
+    "帽子",
+    "冠",
+    "王冠",
+    "ヘルメット",
+    "頭巾",
+    "兜",
+    "笠",
+    "仮面",
+];
+
 /// 語ごとの規則。上から順に評価し、最初に一致したものを適用する。
 ///
 /// 各規則の根拠と、確認した負の対照をコメントに残す。
 #[rustfmt::skip]
 const RULES: &[Rule] = &[
+    // 数学上の量はアタイ。株や商品の値段を表すネとは区別する。
+    Rule {
+        surface: "値",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["変数", "関数", "定数", "パラメータ", "係数"]),
+        reading: "アタイ",
+        word_accent: Some(0),
+    },
+    // 頭に着ける物を直接の目的語に取る被るはカブル。被害や恩恵のコウムルを残す。
+    Rule {
+        surface: "被る",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブル",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "被っ",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブッ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "被り",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブリ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "被ら",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブラ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "被れ",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブレ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "被ろ",
+        pos: Some(is_independent),
+        cue: Cue::All(&[Cue::OrigIn(&["被る"]), Cue::PrevViaParticle(&["を"], KABURU_OBJECTS)]),
+        reading: "カブロ",
+        word_accent: Some(2),
+    },
+    // 全能の主は宗教上のシュ、将棋の角は駒のカクなので、修飾語を確認する。
+    Rule {
+        surface: "主",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["全能"]),
+        reading: "シュ",
+        word_accent: Some(1),
+    },
+    Rule {
+        surface: "角",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["将棋"]),
+        reading: "カク",
+        word_accent: Some(1),
+    },
+    // 骨董市はイチ、幸あれと笑う門は固定した言い方の読みを使う。
+    Rule {
+        surface: "市",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevIn(&["骨董", "骨とう"]),
+        reading: "イチ",
+        word_accent: Some(1),
+    },
+    Rule {
+        surface: "幸",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::NextIn(&["あれ"]),
+        reading: "サチ",
+        word_accent: Some(1),
+    },
+    Rule {
+        surface: "門",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevIn(&["笑う"]),
+        reading: "カド",
+        word_accent: Some(1),
+    },
+    // 親の敵を討つ用法はカタキ。敵と対立するだけの用法は含めない。
+    Rule {
+        surface: "敵",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::All(&[Cue::PrevViaNo(&["親", "父", "母", "兄", "弟", "姉", "妹", "夫", "妻", "師"]), Cue::NextViaOrig(&["を"], &["討つ", "討ち取る"])]),
+        reading: "カタキ",
+        word_accent: Some(3),
+    },
+    // 二歩の反則はニフ。歩数や地名の読みは変えない。
+    Rule {
+        surface: "二歩",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::NextViaOrig(&["の"], &["反則"]),
+        reading: "ニフ",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "二歩",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::NextSequence(&["は", "将棋", "の", "反則"]),
+        reading: "ニフ",
+        word_accent: Some(0),
+    },
+    // 意見を擦り合わせる用法はスリアワセル。手や物を擦る用法は対象にしない。
+    Rule {
+        surface: "擦り合わせる",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["意見", "認識", "考え", "条件", "日程", "計画", "予定", "仕様"]),
+        reading: "スリアワセル",
+        word_accent: Some(5),
+    },
+    Rule {
+        surface: "擦り合わせ",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::All(&[Cue::CformIn(&[CForm::Mizen, CForm::Renyou]), Cue::PrevViaParticle(&["を"], &["意見", "認識", "考え", "条件", "日程", "計画", "予定", "仕様"])]),
+        reading: "スリアワセ",
+        word_accent: Some(0),
+    },
+    // 車が留まる用法と枝に留まる用法はトマル。会社に留まる用法は含めない。
+    Rule {
+        surface: "留まっ",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["が", "は"], &["車", "列車", "電車", "小鳥", "鳥"]),
+        reading: "トマッ",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "留まっ",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["に"], &["枝", "止まり木", "電線"]),
+        reading: "トマッ",
+        word_accent: Some(0),
+    },
+
+    // 交通の便はベン、郵便や航空便はビンなので、名詞が「の」を挟む形に限る。
+    Rule {
+        surface: "便",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["交通", "通勤", "通学", "通行"]),
+        reading: "ベン",
+        word_accent: Some(1),
+    },
+    // 「供をする」は随行を表す。供物や供養の読みは変更しない。
+    Rule {
+        surface: "供",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::NextViaOrig(&["を"], &["する"]),
+        reading: "トモ",
+        word_accent: Some(1),
+    },
+    // 池や湖の主はヌシ、家の主はアルジなので、直前の修飾語を確認する。
+    Rule {
+        surface: "主",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["池", "湖", "沼"]),
+        reading: "ヌシ",
+        word_accent: Some(1),
+    },
+    // 動物の角はツノと読む。建物の角や角の駒は候補に含めない。
+    Rule {
+        surface: "角",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["鹿", "牛", "羊", "山羊", "ヤギ", "犀", "サイ"]),
+        reading: "ツノ",
+        word_accent: Some(2),
+    },
+    // 草薙の剣と奉納の剣の舞はツルギと読む。剣道や刀剣のケンは変更しない。
+    Rule {
+        surface: "剣",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["草薙", "天叢雲"]),
+        reading: "ツルギ",
+        word_accent: Some(3),
+    },
+    Rule {
+        surface: "剣",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::All(&[Cue::PrevViaNo(&["奉納"]), Cue::NextViaOrig(&["の"], &["舞"])]),
+        reading: "ツルギ",
+        word_accent: Some(3),
+    },
+    // 「木の囲い」は複合語ではないため、雪囲いの連濁形を使わない。
+    Rule {
+        surface: "囲い",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevIn(&["の"]),
+        reading: "カコイ",
+        word_accent: Some(0),
+    },
+    // 「この期に及ぶ」は固定表現であり、会計の期や時期のキとは区別する。
+    Rule {
+        surface: "期",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::All(&[Cue::PrevIn(&["この"]), Cue::NextViaOrig(&["に"], &["及ぶ"])]),
+        reading: "ゴ",
+        word_accent: Some(1),
+    },
+    // 病気で床を離れる用法はトコ。床を磨く用法や、宙に浮く描写は含めない。
+    Rule {
+        surface: "床",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::All(&[Cue::PrevViaParticle(&["で"], &["病気", "病", "風邪"]), Cue::NextViaOrig(&["を"], &["離れる"])]),
+        reading: "トコ",
+        word_accent: Some(0),
+    },
+    // 文学や芸術の類はタグイ。分類の大項目を示す数字には適用しない。
+    Rule {
+        surface: "類",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["文学", "芸術", "音楽", "小説"]),
+        reading: "タグイ",
+        word_accent: Some(0),
+    },
+    // 「遥か上」は位置を表す。上巻や上流などの漢語は対象にならない。
+    Rule {
+        surface: "上",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevIn(&["遥か", "はるか"]),
+        reading: "ウエ",
+        word_accent: Some(0),
+    },
+    // たばこの火口はホクチ。火山の火口には適用しない。
+    Rule {
+        surface: "火口",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::PrevViaNo(&["たばこ", "タバコ", "煙草"]),
+        reading: "ホクチ",
+        word_accent: Some(0),
+    },
+    // 抽象的な対象はイダク、腕に抱える対象はダク。助詞「を」と目的語を確認する。
+    Rule {
+        surface: "抱く",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["期待", "不安", "夢", "希望", "疑念", "疑問", "疑惑", "理想", "野心", "大志", "憧れ", "恐怖", "懸念", "敵意", "好意", "敬意", "思い"]),
+        reading: "イダク",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "抱く",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["赤ちゃん", "赤ん坊", "幼子", "乳児", "子供", "子ども", "息子", "娘", "恋人", "猫", "犬", "子犬"]),
+        reading: "ダク",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "抱い",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["期待", "不安", "夢", "希望", "疑念", "疑問", "疑惑", "理想", "野心", "大志", "憧れ", "恐怖", "懸念", "敵意", "好意", "敬意", "思い"]),
+        reading: "イダイ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "抱い",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["赤ちゃん", "赤ん坊", "幼子", "乳児", "子供", "子ども", "息子", "娘", "恋人", "猫", "犬", "子犬"]),
+        reading: "ダイ",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "抱か",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["期待", "不安", "夢", "希望", "疑念", "疑問", "疑惑", "理想", "野心", "大志", "憧れ", "恐怖", "懸念", "敵意", "好意", "敬意", "思い"]),
+        reading: "イダカ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "抱か",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["赤ちゃん", "赤ん坊", "幼子", "乳児", "子供", "子ども", "息子", "娘", "恋人", "猫", "犬", "子犬"]),
+        reading: "ダカ",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "抱き",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["期待", "不安", "夢", "希望", "疑念", "疑問", "疑惑", "理想", "野心", "大志", "憧れ", "恐怖", "懸念", "敵意", "好意", "敬意", "思い"]),
+        reading: "イダキ",
+        word_accent: Some(2),
+    },
+    Rule {
+        surface: "抱き",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["赤ちゃん", "赤ん坊", "幼子", "乳児", "子供", "子ども", "息子", "娘", "恋人", "猫", "犬", "子犬"]),
+        reading: "ダキ",
+        word_accent: Some(0),
+    },
+    // 肩を怒らせる用法はイカラセル。人を怒らせる用法は対象にしない。
+    Rule {
+        surface: "怒ら",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["肩"]),
+        reading: "イカラ",
+        word_accent: Some(2),
+    },
+    // 評判や名誉を汚す用法はケガス。衣服や床を汚す用法は対象にしない。
+    Rule {
+        surface: "汚し",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["を"], &["評判", "名誉", "名声", "家名"]),
+        reading: "ケガシ",
+        word_accent: Some(2),
+    },
+    // 穴が開く用法はアク。扉や本が開く用法には、読みを決める条件が足りない。
+    Rule {
+        surface: "開い",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["が"], &["穴", "鍵"]),
+        reading: "アイ",
+        word_accent: Some(0),
+    },
+    Rule {
+        surface: "開く",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::PrevViaParticle(&["が"], &["穴", "鍵"]),
+        reading: "アク",
+        word_accent: Some(0),
+    },
+    // 視界や運が開ける用法はヒラケル。窓を開ける用法と、命令形は対象にしない。
+    Rule {
+        surface: "開け",
+        pos: Some(|pos| matches!(pos, POS::Doushi(_))),
+        cue: Cue::All(&[Cue::CformIn(&[CForm::Mizen, CForm::Renyou]), Cue::PrevViaParticle(&["が", "は"], &["目の前", "視界", "景色", "視野", "展望", "運", "運勢", "道", "地域", "町", "街", "村"])]),
+        reading: "ヒラケ",
+        word_accent: Some(3),
+    },
     // 「一番好き」は最上級であり、「旅好き」のような名詞との複合語ではない。
     // ズキのコストを変えると旅好きも清音化するため、一番に続く接尾辞だけを直す。
     Rule {
@@ -1229,7 +1750,7 @@ const RULES: &[Rule] = &[
 /// [`Cue::Negated`] が探す打ち消しの語の原形。
 const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
 
-fn negative_nannimo(features: &[ContextWord<'_>], i: usize) -> bool {
+fn negative_nannimo(features: &[impl ContextWord], i: usize) -> bool {
     if !features[i].pos_matches(|pos| matches!(pos, POS::Meishi(_)))
         || !features.get(i + 1).is_some_and(|f| {
             f.surface() == "に"
@@ -1324,13 +1845,76 @@ fn negative_nannimo(features: &[ContextWord<'_>], i: usize) -> bool {
     false
 }
 
+fn adverbial_pair(modifier: &impl ContextWord, particle: &impl ContextWord) -> bool {
+    match particle.surface() {
+        "に" => {
+            particle.pos_matches(|pos| {
+                matches!(
+                    pos,
+                    POS::Joshi(Joshi::Fukushika | Joshi::KakuJoshi(KakuJoshi::General))
+                )
+            }) && modifier.pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::KeiyoudoushiGokan)))
+        }
+        "と" => {
+            particle.pos_matches(|pos| matches!(pos, POS::Joshi(Joshi::Fukushika)))
+                && modifier.pos_matches(|pos| matches!(pos, POS::Fukushi(_)))
+        }
+        _ => false,
+    }
+}
+
+fn previous_via_particle(
+    words: &[impl ContextWord],
+    i: usize,
+    particles: &[&str],
+    candidates: &[&str],
+) -> bool {
+    let mut end = i;
+    // 副詞を4形態素まで遡り、修飾語が長い文では推測しない。
+    while i - end < 4 && end > 0 {
+        let word = &words[end - 1];
+        if word
+            .pos_matches(|pos| matches!(pos, POS::Fukushi(_) | POS::Meishi(Meishi::FukushiKanou)))
+            || (word.pos_matches(|pos| matches!(pos, POS::Keiyoushi(_)))
+                && word.cform().is_some_and(|form| form.is_renyou()))
+        {
+            end -= 1;
+        } else if end >= 2 && i - end + 2 <= 4 && adverbial_pair(&words[end - 2], word) {
+            end -= 2;
+        } else {
+            break;
+        }
+    }
+    end >= 2
+        && particles.contains(&words[end - 1].surface())
+        && words[end - 1].pos_matches(|pos| matches!(pos, POS::Joshi(_)))
+        && candidates.contains(&words[end - 2].surface())
+}
+
 /// [`Cue::All`] が手がかりを入れ子にできるので、判定は再帰で書く。
-fn cue_matches(cue: &Cue, njd_features: &[ContextWord<'_>], i: usize) -> bool {
+fn cue_matches(cue: &Cue, njd_features: &[impl ContextWord], i: usize) -> bool {
     match cue {
+        Cue::OrigIn(candidates) => candidates.contains(&njd_features[i].orig()),
         Cue::NegativeNannimo => negative_nannimo(njd_features, i),
         Cue::NextIn(candidates) => njd_features
             .get(i + 1)
             .is_some_and(|next| candidates.contains(&next.surface())),
+        Cue::NextSequence(sequence) => {
+            njd_features
+                .get(i + 1..i + 1 + sequence.len())
+                .is_some_and(|words| {
+                    words
+                        .iter()
+                        .map(ContextWord::surface)
+                        .eq(sequence.iter().copied())
+                })
+        }
+        Cue::CformIn(candidates) => njd_features[i]
+            .cform()
+            .is_some_and(|form| candidates.contains(&form)),
+        Cue::PrevViaParticle(particles, candidates) => {
+            previous_via_particle(njd_features, i, particles, candidates)
+        }
         Cue::PrevIn(candidates) => i > 0 && candidates.contains(&njd_features[i - 1].surface()),
         Cue::PrevViaNo(candidates) => {
             i > 1
@@ -1352,7 +1936,7 @@ fn cue_matches(cue: &Cue, njd_features: &[ContextWord<'_>], i: usize) -> bool {
         Cue::PrevCform(candidates) => {
             i > 0
                 && njd_features[i - 1]
-                    .cform
+                    .cform()
                     .is_some_and(|form| candidates.contains(&form))
         }
         Cue::PrevMinChars(min) => i > 0 && njd_features[i - 1].surface().chars().count() >= *min,
@@ -1372,20 +1956,27 @@ fn cue_matches(cue: &Cue, njd_features: &[ContextWord<'_>], i: usize) -> bool {
     }
 }
 
+#[derive(Default)]
+struct SurfaceRules {
+    rules: Vec<&'static Rule>,
+    has_word_accent: bool,
+}
+
 /// 表層形から、その表層形を対象にする規則を引く。並びは [`RULES`] の順のままで、
 /// 上から評価して最初に一致したものを使う性質を保つ。
-static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static Rule>>> =
-    LazyLock::new(|| {
-        let mut by_surface: FxHashMap<&'static str, Vec<&'static Rule>> = FxHashMap::default();
-        for rule in RULES.iter() {
-            by_surface.entry(rule.surface).or_default().push(rule);
-        }
-        by_surface
-    });
+static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, SurfaceRules>> = LazyLock::new(|| {
+    let mut by_surface: FxHashMap<&'static str, SurfaceRules> = FxHashMap::default();
+    for rule in RULES.iter() {
+        let group = by_surface.entry(rule.surface).or_default();
+        group.rules.push(rule);
+        group.has_word_accent |= rule.word_accent.is_some();
+    }
+    by_surface
+});
 
 fn first_matching_rule<'a>(
     mut rules: impl Iterator<Item = &'a Rule>,
-    words: &[ContextWord<'_>],
+    words: &[impl ContextWord],
     i: usize,
 ) -> Option<&'a Rule> {
     rules.find(|rule| {
@@ -1395,22 +1986,27 @@ fn first_matching_rule<'a>(
     })
 }
 
-fn matching_rule(words: &[ContextWord<'_>], i: usize) -> Option<&'static Rule> {
+fn matching_rule(words: &[impl ContextWord], i: usize) -> Option<&'static Rule> {
     RULES_BY_SURFACE
         .get(words[i].surface())
-        .and_then(|rules| first_matching_rule(rules.iter().copied(), words, i))
+        .and_then(|group| first_matching_rule(group.rules.iter().copied(), words, i))
 }
 
 pub(crate) fn prepare_word_readings(nodes: &mut [NJDNode], protected: &[bool]) {
-    let rules: Vec<_> = {
-        let words: Vec<_> = nodes.iter().map(ContextWord::from_node).collect();
-        (0..words.len()).map(|i| matching_rule(&words, i)).collect()
-    };
-    for (i, rule) in rules.into_iter().enumerate() {
+    let by_surface = &*RULES_BY_SURFACE;
+    for i in 0..nodes.len() {
         if protected.get(i) == Some(&true) {
             continue;
         }
-        if let Some(rule) = rule
+        let Some(group) = by_surface
+            .get(nodes[i].get_string())
+            .filter(|group| group.has_word_accent)
+        else {
+            continue;
+        };
+        // 核を指定しない規則が先に一致する場合もあるため、規則は全件を元の順に調べる。
+        // 規則の条件は読みと発音を参照しないため、後続語の判定に影響しない。
+        if let Some(rule) = first_matching_rule(group.rules.iter().copied(), nodes, i)
             && let Some(accent) = rule.word_accent
         {
             nodes[i].set_read(rule.reading);
@@ -1419,15 +2015,14 @@ pub(crate) fn prepare_word_readings(nodes: &mut [NJDNode], protected: &[bool]) {
     }
 }
 
-fn phrase_reading(
+fn reading_after_chaining(
     features: &[NjdFeature],
-    words: &[ContextWord<'_>],
     i: usize,
 ) -> Option<(&'static str, &'static str)> {
     // 日付の「付」はヅケであり、付属を表すツキとは異なる。
     if features[i].string == "付" && i > 0
         && let Some(day) = features[i - 1].string.strip_suffix('日')
-        && (words[i - 1].pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi))))
+        && (features[i - 1].pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::Setsubi(Setsubi::Josuushi))))
             || (!day.is_empty() && day.chars().all(|c| matches!(c,
                 '一' | '二' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '〇' | '零' | '0'..='9' | '０'..='９'))))
     { return None; }
@@ -1437,11 +2032,11 @@ fn phrase_reading(
         && i > 0
         && features[i - 1].string == "一日"
         && features[i - 1].read == "イチニチ"
-        && (i < 2 || !words[i - 2].pos_matches(|pos| pos.is_kazu()))
+        && (i < 2 || !features[i - 2].pos_matches(|pos| pos.is_kazu()))
     {
         return Some(("ジュウ", "ジュー"));
     }
-    let rule = matching_rule(words, i)?;
+    let rule = matching_rule(features, i)?;
     rule.word_accent
         .is_none()
         .then_some((rule.reading, rule.reading))
@@ -1449,23 +2044,12 @@ fn phrase_reading(
 
 /// 隣接する形態素で読みが決まる語を補正する。
 pub(crate) fn modify_context_reading(features: &mut [NjdFeature], protected: &[bool]) {
-    // 条件は読み・発音・句の核を参照しないため、判定を終えてから値を書き換えられる。
-    let changes: Vec<_> = {
-        let words: Vec<_> = features.iter().map(ContextWord::from_feature).collect();
-        (0..features.len())
-            .map(|i| {
-                if protected.get(i) == Some(&true) {
-                    None
-                } else {
-                    phrase_reading(features, &words, i)
-                }
-            })
-            .collect()
-    };
-    for (i, change) in changes.into_iter().enumerate() {
-        let Some((reading, pronunciation)) = change else {
-            continue;
-        };
+    // 「一日中」は補正前の読みも条件にするため、全候補を確定してから読みと句の核を変える。
+    let changes: Vec<_> = (0..features.len())
+        .filter(|&i| protected.get(i) != Some(&true))
+        .filter_map(|i| reading_after_chaining(features, i).map(|change| (i, change)))
+        .collect();
+    for (i, (reading, pronunciation)) in changes {
         let node = &mut features[i];
         // 同じ発音を書き直すと、NJD が付けた無声化の記号が消える。
         node.read = reading.into();
@@ -1539,6 +2123,31 @@ fn shift_accent_nucleus(
 mod tests {
     use super::*;
 
+    struct TestWord<'a> {
+        surface: &'a str,
+        orig: &'a str,
+        pos: Option<POS>,
+        cform: Option<CForm>,
+    }
+
+    impl ContextWord for TestWord<'_> {
+        fn surface(&self) -> &str {
+            self.surface
+        }
+
+        fn orig(&self) -> &str {
+            self.orig
+        }
+
+        fn pos(&self) -> Option<POS> {
+            self.pos
+        }
+
+        fn cform(&self) -> Option<CForm> {
+            self.cform
+        }
+    }
+
     fn noun(surface: &str, pron: &str, acc: i32, chain_flag: i32) -> NjdFeature {
         NjdFeature {
             string: surface.into(),
@@ -1559,17 +2168,117 @@ mod tests {
     }
 
     #[test]
+    fn kaburu_does_not_change_the_archaic_oou_conjugation() {
+        let mut words = [
+            TestWord {
+                surface: "帽子",
+                orig: "帽子",
+                pos: Some(POS::Meishi(Meishi::General)),
+                cform: Some(CForm::None),
+            },
+            TestWord {
+                surface: "を",
+                orig: "を",
+                pos: Some(POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General))),
+                cform: Some(CForm::None),
+            },
+            TestWord {
+                surface: "被っ",
+                orig: "被る",
+                pos: Some(POS::Doushi(Doushi::Jiritsu)),
+                cform: Some(CForm::RenyouConjunctionTa),
+            },
+        ];
+        assert_eq!(matching_rule(&words, 2).unwrap().reading, "カブッ");
+        words[2].orig = "被う";
+        assert!(matching_rule(&words, 2).is_none());
+    }
+
+    #[test]
     fn invalid_grammar_is_distinct_from_a_valid_unknown_pos() {
         let mut feature = noun("前", "マエ", 0, 0);
         feature.pos_group1 = "未定義の品詞".into();
         feature.cform = "未定義の活用形".into();
-        let invalid = ContextWord::from_feature(&feature);
-        assert_eq!(invalid.pos, None);
-        assert_eq!(invalid.cform, None);
-        assert!(!invalid.pos_matches(|pos| matches!(pos, POS::Meishi(_))));
+        assert_eq!(feature.pos(), None);
+        assert_eq!(feature.cform(), None);
+        assert!(!feature.pos_matches(|pos| matches!(pos, POS::Meishi(_))));
         feature.pos = "*".into();
-        let unknown = ContextWord::from_feature(&feature);
-        assert_eq!(unknown.pos, Some(POS::Unknown));
+        assert_eq!(feature.pos(), Some(POS::Unknown));
+    }
+
+    #[test]
+    fn previous_particle_skips_at_most_four_modifiers_and_stops_at_a_clause() {
+        let word = |surface: &'static str, pos, cform| TestWord {
+            surface,
+            orig: surface,
+            pos: Some(pos),
+            cform: Some(cform),
+        };
+        let noun = || word("甲", POS::Meishi(Meishi::General), CForm::None);
+        let particle = || {
+            word(
+                "を",
+                POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General)),
+                CForm::None,
+            )
+        };
+        let adverb = || word("とても", POS::Fukushi(Fukushi::General), CForm::None);
+        for count in 0..=5 {
+            let mut words = vec![noun(), particle()];
+            words.extend((0..count).map(|_| adverb()));
+            assert_eq!(
+                previous_via_particle(&words, words.len(), &["を"], &["甲"]),
+                count <= 4
+            );
+        }
+        for ni in [Joshi::Fukushika, Joshi::KakuJoshi(KakuJoshi::General)] {
+            for count in 0..=3 {
+                let mut words = vec![noun(), particle()];
+                words.extend((0..count).map(|_| adverb()));
+                words.push(word(
+                    "完全",
+                    POS::Meishi(Meishi::KeiyoudoushiGokan),
+                    CForm::None,
+                ));
+                words.push(word("に", POS::Joshi(ni), CForm::None));
+                assert_eq!(
+                    previous_via_particle(&words, words.len(), &["を"], &["甲"]),
+                    count <= 2
+                );
+            }
+        }
+        for count in 0..=3 {
+            let mut words = vec![noun(), particle()];
+            words.extend((0..count).map(|_| adverb()));
+            words.push(word(
+                "ぴたり",
+                POS::Fukushi(Fukushi::JoshiruiSetsuzoku),
+                CForm::None,
+            ));
+            words.push(word("と", POS::Joshi(Joshi::Fukushika), CForm::None));
+            assert_eq!(
+                previous_via_particle(&words, words.len(), &["を"], &["甲"]),
+                count <= 2
+            );
+        }
+        for boundary in [
+            word("、", POS::Kigou(Kigou::General), CForm::None),
+            word("乙", POS::Meishi(Meishi::General), CForm::None),
+            word("見る", POS::Doushi(Doushi::Jiritsu), CForm::Basic),
+            word(
+                "に",
+                POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General)),
+                CForm::None,
+            ),
+        ] {
+            let words = [noun(), particle(), boundary, adverb()];
+            assert!(!previous_via_particle(
+                &words,
+                words.len(),
+                &["を"],
+                &["甲"]
+            ));
+        }
     }
 
     #[test]
@@ -1578,7 +2287,6 @@ mod tests {
             NJDNode::new_single("身体,名詞,一般,*,*,*,*,身体,シンタイ,シンタイ,1/4,C2"),
             NJDNode::new_single("を,助詞,格助詞,一般,*,*,*,を,ヲ,ヲ,0/1,*"),
         ];
-        let words: Vec<_> = nodes.iter().map(ContextWord::from_node).collect();
         let preserve = Rule {
             surface: "身体",
             pos: Some(|pos| matches!(pos, POS::Meishi(_))),
@@ -1593,15 +2301,24 @@ mod tests {
             reading: "カラダ",
             word_accent: Some(0),
         };
-        let selected = first_matching_rule([&preserve, &change].into_iter(), &words, 0).unwrap();
+        let selected = first_matching_rule([&preserve, &change].into_iter(), &nodes, 0).unwrap();
         assert_eq!(selected.reading, "シンタイ");
         assert_eq!(selected.word_accent, Some(1));
+        let phrase_only = Rule {
+            surface: "身体",
+            pos: None,
+            cue: Cue::NextIn(&["を"]),
+            reading: "シンタイ",
+            word_accent: None,
+        };
+        let selected = first_matching_rule([&phrase_only, &change].into_iter(), &nodes, 0).unwrap();
+        assert_eq!(selected.word_accent, None);
         let incompatible = Rule {
             pos: Some(|pos| matches!(pos, POS::Doushi(_))),
             ..preserve
         };
         let selected =
-            first_matching_rule([&incompatible, &change].into_iter(), &words, 0).unwrap();
+            first_matching_rule([&incompatible, &change].into_iter(), &nodes, 0).unwrap();
         assert_eq!(selected.reading, "カラダ");
     }
 

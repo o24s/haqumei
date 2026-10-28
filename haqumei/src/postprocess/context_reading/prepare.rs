@@ -1,6 +1,6 @@
 //! 品詞・単語の核・分割を、数詞処理とアクセント結合の前に確定する。
 
-use std::ops::Range;
+use std::{ops::Range, sync::LazyLock};
 
 use haqumei_jpreprocess_core::{
     accent_rule::{AccentType, ChainRule, ChainRules},
@@ -11,6 +11,7 @@ use haqumei_jpreprocess_core::{
     word_details::WordDetails,
 };
 use haqumei_jpreprocess_njd::NJDNode;
+use rustc_hash::FxHashMap;
 
 use super::PREPARE_RULES;
 
@@ -102,6 +103,15 @@ pub(super) struct RewriteRule {
     pub replacement: &'static [NodeSpec],
 }
 
+static RULES_BY_SURFACE: LazyLock<FxHashMap<&'static str, Vec<&'static RewriteRule>>> =
+    LazyLock::new(|| {
+        let mut rules: FxHashMap<&'static str, Vec<&'static RewriteRule>> = FxHashMap::default();
+        for rule in PREPARE_RULES {
+            rules.entry(rule.surface).or_default().push(rule);
+        }
+        rules
+    });
+
 /// 駅名を数詞へ分割すると空白を残す条件も変わるため、空白処理より先に実行する。
 pub(crate) fn prepare_context_segments(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>) {
     apply_rules(nodes, protected, Stage::Segmentation);
@@ -113,17 +123,20 @@ pub(crate) fn prepare_context_words(nodes: &mut Vec<NJDNode>, protected: &mut Ve
 
 fn apply_rules(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>, stage: Stage) {
     debug_assert_eq!(nodes.len(), protected.len());
+    let by_surface = &*RULES_BY_SURFACE;
     let mut i = 0;
     while i < nodes.len() {
-        let matched = PREPARE_RULES.iter().find_map(|rule| {
-            if rule.stage != stage || rule.surface != nodes[i].get_string() {
-                return None;
-            }
-            let matched = (rule.context)(nodes, i)?;
-            (!protected[matched.protect.clone()]
-                .iter()
-                .any(|&value| value))
-            .then_some((rule, matched))
+        let matched = by_surface.get(nodes[i].get_string()).and_then(|rules| {
+            rules.iter().copied().find_map(|rule| {
+                if rule.stage != stage {
+                    return None;
+                }
+                let matched = (rule.context)(nodes, i)?;
+                (!protected[matched.protect.clone()]
+                    .iter()
+                    .any(|&value| value))
+                .then_some((rule, matched))
+            })
         });
         if let Some((rule, matched)) = matched {
             let next = matched.replace.start + rule.replacement.len();
@@ -144,6 +157,322 @@ fn apply_rules(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>, stage: Stage
 
 fn kata_suffix_candidate(node: &NJDNode) -> bool {
     node.get_string() == "方" && node.get_read() == Some("ホウ")
+}
+
+/// 数詞の直後で「タケ」と解析された「丈」の置換区間を返す。
+pub(super) fn 丈(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i > 0
+        && matches!(nodes[i - 1].get_pos(), POS::Meishi(Meishi::Kazu))
+        && matches!(nodes[i].get_pos(), POS::Meishi(Meishi::General))
+        && nodes[i].get_read() == Some("タケ"))
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i.saturating_sub(1)..i + 1,
+    })
+}
+
+/// 「ゴヘ」と解析された「五部」が部数を表す場合に、置換区間を返す。
+pub(super) fn 五部(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    if nodes[i].get_read() != Some("ゴヘ") {
+        return None;
+    }
+    let next = nodes.get(i + 1)?;
+    let end = match next.get_orig() {
+        Some("買う" | "刷る") if matches!(next.get_pos(), POS::Doushi(_)) => i + 2,
+        Some("用意" | "印刷" | "配布" | "複製" | "増刷" | "作成")
+            if matches!(next.get_pos(), POS::Meishi(Meishi::SahenSetsuzoku))
+                && nodes.get(i + 2).is_some_and(|verb| {
+                    verb.get_orig() == Some("する") && matches!(verb.get_pos(), POS::Doushi(_))
+                }) =>
+        {
+            i + 3
+        }
+        _ => return None,
+    };
+    Some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..end,
+    })
+}
+
+/// 「十重に囲む」などの「十・重」を一語にまとめる区間を返す。
+pub(super) fn 十重(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (nodes
+        .get(i + 1)
+        .is_some_and(|next| next.get_string() == "重")
+        && next_via(nodes, i + 1, "に", &["囲む", "囲う", "重なる", "重ねる"]))
+    .then_some(RewriteMatch {
+        replace: i..i + 2,
+        protect: i..i + 4,
+    })
+}
+
+/// 「従」の直後に続く一位〜八位の終端と、三位かどうかを返す。
+fn 位階の末尾(nodes: &[NJDNode], i: usize) -> Option<(usize, bool)> {
+    let next = nodes.get(i + 1)?.get_string();
+    if matches!(
+        next,
+        "一位" | "二位" | "三位" | "四位" | "五位" | "六位" | "七位" | "八位"
+    ) {
+        return Some((i + 2, next == "三位"));
+    }
+    (matches!(next, "一" | "二" | "三" | "四" | "五" | "六" | "七" | "八")
+        && nodes
+            .get(i + 2)
+            .is_some_and(|node| node.get_string() == "位"))
+    .then_some((i + 3, next == "三"))
+}
+
+/// 「従・三位」「従・三・位」の置換区間を返す。
+pub(super) fn 従三位(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    let (end, third) = 位階の末尾(nodes, i)?;
+    third.then_some(RewriteMatch {
+        replace: i..end,
+        protect: i..end,
+    })
+}
+
+/// 一位〜八位が続く「従」の置換区間を返す。
+pub(super) fn 従(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    let (end, _) = 位階の末尾(nodes, i)?;
+    Some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..end,
+    })
+}
+
+/// 「従」に続く数詞と「位」の置換区間を返す。
+pub(super) fn 位階の数詞(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i > 0
+        && nodes[i - 1].get_string() == "従"
+        && nodes[i - 1].get_read() == Some("ジュ")
+        && nodes
+            .get(i + 1)
+            .is_some_and(|node| node.get_string() == "位"))
+    .then_some(RewriteMatch {
+        replace: i..i + 2,
+        protect: i.saturating_sub(1)..i + 2,
+    })
+}
+
+/// 「円」で終わる金額の前に付く「金」の置換区間を返す。
+pub(super) fn 金額の金(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    let mut saw_number = false;
+    for (end, node) in nodes.iter().enumerate().skip(i + 1) {
+        let surface = node.get_string();
+        if surface == "円" {
+            return saw_number.then_some(RewriteMatch {
+                replace: i..i + 1,
+                protect: i..end + 1,
+            });
+        }
+        if surface.is_empty()
+            || !surface.chars().all(|c| {
+                matches!(c, '0'..='9' | '０'..='９' | '〇' | '零' | '一' | '二' | '三'
+                    | '四' | '五' | '六' | '七' | '八' | '九' | '十' | '百' | '千'
+                    | '万' | '億' | '兆' | '壱' | '弐' | '貳' | '参')
+            })
+        {
+            break;
+        }
+        saw_number = true;
+    }
+    None
+}
+
+/// 恩恵・被害を受ける「被り」の置換区間を返す。
+pub(super) fn 被り(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    if nodes[i].get_orig() != Some("被る")
+        || *nodes[i].get_cform() != CForm::Renyou
+        || !matches!(nodes[i].get_pos(), POS::Doushi(_))
+    {
+        return None;
+    }
+    super::previous_via_particle(
+        nodes,
+        i,
+        &["を"],
+        &[
+            "恩情",
+            "恩恵",
+            "損害",
+            "被害",
+            "迷惑",
+            "損失",
+            "不利益",
+            "災難",
+            "災厄",
+        ],
+    )
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..i + 1,
+    })
+}
+
+/// 植物の根元を指す「根本」の置換区間を返す。
+pub(super) fn 根本(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i >= 2
+        && matches!(nodes[i].get_pos(), POS::Meishi(_))
+        && nodes[i - 1].get_string() == "の"
+        && matches!(
+            nodes[i - 2].get_string(),
+            "木" | "草" | "樹木" | "幹" | "茎"
+        )
+        && nodes.get(i + 1).is_none_or(|node| {
+            matches!(
+                node.get_pos(),
+                POS::Joshi(_) | POS::Jodoushi | POS::Kigou(_)
+            )
+        }))
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i.saturating_sub(2)..i + 1,
+    })
+}
+
+/// 文末で動詞の連用形に続く「候」の置換区間を返す。
+pub(super) fn 候(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i > 0
+        && matches!(nodes[i].get_pos(), POS::Meishi(_))
+        && matches!(nodes[i - 1].get_pos(), POS::Doushi(_))
+        && *nodes[i - 1].get_cform() == CForm::Renyou
+        && nodes
+            .get(i + 1)
+            .is_none_or(|node| matches!(node.get_pos(), POS::Kigou(_))))
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i.saturating_sub(1)..i + 1,
+    })
+}
+
+/// 「鬼の居ぬ間」の「間」の置換区間を返す。
+pub(super) fn 鬼の居ぬ間(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    (i >= 4
+        && nodes[i - 4].get_string() == "鬼"
+        && nodes[i - 3].get_string() == "の"
+        && nodes[i - 2].get_orig() == Some("居る")
+        && nodes[i - 1].get_string() == "ぬ")
+        .then_some(RewriteMatch {
+            replace: i..i + 1,
+            protect: i.saturating_sub(4)..i + 1,
+        })
+}
+
+/// 「話の間を取る」などの「間」の置換区間を返す。
+pub(super) fn 話の間(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    if !matches!(
+        nodes[i].get_pos(),
+        POS::Meishi(Meishi::General | Meishi::FukushiKanou)
+    ) {
+        return None;
+    }
+    let mut before = i.checked_sub(1)?;
+    if matches!(nodes[before].get_string(), "「" | "『") {
+        before = before.checked_sub(1)?;
+    }
+    let head = before.checked_sub(1)?;
+    if nodes[before].get_string() != "の"
+        || !matches!(
+            nodes[head].get_string(),
+            "話" | "会話" | "台詞" | "せりふ" | "セリフ"
+        )
+    {
+        return None;
+    }
+    let mut after = i + 1;
+    if nodes
+        .get(after)
+        .is_some_and(|node| matches!(node.get_string(), "」" | "』"))
+    {
+        after += 1;
+    }
+    (nodes
+        .get(after)
+        .is_some_and(|node| node.get_string() == "を")
+        && nodes.get(after + 1).is_some_and(|node| {
+            matches!(node.get_pos(), POS::Doushi(_))
+                && matches!(node.get_orig(), Some("取る" | "とる" | "置く" | "おく"))
+        }))
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: head..after + 2,
+    })
+}
+
+/// 「縁を断った」などの「断っ」の置換区間を返す。
+pub(super) fn 断つ(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    if !matches!(nodes[i].get_pos(), POS::Doushi(_)) {
+        return None;
+    }
+    super::previous_via_particle(
+        nodes,
+        i,
+        &["を"],
+        &["縁", "関係", "絆", "退路", "悪習", "悪癖"],
+    )
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..i + 1,
+    })
+}
+
+/// 「仏の教え」など、信仰の対象を指す「仏」の置換区間を返す。
+pub(super) fn 仏(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    let is_country_pair = i > 0
+        && matches!(
+            nodes[i - 1].get_string(),
+            "と" | "・" | "日" | "米" | "英" | "独" | "伊"
+        );
+    (!is_country_pair
+        && nodes.get(i + 1).is_some_and(|n| n.get_string() == "の")
+        && nodes
+            .get(i + 2)
+            .is_some_and(|n| matches!(n.get_string(), "教え" | "慈悲" | "加護")))
+    .then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..i + 1,
+    })
+}
+
+fn next_via(nodes: &[NJDNode], i: usize, particle: &str, candidates: &[&str]) -> bool {
+    nodes
+        .get(i + 1)
+        .is_some_and(|node| node.get_string() == particle)
+        && nodes.get(i + 2).is_some_and(|node| {
+            node.get_orig()
+                .is_some_and(|orig| candidates.contains(&orig))
+        })
+}
+
+/// 地理上の区画を指す「大字」の置換区間を返す。
+pub(super) fn 大字(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    next_via(nodes, i, "の", &["境界", "境界線", "区域", "地番", "住所"]).then_some(RewriteMatch {
+        replace: i..i + 1,
+        protect: i..i + 1,
+    })
+}
+
+/// 「五分前」など、時間を表す「五分」の置換区間を返す。
+pub(super) fn 五分(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
+    // 前金が「前」「金」に分かれる場合も、支払う割合のゴブを残す。
+    let is_payment = nodes
+        .get(i + 1)
+        .is_some_and(|node| matches!(node.get_string(), "前" | "後"))
+        && nodes.get(i + 2).is_some_and(|node| {
+            matches!(
+                node.get_string(),
+                "金" | "払" | "払い" | "渡" | "渡し" | "渡金"
+            )
+        });
+    (nodes
+        .get(i + 1)
+        .is_some_and(|node| matches!(node.get_string(), "前" | "後" | "間"))
+        && !is_payment)
+        .then_some(RewriteMatch {
+            replace: i..i + 1,
+            protect: i..i + 1,
+        })
 }
 
 pub(super) fn nominal_kata_stem(nodes: &[NJDNode], i: usize, read: &str) -> Option<RewriteMatch> {

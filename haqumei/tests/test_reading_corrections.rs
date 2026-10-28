@@ -1,6 +1,179 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn lexical_nouns_and_abstract_koumuri_keep_their_features() {
+    check_context_readings(
+        &[
+            ("恩情を被り、感謝した。", "被り", "コウムリ", 4),
+            ("お願い申し上げ候。", "候", "ソウロウ", 4),
+            (
+                "恩情を語ってから帽子を被り、出かけた。",
+                "被り",
+                "カブリ",
+                3,
+            ),
+            ("鬼の居ぬ間に昼寝する。", "間", "マ", 1),
+            ("話の「間」を取る。", "間", "マ", 1),
+            ("台詞の『間』を置く。", "間", "マ", 1),
+            ("変数の値を求める。", "値", "アタイ", 3),
+            ("木の根本に座る。", "根本", "ネモト", 3),
+        ],
+        &[
+            "問題の根本を考える。",
+            "木の分類の根本を考える。",
+            "木の根本的な性質を調べる。",
+            "草の根本原因を考える。",
+            "木の根本構造を学ぶ。",
+            "株の値を調べる。",
+            "誰も居ぬ間に昼寝する。",
+            "鬼の居る間は静かだ。",
+            "話の間に客が帰った。",
+            "両者の間を取って折衷した。",
+            "暮春の候、お元気でしょうか。",
+            "候補を探す。",
+        ],
+    );
+    let mut engine = Haqumei::new().unwrap();
+    let features = engine.run_frontend("恩情を被り、感謝した。").unwrap();
+    let verb = features.iter().find(|f| f.string == "被り").unwrap();
+    assert_eq!(verb.orig, "被る");
+    assert_eq!(verb.ctype, "五段・ラ行");
+    assert_eq!(verb.cform, "連用形");
+    assert_eq!(verb.acc, 3);
+    let features = engine.run_frontend("木の根本。").unwrap();
+    let noun = features.iter().find(|f| f.string == "根本").unwrap();
+    assert_eq!(noun.pos_group1, "一般");
+    assert_eq!(noun.acc, 3);
+    assert_eq!(noun.chain_rule, "C2");
+}
+
+#[test]
+fn counters_and_ranks_have_consistent_readings_and_word_boundaries() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, word, read, group) in [
+        ("三丈を測る。", "丈", "ジョウ", "接尾"),
+        ("五部印刷する。", "部", "ブ", "接尾"),
+        ("十重に囲む。", "十重", "トエ", "一般"),
+        ("金壱万円を納める。", "金", "キン", "数接続"),
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        let feature = features.iter().find(|f| f.string == word).unwrap();
+        assert_eq!(feature.read, read, "{text}");
+        assert_eq!(feature.pos_group1, group, "{text}");
+        assert_eq!(features, engine.run_frontend_detailed(text).unwrap().0);
+        assert_eq!(
+            engine.g2p_mapping(text).unwrap(),
+            engine.g2p_candidates(text).unwrap().candidates[0].words,
+            "{text}"
+        );
+    }
+    let mapping = engine.g2p_mapping_detailed("五部印刷する。").unwrap();
+    for (word, expected) in [("五", 0..1), ("部", 1..2), ("印刷", 2..4)] {
+        assert_eq!(
+            mapping.iter().find(|w| w.word == word).unwrap().char_span,
+            expected
+        );
+    }
+    for (rank, reading) in [
+        ("従一位", "ジュイチイ"),
+        ("従二位", "ジュニイ"),
+        ("従三位", "ジュサンミ"),
+        ("従四位", "ジュシイ"),
+        ("従五位", "ジュゴイ"),
+        ("従六位", "ジュロクイ"),
+        ("従七位", "ジュシチイ"),
+        ("従八位", "ジュハチイ"),
+    ] {
+        let text = format!("{rank}に就く。");
+        assert!(engine.g2k(&text).unwrap().starts_with(reading), "{text}");
+        let first = &engine.run_frontend(&text).unwrap()[0];
+        assert_eq!(first.pos, "接頭詞", "{text}");
+        assert_eq!(first.ctype, "*", "{text}");
+        assert_eq!(first.orig, "従", "{text}");
+    }
+    for text in [
+        "丈を測る。",
+        "五部に住む。",
+        "五部印刷株式会社の社員だ。",
+        "十重奏を聞く。",
+        "十重の塔。",
+        "金が壱万円。",
+        "金、壱万円。",
+        "三位に入賞した。",
+        "従う人が三位になった。",
+    ] {
+        let corrected = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        assert_eq!(corrected, engine.g2k(text).unwrap(), "{text}");
+        engine.options.modify_context_reading = true;
+    }
+}
+
+#[test]
+fn headwear_objects_select_kaburu_without_crossing_a_clause() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, word, read) in [
+        ("帽子を被る。", "被る", "カブル"),
+        ("王冠をそっと被った。", "被っ", "カブッ"),
+        ("頭巾を被りながら歩く。", "被り", "カブリ"),
+        ("帽子を被らない。", "被ら", "カブラ"),
+        ("帽子を被ればいい。", "被れ", "カブレ"),
+        ("帽子を被ろう。", "被ろ", "カブロ"),
+    ] {
+        let features = engine.run_frontend(text).unwrap();
+        let verb = features.iter().find(|f| f.string == word).unwrap();
+        assert_eq!(verb.read, read, "{text}");
+        assert_eq!(verb.orig, "被る", "{text}");
+        assert_eq!(verb.ctype, "五段・ラ行", "{text}");
+        assert_eq!(verb.mora_size, 3, "{text}");
+        if matches!(word, "被る" | "被っ" | "被れ") {
+            assert_eq!(verb.acc, 2, "{text}");
+        }
+    }
+    for text in [
+        "損害を被った。",
+        "帽子を売って損害を被った。",
+        "冠の恩恵を被った。",
+        "帽子を、損害は被った。",
+    ] {
+        let corrected = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        assert_eq!(corrected, engine.g2k(text).unwrap(), "{text}");
+        engine.options.modify_context_reading = true;
+    }
+}
+
+#[test]
+fn protected_context_prevents_counter_and_rank_rewrites() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| {
+            matches!(
+                m.surface.as_str(),
+                "三" | "印刷" | "囲む" | "位" | "円" | "被っ"
+            )
+        }) {
+            morph.dictionary_index = 1;
+        }
+    });
+    engine.options.protect_user_dict_readings = true;
+    for text in [
+        "三丈を測る。",
+        "五部印刷する。",
+        "十重に囲む。",
+        "従五位に就く。",
+        "従三位に就く。",
+        "金壱万円。",
+        "帽子を被った。",
+    ] {
+        let protected = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        assert_eq!(protected, engine.g2k(text).unwrap(), "{text}");
+        engine.options.modify_context_reading = true;
+    }
+}
+
+#[test]
 fn kata_suffix_readings_survive_a_following_copula() {
     let mut engine = Haqumei::new().unwrap();
     for (text, expected) in [
@@ -148,6 +321,32 @@ fn check_context_readings(cases: &[(&str, &str, &str, i32)], preserved: &[&str])
         let without_rules = engine.g2k(text).unwrap();
         engine.options.modify_context_reading = true;
         assert_eq!(with_rules, without_rules, "{text}");
+    }
+}
+
+#[test]
+fn lexical_context_rewrites_keep_the_lemma_and_conjugation_consistent() {
+    let mut engine = Haqumei::new().unwrap();
+    let features = engine.run_frontend("縁を断った。").unwrap();
+    let verb = features.iter().find(|f| f.string == "断っ").unwrap();
+    assert_eq!(verb.read, "タッ");
+    assert_eq!(verb.orig, "断つ");
+    assert_eq!(verb.ctype, "五段・タ行");
+    assert_eq!(verb.cform, "連用タ接続");
+    assert_eq!(verb.mora_size, 2);
+
+    let features = engine.run_frontend("仏の教えを学ぶ。").unwrap();
+    let noun = features.iter().find(|f| f.string == "仏").unwrap();
+    assert_eq!(noun.read, "ホトケ");
+    assert_eq!(noun.pos, "名詞");
+    assert_eq!(noun.pos_group1, "一般");
+    assert_eq!(noun.mora_size, 3);
+
+    for text in ["誘いを断った。", "仏の大統領が訪れた。"] {
+        let with_rules = engine.g2k(text).unwrap();
+        engine.options.modify_context_reading = false;
+        assert_eq!(engine.g2k(text).unwrap(), with_rules, "{text}");
+        engine.options.modify_context_reading = true;
     }
 }
 

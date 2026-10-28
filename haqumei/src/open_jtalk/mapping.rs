@@ -1017,21 +1017,24 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
             continue;
         }
 
-        // 原形を「富士:河口湖」と登録すると、MeCab の1形態素が NJD では2形態素になる。
-        // 元の表層形を再現する分割だけ、各語の文字数で区間を分ける。
+        // 原形に含まれる分割指定や、五部を五・部へ分ける補正は語の境界を増やす。
+        // 表層形と文字数が保たれている場合だけ、NJD の各語に元の文字位置を割り当てる。
         if word.len() < morph.surface.len()
             && morph.surface.starts_with(word)
-            && let Some(orig) = morph.feature.split(',').nth(7)
-            && orig.contains(':')
+            && morph.surface.chars().count() == morph.char_span.len()
         {
-            let end = idx + orig.split(':').count();
-            if let Some(parts) = features.get(idx..end)
-                && orig.split(':').eq(parts.iter().map(|f| f.string.as_str()))
-                && parts.iter().map(|f| f.string.as_str()).collect::<String>() == morph.surface
-                && morph.surface.chars().count() == morph.char_span.len()
-            {
+            let mut end = idx;
+            let mut joined = String::new();
+            while let Some(part) = features.get(end) {
+                joined.push_str(&part.string);
+                end += 1;
+                if !morph.surface.starts_with(&joined) || joined == morph.surface {
+                    break;
+                }
+            }
+            if joined == morph.surface {
                 let mut start = morph.char_span.start;
-                for (feature, span) in parts.iter().zip(&mut spans[idx..end]) {
+                for (feature, span) in features[idx..end].iter().zip(&mut spans[idx..end]) {
                     let end = start + feature.string.chars().count();
                     *span = start..end;
                     start = end;
