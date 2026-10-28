@@ -390,6 +390,10 @@ enum Cue {
     OrigIn(&'static [&'static str]),
     /// 「何にも」に続く述語が、ナンニモと読む打ち消しの用法である。
     NegativeNannimo,
+    /// 「外ならぬ」に続く語が、人や特別な事情を指す。
+    外ならぬ,
+    /// 「外でもない」が用件を切り出す慣用表現である。
+    外でもない,
     /// 直後の形態素の表層形が、いずれかに一致する。
     NextIn(&'static [&'static str]),
 
@@ -1357,11 +1361,28 @@ const RULES: &[Rule] = &[
         reading: "ココ",
         word_accent: None,
     },
+    // 「外ならぬ君の頼み」は相手を特に指す慣用表現。
+    // 「外ならぬ内側」は位置の否定なので、人や事情を指す後続語に限る。
+    Rule {
+        surface: "外",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::外ならぬ,
+        reading: "ホカ",
+        word_accent: Some(0),
+    },
+    // 用件を切り出す「外でもない」はホカ。「内でも外でもない」は位置の否定。
+    // 導入の位置と後続する用件の名詞を確認し、並列された否定は変更しない。
+    Rule {
+        surface: "外",
+        pos: Some(|pos| matches!(pos, POS::Meishi(_))),
+        cue: Cue::外でもない,
+        reading: "ホカ",
+        word_accent: Some(0),
+    },
     // 「〜するより外にない」「君より外にない」の 外 は ホカ と読む。
     //
-    // 空間の比較に ソト が使われるため、「より」と打ち消しだけでは足りず、
-    // 「物体AはBより外にない」「地球より外に惑星はない」が ソト になるべきである。
-    // 分かれるのは「より」の直前の品詞で、動詞と代名詞の後に空間の比較は来ない。
+    // 「地球より外に惑星はない」は空間の比較なので、
+    // 「より」の直前が動詞か代名詞の場合に限る。
     // [9 / 0]
     Rule {
         surface: "外",
@@ -1750,6 +1771,145 @@ const RULES: &[Rule] = &[
 /// [`Cue::Negated`] が探す打ち消しの語の原形。
 const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
 
+fn 用件の名詞(word: &impl ContextWord) -> bool {
+    word.pos_matches(|pos| matches!(pos, POS::Meishi(_)))
+        && matches!(
+            word.surface(),
+            "用件"
+                | "用事"
+                | "件"
+                | "話"
+                | "相談"
+                | "予定"
+                | "お願い"
+                | "頼み"
+                | "依頼"
+                | "問題"
+                | "質問"
+                | "連絡"
+                | "報告"
+                | "計画"
+                | "事情"
+                | "理由"
+        )
+}
+
+fn 外ならぬ(words: &[impl ContextWord], i: usize) -> bool {
+    if !words
+        .get(i + 1)
+        .is_some_and(|word| word.surface() == "なら")
+        || !words
+            .get(i + 2)
+            .is_some_and(|word| matches!(word.surface(), "ぬ" | "ない"))
+        || i > 0 && matches!(words[i - 1].surface(), "の" | "も" | "より")
+    {
+        return false;
+    }
+    let mut next = i + 3;
+    if words
+        .get(next)
+        .is_some_and(|word| word.pos_matches(|pos| matches!(pos, POS::Rentaishi)))
+    {
+        next += 1;
+    }
+    words.get(next).is_some_and(|word| {
+        word.pos_matches(|pos| {
+            matches!(pos, POS::Meishi(Meishi::KoyuMeishi(KoyuMeishi::Person(_))))
+        }) || word.pos_matches(|pos| matches!(pos, POS::Meishi(_)))
+            && matches!(
+                word.surface(),
+                "君" | "あなた"
+                    | "貴方"
+                    | "私"
+                    | "僕"
+                    | "俺"
+                    | "彼"
+                    | "彼女"
+                    | "自分"
+                    | "先生"
+                    | "恩師"
+                    | "師匠"
+                    | "陛下"
+                    | "本人"
+                    | "当人"
+                    | "事情"
+                    | "理由"
+                    | "原因"
+                    | "事実"
+                    | "目的"
+            )
+    })
+}
+
+fn 外でもない(words: &[impl ContextWord], i: usize) -> bool {
+    if !words.get(i + 1..i + 4).is_some_and(|after| {
+        after
+            .iter()
+            .map(ContextWord::surface)
+            .eq(["で", "も", "ない"])
+    }) {
+        return false;
+    }
+
+    let mut before = i;
+    if before > 0 && words[before - 1].surface() == "、" {
+        before -= 1;
+    } else if before > 0 && !matches!(words[before - 1].surface(), "「" | "『" | "は") {
+        return false;
+    }
+    if before > 0 && words[before - 1].surface() == "は" {
+        // 「電話したのは」「用件は」は導入になるが、「家の中は」は場所を表す。
+        if before < 2
+            || !((words[before - 2].surface() == "の"
+                && words[before - 2]
+                    .pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::Hijiritsu(_)))))
+                || 用件の名詞(&words[before - 2]))
+        {
+            return false;
+        }
+    } else if before > 0 && NEGATIVE_ORIGS.contains(&words[before - 1].orig()) {
+        return false;
+    }
+
+    let mut start = i + 4;
+    if words.get(start).is_some_and(|word| word.surface() == "が") {
+        start += 1;
+    }
+    if words.get(start).is_some_and(|word| word.surface() == "、") {
+        start += 1;
+    }
+    if words
+        .get(start)
+        .is_some_and(|word| word.surface() == "ちょっと")
+    {
+        start += 1;
+    }
+
+    let mut topic = false;
+    // 6形態素以内で名詞句の終端まで確認できた場合だけ、最後の名詞で用件と判断する。
+    for (offset, word) in words.iter().skip(start).take(7).enumerate() {
+        if matches!(
+            word.surface(),
+            "内" | "中" | "内側" | "内部" | "室内" | "屋内"
+        ) {
+            return false;
+        }
+        if !word.pos_matches(|pos| matches!(pos, POS::Meishi(_) | POS::Rentaishi))
+            && !(word.surface() == "の"
+                && word.pos_matches(|pos| matches!(pos, POS::Joshi(Joshi::Rentaika))))
+        {
+            break;
+        }
+        if offset == 6 {
+            return false;
+        }
+        if word.pos_matches(|pos| matches!(pos, POS::Meishi(_))) {
+            topic = 用件の名詞(word);
+        }
+    }
+    topic
+}
+
 fn negative_nannimo(features: &[impl ContextWord], i: usize) -> bool {
     if !features[i].pos_matches(|pos| matches!(pos, POS::Meishi(_)))
         || !features.get(i + 1).is_some_and(|f| {
@@ -1896,6 +2056,8 @@ fn cue_matches(cue: &Cue, njd_features: &[impl ContextWord], i: usize) -> bool {
     match cue {
         Cue::OrigIn(candidates) => candidates.contains(&njd_features[i].orig()),
         Cue::NegativeNannimo => negative_nannimo(njd_features, i),
+        Cue::外ならぬ => 外ならぬ(njd_features, i),
+        Cue::外でもない => 外でもない(njd_features, i),
         Cue::NextIn(candidates) => njd_features
             .get(i + 1)
             .is_some_and(|next| candidates.contains(&next.surface())),
