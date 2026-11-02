@@ -132,6 +132,14 @@ fn apply_rules(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>, stage: Stage
                     return None;
                 }
                 let matched = (rule.context)(nodes, i)?;
+                // ローマ数字などの元表記は、展開元を示す識別子から復元する。
+                // ノードを作り直すと識別子が失われるため、展開済みの数詞は置換しない。
+                if nodes[matched.replace.clone()]
+                    .iter()
+                    .any(|node| node.roman_source().is_some() || node.surface_source().is_some())
+                {
+                    return None;
+                }
                 (!protected[matched.protect.clone()]
                     .iter()
                     .any(|&value| value))
@@ -251,9 +259,11 @@ pub(super) fn 五部(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
 
 /// 「十重に囲む」などの「十・重」を一語にまとめる区間を返す。
 pub(super) fn 十重(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
-    (nodes
-        .get(i + 1)
-        .is_some_and(|next| next.get_string() == "重")
+    // 二十重や百十重の末尾を、単独の十重としてまとめない。
+    ((i == 0 || !nodes[i - 1].get_pos().is_kazu())
+        && nodes
+            .get(i + 1)
+            .is_some_and(|next| next.get_string() == "重")
         && next_via(nodes, i + 1, "に", &["囲む", "囲う", "重なる", "重ねる"]))
     .then_some(RewriteMatch {
         replace: i..i + 2,
@@ -499,14 +509,6 @@ fn next_via(nodes: &[NJDNode], i: usize, particle: &str, candidates: &[&str]) ->
         })
 }
 
-/// 地理上の区画を指す「大字」の置換区間を返す。
-pub(super) fn 大字(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
-    next_via(nodes, i, "の", &["境界", "境界線", "区域", "地番", "住所"]).then_some(RewriteMatch {
-        replace: i..i + 1,
-        protect: i..i + 1,
-    })
-}
-
 /// 「五分前」など、時間を表す「五分」の置換区間を返す。
 pub(super) fn 五分(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {
     // 前金が「前」「金」に分かれる場合も、支払う割合のゴブを残す。
@@ -651,6 +653,31 @@ mod tests {
     use haqumei_jpreprocess_njd::{NJD, accent_phrase, accent_type};
 
     use super::*;
+
+    #[test]
+    fn expanded_number_sources_survive_context_segmentation() {
+        for roman in [true, false] {
+            let mut nodes = vec![
+                NJDNode::new_single("十,名詞,数,*,*,*,*,十,ジュウ,ジュー,1/2,C3"),
+                NJDNode::new_single("重,名詞,接尾,助数詞,*,*,*,重,ジュウ,ジュー,1/2,*"),
+                NJDNode::new_single("に,助詞,格助詞,一般,*,*,*,に,ニ,ニ,0/1,*"),
+                NJDNode::new_single(
+                    "囲む,動詞,自立,*,*,五段・マ行,基本形,囲む,カコム,カコム,0/3,*",
+                ),
+            ];
+            let source = std::num::NonZeroU32::new(1).unwrap();
+            if roman {
+                nodes[0].set_roman_source(source);
+            } else {
+                nodes[0].set_surface_source(source);
+            }
+            let original = nodes.clone();
+            let mut protected = vec![false; nodes.len()];
+            prepare_context_segments(&mut nodes, &mut protected);
+            assert_eq!(nodes, original);
+            assert_eq!(protected, [false; 4]);
+        }
+    }
 
     #[test]
     fn 敬称の方は名詞と単語の核を結合前に確定する() {

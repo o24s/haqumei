@@ -54,13 +54,18 @@ fn split_source_keeps_raw_features_and_following_unknown_words() {
 }
 
 #[test]
-fn station_name_splitting_and_merging_keep_each_written_character() {
+fn context_splitting_and_merging_keep_each_written_character() {
     let mut engine = Haqumei::new().unwrap();
     for text in [
         "十三駅先には十三駅がある。",
         "十三駅は、十三駅先にある。",
         "阪急十三駅で乗り換える。",
         "十 十三駅先にある。",
+        "従Ⅲ位に就く。",
+        "従Ⅳ位に就く。",
+        "従Ⅶ位に就く。",
+        "Ⅹ重に囲む。",
+        "ⅩⅩ重に重ねる。",
     ] {
         let chars = text.chars().collect::<Vec<_>>();
         let (features, morphs) = engine.run_frontend_detailed(text).unwrap();

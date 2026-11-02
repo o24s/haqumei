@@ -110,6 +110,17 @@ fn counters_and_ranks_have_consistent_readings_and_word_boundaries() {
 }
 
 #[test]
+fn lexical_toe_does_not_merge_a_numeric_suffix() {
+    check_context_readings(
+        &[
+            ("城を十重に囲む。", "十重", "トエ", 2),
+            ("雲が十重に重なる。", "十重", "トエ", 2),
+        ],
+        &["二十重に囲む。", "百十重に重ねる。", "二百十重に重ねる。"],
+    );
+}
+
+#[test]
 fn headwear_objects_select_kaburu_without_crossing_a_clause() {
     let mut engine = Haqumei::new().unwrap();
     for (text, word, read) in [

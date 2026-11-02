@@ -217,11 +217,12 @@ const PREPARE_RULES: &[RewriteRule] = &[
             NodeSpec::new("金", POS::Settoushi(Settoushi::SuuSetsuzoku), "キン", "キン", 1, Some(AccentType::P2)),
         ],
     },
-    // 地理上の大字はオオアザ。正書法と発音を分けて持つ。
+    // 収集データでは、地域接尾辞と後続名詞に挟まる大字は62出現ともオオアザ。
+    // 住所の字と条件が共通するため、判定を共有する。
     RewriteRule {
         surface: "大字",
         stage: Stage::Lexical,
-        context: prepare::大字,
+        context: prepare::住所の字,
         replacement: &[
             NodeSpec::new("大字", POS::Meishi(Meishi::General), "オオアザ", "オーアザ", 1, Some(AccentType::C1)),
         ],
@@ -413,10 +414,6 @@ enum Cue {
     外ならぬ,
     /// 「外でもない」が用件を切り出す慣用表現である。
     外でもない,
-    /// 食品だけを主語にした述語で、負担を表す修飾語を伴わない。
-    辛味を表す,
-    /// 文や引用の冒頭で、日付を導入する。
-    日付を導く来る,
     /// 直後の形態素の表層形が、いずれかに一致する。
     NextIn(&'static [&'static str]),
 
@@ -513,23 +510,6 @@ const オビヤカスの目的語: &[&str] = &[
 /// 各規則の根拠と、確認した負の対照をコメントに残す。
 #[rustfmt::skip]
 const RULES: &[Rule] = &[
-    // 「三食カレーは辛い」は負担を表すため、食品名の前後も確認する。
-    // 食品名だけの主語と程度の副詞に限り、連体用法や「さすがに」は含めない。
-    Rule {
-        surface: "辛い",
-        pos: Some(|pos| matches!(pos, POS::Keiyoushi(Keiyoushi::Jiritsu))),
-        cue: Cue::辛味を表す,
-        reading: "カライ",
-        word_accent: Some(2),
-    },
-    // 日付を導入する「来る金曜日」はキタル。「彼が来る金曜日」はクルのまま。
-    Rule {
-        surface: "来る",
-        pos: Some(is_independent),
-        cue: Cue::All(&[Cue::CformIn(&[CForm::Basic]), Cue::日付を導く来る]),
-        reading: "キタル",
-        word_accent: Some(0),
-    },
     // 存続や安全を危うくする用法はオビヤカス。人を驚かせるオドカスとは区別する。
     Rule {
         surface: "脅かす",
@@ -1459,26 +1439,13 @@ const RULES: &[Rule] = &[
         reading: "ホカ",
         word_accent: Some(0),
     },
-    // 「〜するより外にない」「君より外にない」の 外 は ホカ と読む。
-    //
-    // 「地球より外に惑星はない」は空間の比較なので、
-    // 「より」の直前が動詞か代名詞の場合に限る。
+    // 「〜するより外にない」の外はホカと読む。
+    // 代名詞は場所も指すため、「より」の直前が動詞の場合に限る。
     // [9 / 0]
     Rule {
         surface: "外",
         pos: None,
         cue: Cue::All(&[Cue::PrevPosVia(&["より"], |pos| matches!(pos, POS::Doushi(_))), Cue::Negated]),
-        reading: "ホカ",
-        word_accent: None,
-    },
-    // [9 / 0]
-    Rule {
-        surface: "外",
-        pos: None,
-        cue: Cue::All(&[
-            Cue::PrevPosVia(&["より"], |pos| matches!(pos, POS::Meishi(Meishi::Daimeishi(_)))),
-            Cue::Negated,
-        ]),
         reading: "ホカ",
         word_accent: None,
     },
@@ -1851,85 +1818,6 @@ const RULES: &[Rule] = &[
 /// [`Cue::Negated`] が探す打ち消しの語の原形。
 const NEGATIVE_ORIGS: &[&str] = &["ない", "無い", "ぬ", "ん", "まい", "ず"];
 
-fn 辛味を表す(words: &[impl ContextWord], i: usize) -> bool {
-    if words.get(i + 1).is_some_and(|word| {
-        word.pos_matches(|pos| matches!(pos, POS::Meishi(_)))
-            && !matches!(word.surface(), "の" | "ん")
-    }) {
-        return false;
-    }
-    let mut end = i;
-    while end > 0 && i - end < 3 {
-        let word = &words[end - 1];
-        if matches!(
-            word.surface(),
-            "とても" | "非常" | "かなり" | "すごく" | "少し" | "ちょっと"
-        ) && word.pos_matches(|pos| matches!(pos, POS::Fukushi(_) | POS::Keiyoushi(_)))
-        {
-            end -= 1;
-        } else if end >= 2
-            && words[end - 1].surface() == "に"
-            && words[end - 2].surface() == "非常"
-            && adverbial_pair(&words[end - 2], &words[end - 1])
-        {
-            end -= 2;
-        } else {
-            break;
-        }
-    }
-    if end < 2
-        || !matches!(words[end - 1].surface(), "が" | "は")
-        || !words[end - 1].pos_matches(|pos| matches!(pos, POS::Joshi(_)))
-        || !matches!(
-            words[end - 2].surface(),
-            "カレー"
-                | "唐辛子"
-                | "キムチ"
-                | "わさび"
-                | "山葵"
-                | "胡椒"
-                | "コショウ"
-                | "ソース"
-                | "ラーメン"
-                | "スープ"
-                | "味付け"
-                | "麻婆豆腐"
-        )
-    {
-        return false;
-    }
-    let mut start = end - 2;
-    if start > 0 && words[start - 1].pos_matches(|pos| matches!(pos, POS::Rentaishi)) {
-        start -= 1;
-    }
-    // 「一週間カレー」「毎日カレー」のような名詞を伴う主語は推測しない。
-    start == 0 || matches!(words[start - 1].surface(), "。" | "、" | "「" | "『")
-}
-
-fn 日付を導く来る(words: &[impl ContextWord], i: usize) -> bool {
-    if i > 0 && !matches!(words[i - 1].surface(), "。" | "、" | "「" | "『") {
-        return false;
-    }
-    let Some(next) = words.get(i + 1) else {
-        return false;
-    };
-    if !next.pos_matches(|pos| matches!(pos, POS::Meishi(_))) {
-        return false;
-    }
-    matches!(
-        next.surface(),
-        "月曜日" | "火曜日" | "水曜日" | "木曜日" | "金曜日" | "土曜日" | "日曜日"
-    ) || next.surface().strip_suffix('月').is_some_and(|number| {
-        !number.is_empty()
-            && number
-                .chars()
-                .all(|c| "0123456789０１２３４５６７８９一二三四五六七八九十".contains(c))
-    }) || next.pos_matches(|pos| matches!(pos, POS::Meishi(Meishi::Kazu)))
-        && words
-            .get(i + 2)
-            .is_some_and(|unit| matches!(unit.surface(), "月" | "日" | "年"))
-}
-
 fn 用件の名詞(word: &impl ContextWord) -> bool {
     word.pos_matches(|pos| matches!(pos, POS::Meishi(_)))
         && matches!(
@@ -2217,8 +2105,6 @@ fn cue_matches(cue: &Cue, njd_features: &[impl ContextWord], i: usize) -> bool {
         Cue::NegativeNannimo => negative_nannimo(njd_features, i),
         Cue::外ならぬ => 外ならぬ(njd_features, i),
         Cue::外でもない => 外でもない(njd_features, i),
-        Cue::辛味を表す => 辛味を表す(njd_features, i),
-        Cue::日付を導く来る => 日付を導く来る(njd_features, i),
         Cue::NextIn(candidates) => njd_features
             .get(i + 1)
             .is_some_and(|next| candidates.contains(&next.surface())),
