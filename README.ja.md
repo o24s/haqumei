@@ -631,8 +631,8 @@ JSUT corpus の basic5000 に対するアノテーションである、jsut-labe
 | G2P | jsut-label (PER) | ROHAN (KER) |
 | :--- | ---: | ---: |
 | pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
-| pyopenjtalk-plus 0.4.1.post10 | 0.84% | **0.66%** |
-| **haqumei 0.12.3** | **0.81%** | 0.71% |
+| pyopenjtalk-plus 0.4.1.post10 | **0.71%** | **0.66%** |
+| **haqumei 0.12.3** | 0.81% | 0.71% |
 
 \* 素の `pyopenjtalk` には長音と四つ仮名を元の表記のまま書き出す手段が無いため、
 出力を ROHAN の表記に揃えられません。この差の大半は読みの誤りではなく表記の違いです。
@@ -646,14 +646,62 @@ JSUT corpus の basic5000 に対するアノテーションである、jsut-labe
 | G2P | options | jsut-label (PER) | ROHAN (KER) |
 | :--- | :--- | ---: | ---: |
 | pyopenjtalk | - | 1.31% | 5.02% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
-| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=None, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=None, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=Iu, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=Iu, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=Yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.72% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=Yuu, revert_long_vowels=False, revert_yotsugana=False | 0.80% | 3.74% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiIu, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiIu, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiYuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.69% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiYuu, revert_long_vowels=False, revert_yotsugana=False | 0.87% | 3.71% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=YuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=YuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.71% | 3.73% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiYuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=True, iu_pronunciation=KanjiYuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.82% | 3.70% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=None, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=None, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=Iu, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=Iu, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=Yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.72% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=Yuu, revert_long_vowels=False, revert_yotsugana=False | 0.80% | 3.74% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiIu, revert_long_vowels=True, revert_yotsugana=True | - | 0.66% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiIu, revert_long_vowels=False, revert_yotsugana=False | 0.84% | 3.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiYuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.69% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiYuu, revert_long_vowels=False, revert_yotsugana=False | 0.87% | 3.71% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=YuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=YuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.71% | 3.73% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiYuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.68% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=True, iu_pronunciation=KanjiYuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.82% | 3.70% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=None, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=None, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=Iu, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=Iu, revert_long_vowels=False, revert_yotsugana=False | 0.93% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=Yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=Yuu, revert_long_vowels=False, revert_yotsugana=False | 0.88% | 3.82% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiIu, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiIu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiYuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.78% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiYuu, revert_long_vowels=False, revert_yotsugana=False | 0.95% | 3.80% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=YuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=YuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.79% | 3.82% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiYuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.76% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=True, use_tsqyomi=False, iu_pronunciation=KanjiYuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.78% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=None, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=None, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.77% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=Iu, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=Iu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.76% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=Yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=Yuu, revert_long_vowels=False, revert_yotsugana=False | 0.88% | 3.82% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiIu, revert_long_vowels=True, revert_yotsugana=True | - | 0.75% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiIu, revert_long_vowels=False, revert_yotsugana=False | 0.92% | 3.76% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiYuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.78% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiYuu, revert_long_vowels=False, revert_yotsugana=False | 0.95% | 3.79% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=YuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.80% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=YuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.79% | 3.82% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiYuuBase, revert_long_vowels=True, revert_yotsugana=True | - | 0.76% |
+| pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiYuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.78% |
 | haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
 | haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.94% | 3.73% |
 | haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.77% |
