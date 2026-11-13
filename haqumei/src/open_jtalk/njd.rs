@@ -255,11 +255,19 @@ fn is_special_mora(mora: &str) -> bool {
     matches!(mora, "ー" | "ン" | "ッ")
 }
 
+#[derive(Default)]
+pub(crate) struct RawContext<'a> {
+    pub(super) protected: &'a [bool],
+    // 空白などを挟んで前の形態素に接していない特徴量の添字。
+    pub(super) gaps: &'a [usize],
+    pub(super) edited: &'a [usize],
+}
+
 /// MeCab の特徴量から、発音・数詞・アクセントを順に求める。
 pub(crate) fn run_frontend(
     raw: &[&str],
     modify_numeral_reading: bool,
-    protected_raw: &[bool],
+    context: RawContext<'_>,
     apply_unvoicing: bool,
     split_prefixes: bool,
     split_fillers: bool,
@@ -275,6 +283,8 @@ pub(crate) fn run_frontend(
     let mut has_roman = false;
     let mut has_expanded_surface = false;
     let mut protected_nodes = Vec::new();
+    let mut gaps = Vec::new();
+    let mut edited = Vec::new();
 
     for (i, feature) in raw.iter().enumerate() {
         let mut fields = ["*"; 13];
@@ -282,7 +292,11 @@ pub(crate) fn run_frontend(
             *field = value;
         }
 
-        let is_protected = protected_raw.get(i).copied().unwrap_or(false);
+        let is_protected = context.protected.get(i).copied().unwrap_or(false);
+        if context.gaps.binary_search(&i).is_ok() {
+            gaps.push(nodes.len());
+        }
+        let start = nodes.len();
 
         if fields[1..3] == ["名詞", "数"]
             && matches!(fields[3], "番号位" | "番号桁" | "番号丸")
@@ -344,8 +358,12 @@ pub(crate) fn run_frontend(
             entry @ WordEntry::Multiple(_) => nodes.extend(NJDNode::load(fields[0], &entry)),
         }
         protected_nodes.resize(nodes.len(), is_protected);
+        if context.edited.binary_search(&i).is_ok() {
+            edited.extend(start..nodes.len());
+        }
     }
     if modify_context_reading {
+        crate::postprocess::prepare_context_ha(&mut nodes, &mut protected_nodes, &gaps, &edited);
         crate::postprocess::prepare_context_segments(&mut nodes, &mut protected_nodes);
     }
     number::retain_number_spaces(&mut nodes, &mut protected_nodes);
@@ -685,7 +703,9 @@ mod nul_tests {
     #[test]
     fn nul_in_surface_and_original_form_is_not_a_terminator() {
         let raw = ["語\0尾,名詞,一般,*,*,*,*,原\0形,ゴ,ゴ,1/1,*,0"];
-        let features = super::run_frontend(&raw, false, &[], true, false, false, false).unwrap();
+        let features =
+            super::run_frontend(&raw, false, Default::default(), true, false, false, false)
+                .unwrap();
         assert_eq!(features[0].string, "語\0尾");
         assert_eq!(features[0].orig, "原\0形");
         let njd = super::features_to_njd(&features).unwrap();

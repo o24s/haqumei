@@ -234,8 +234,16 @@ impl OpenJTalk {
             return Ok(Vec::new());
         }
 
-        let mecab_features = self.run_mecab(text)?;
-        self.run_njd_from_mecab_with_numeral_reading(&mecab_features, modify_numeral_reading)
+        let (features, gaps) = self.run_mecab_features(text, self.modify_body_reading)?;
+        let raw: Vec<_> = features.iter().map(String::as_str).collect();
+        self.run_njd(
+            &raw,
+            modify_numeral_reading,
+            njd::RawContext {
+                gaps: &gaps,
+                ..Default::default()
+            },
+        )
     }
 
     /// OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -819,13 +827,26 @@ impl OpenJTalk {
     /// MeCab解析を実行し、feature のリストを返します。
     /// 数字の区切りになる空白は残し、それ以外の空白は除きます。
     pub fn run_mecab(&mut self, text: &str) -> Result<Vec<String>, HaqumeiError> {
+        self.run_mecab_features(text, false)
+            .map(|(features, _)| features)
+    }
+
+    fn run_mecab_features(
+        &mut self,
+        text: &str,
+        track_gaps: bool,
+    ) -> Result<(Vec<String>, Vec<usize>), HaqumeiError> {
         self.ensure_dictionary_is_latest()?;
 
         let normalized = self.text2mecab_string(text)?;
+        // NJD の文脈判定は文字の隣接を見ます。空白は特徴量の列に戻さず、位置を渡します。
+        let track_gaps = track_gaps && normalized.contains('は');
         let analysis = self
             .mecab
             .analyze(&normalized, self.resolve_kanji_variants)?;
         let mut features = Vec::with_capacity(analysis.best_path.len());
+        let mut gaps = Vec::new();
+        let mut previous_end = 0;
         let mut previous_numeric = false;
         let mut pending_space = None;
         for &index in &analysis.best_path {
@@ -847,6 +868,10 @@ impl OpenJTalk {
                     space.feature
                 ));
             }
+            if track_gaps && previous_end < node.byte_span.start {
+                gaps.push(features.len());
+            }
+            previous_end = node.byte_span.end;
             previous_numeric = numeric;
             // 未知記号と一語にまとめられた「！」「？」は、NJDで読点に変わる。
             // 詳細解析と同じ記号の素性に分け、疑問・感嘆の区別を保つ。
@@ -867,7 +892,7 @@ impl OpenJTalk {
                 features.push(format!("{},{}", surface, node.feature));
             }
         }
-        Ok(features)
+        Ok((features, gaps))
     }
 
     /// MeCab解析を実行し、詳細な形態素情報を返します。
@@ -974,24 +999,21 @@ impl OpenJTalk {
         I: IntoIterator,
         I::Item: AsRef<str> + 'a,
     {
-        self.run_njd_from_mecab_with_numeral_reading(mecab_features, false)
-    }
-
-    pub(crate) fn run_njd_from_mecab_with_numeral_reading<'a, I>(
-        &mut self,
-        mecab_features: I,
-        modify_numeral_reading: bool,
-    ) -> Result<Vec<NjdFeature>, HaqumeiError>
-    where
-        I: IntoIterator,
-        I::Item: AsRef<str> + 'a,
-    {
         let raw: Vec<_> = mecab_features.into_iter().collect();
         let borrowed: Vec<&str> = raw.iter().map(AsRef::as_ref).collect();
+        self.run_njd(&borrowed, false, njd::RawContext::default())
+    }
+
+    fn run_njd(
+        &self,
+        features: &[&str],
+        modify_numeral_reading: bool,
+        context: njd::RawContext<'_>,
+    ) -> Result<Vec<NjdFeature>, HaqumeiError> {
         njd::run_frontend(
-            &borrowed,
+            features,
             modify_numeral_reading,
-            &[],
+            context,
             !self.defer_unvoicing,
             self.split_prefix_accent_phrase,
             self.split_filler_accent_phrase,
@@ -1026,14 +1048,28 @@ impl OpenJTalk {
                 )
             })
             .unzip();
-        njd::run_frontend(
+        let mut gaps = Vec::new();
+        let mut edited_inputs = Vec::new();
+        if self.modify_body_reading {
+            gaps.extend(morphs.windows(2).enumerate().filter_map(|(i, pair)| {
+                (pair[0].char_span.end != pair[1].char_span.start).then_some(i + 1)
+            }));
+            edited_inputs.extend(morphs.iter().enumerate().filter_map(|(i, morph)| {
+                let at = edited.partition_point(|range| range.end <= morph.char_span.start);
+                edited
+                    .get(at)
+                    .is_some_and(|range| range.start < morph.char_span.end)
+                    .then_some(i)
+            }));
+        }
+        self.run_njd(
             &raw,
             modify_numeral_reading,
-            &protected,
-            !self.defer_unvoicing,
-            self.split_prefix_accent_phrase,
-            self.split_filler_accent_phrase,
-            self.modify_body_reading,
+            njd::RawContext {
+                protected: &protected,
+                gaps: &gaps,
+                edited: &edited_inputs,
+            },
         )
     }
 

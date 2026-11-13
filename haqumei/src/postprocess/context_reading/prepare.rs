@@ -5,9 +5,9 @@ use std::{ops::Range, sync::LazyLock};
 use haqumei_jpreprocess_core::{
     accent_rule::{AccentType, ChainRule, ChainRules},
     cform::CForm,
-    ctype::CType,
-    pos::{Meishi, POS, Setsubi},
-    pronunciation::Pronunciation,
+    ctype::{CType, Special},
+    pos::{Fukushi, Joshi, KakuJoshi, Kigou, KoyuMeishi, Meishi, POS, Setsubi},
+    pronunciation::{MoraEnum, Pronunciation},
     word_details::WordDetails,
 };
 use haqumei_jpreprocess_njd::NJDNode;
@@ -165,6 +165,746 @@ fn apply_rules(nodes: &mut Vec<NJDNode>, protected: &mut Vec<bool>, stage: Stage
 
 fn kata_suffix_candidate(node: &NJDNode) -> bool {
     node.get_string() == "方" && node.get_read() == Some("ホウ")
+}
+
+pub(crate) fn prepare_context_ha(
+    nodes: &mut Vec<NJDNode>,
+    protected: &mut Vec<bool>,
+    gaps: &[usize],
+    edited: &[usize],
+) {
+    const BREATH: NodeSpec = NodeSpec::new(
+        "はー",
+        POS::Fukushi(Fukushi::General),
+        "ハア",
+        "ハー",
+        1,
+        None,
+    );
+    const SIGH: NodeSpec = NodeSpec::new(
+        "はー",
+        POS::Kandoushi,
+        "ハア",
+        "ハー",
+        1,
+        Some(AccentType::C3),
+    );
+    const PANTING: NodeSpec = NodeSpec::new(
+        "はーはー",
+        POS::Fukushi(Fukushi::General),
+        "ハアハア",
+        "ハーハー",
+        1,
+        None,
+    );
+    const STUTTER: NodeSpec = NodeSpec::new("は", POS::Filler, "ハ", "ハ", 1, None);
+    const TOPIC: &str =
+        "は,助詞,係助詞,*,*,*,*,は,ハ,ワ,0/1,名詞%F1/動詞%F2@0/形容詞%F2@0/助詞%F2@0";
+    const LETTER: NodeSpec = NodeSpec::new(
+        "は",
+        POS::Meishi(Meishi::General),
+        "ハ",
+        "ハ",
+        1,
+        Some(AccentType::C3),
+    );
+
+    // 空白と編集箇所の添字は置換前の形態素列を指すため、後ろから調べる。
+    let mut i = nodes.len();
+    while i > 0 {
+        i -= 1;
+        if let Some(laugh) = 笑い声の範囲(nodes, i, gaps)
+            && ha_context_available(protected, gaps, edited, laugh.context, laugh.continuous)
+        {
+            let surface: String = nodes[laugh.replace.clone()]
+                .iter()
+                .map(NJDNode::get_string)
+                .collect();
+            let spoken = if laugh.restore_topic {
+                surface.strip_prefix('は').unwrap()
+            } else {
+                &surface
+            };
+            let spoken = if laugh.split_quote {
+                spoken.strip_suffix("っと").unwrap()
+            } else {
+                spoken
+            };
+            let reading = spoken.replace('は', "ハ").replace('っ', "ッ");
+            let node = NJDNode::from_details(
+                spoken.to_owned(),
+                WordDetails {
+                    pos: POS::Filler,
+                    orig: Some(spoken.to_owned()),
+                    pron: Pronunciation::parse(&reading, 0).unwrap(),
+                    read: Some(reading),
+                    ..WordDetails::default()
+                },
+            );
+            i = laugh.replace.start;
+            let topic = laugh.restore_topic.then(|| NJDNode::new_single(TOPIC));
+            let quote = laugh.split_quote.then(|| {
+                NJDNode::new_single(
+                    "っと,助詞,格助詞,引用,*,*,*,っと,ット,ット,2/2,名詞%F1/動詞%F2@0/形容詞%F1",
+                )
+            });
+            let replacement = topic.into_iter().chain([node]).chain(quote);
+            nodes.splice(laugh.replace.clone(), replacement);
+            protected.splice(
+                laugh.replace,
+                std::iter::repeat_n(
+                    false,
+                    1 + usize::from(laugh.restore_topic) + usize::from(laugh.split_quote),
+                ),
+            );
+            continue;
+        }
+        let before = &nodes[..i];
+        let after = &nodes[i..];
+        let (count, spec, context, continuous) = match nodes[i].get_string() {
+            "はぁ" if 係助詞のはぁ(before, after) => {
+                if !ha_context_available(protected, gaps, edited, i - 1..i + 3, i - 1..i + 3) {
+                    continue;
+                }
+                nodes[i] = NJDNode::new_single(
+                    "はぁ,助詞,係助詞,*,*,*,*,は,ハァ,ワー,0/2,名詞%F1/動詞%F2@0/形容詞%F2@0/助詞%F2@0",
+                );
+                continue;
+            }
+            "は" if 係助詞のは(&nodes[i]) => {
+                if let Some(context) = 息を表すはー(before, after) {
+                    (2, &BREATH, context.clone(), i..context.end)
+                } else if let Some(context) = 息切れの反復(before, after) {
+                    if ha_context_available(
+                        protected,
+                        gaps,
+                        edited,
+                        context.clone(),
+                        context.clone(),
+                    ) {
+                        let first = context.start;
+                        let comma = nodes[first + 2].clone();
+                        nodes.splice(first..i + 2, [SIGH.node(), comma, SIGH.node()]);
+                        protected.splice(first..i + 2, [false; 3]);
+                        i = first;
+                    }
+                    continue;
+                } else if 反復するはー(after) {
+                    (4, &PANTING, i..i + 5, i..i + 5)
+                } else if let Some(context) = 独立したはー(before, after) {
+                    // 開き括弧や句点の後に空白があっても発話は始まる。「は」と「ー」は隣接が必要。
+                    (2, &SIGH, context, i..i + 2)
+                } else if let Some(context) = 言い直しのは(before, after) {
+                    (1, &STUTTER, context, i..i + 3)
+                } else if let Some(context) = 字としてのは(before, after) {
+                    (1, &LETTER, context, i - 1..i + 2)
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+        if ha_context_available(protected, gaps, edited, context, continuous) {
+            nodes[i] = spec.node();
+            nodes.drain(i + 1..i + count);
+            protected.drain(i + 1..i + count);
+        }
+    }
+}
+
+fn ha_context_available(
+    protected: &[bool],
+    gaps: &[usize],
+    edited: &[usize],
+    context: Range<usize>,
+    continuous: Range<usize>,
+) -> bool {
+    !protected[context.clone()].iter().any(|&value| value)
+        && !edited
+            .get(edited.partition_point(|&i| i < context.start))
+            .is_some_and(|&i| i < context.end)
+        && !gaps
+            .get(gaps.partition_point(|&i| i <= continuous.start))
+            .is_some_and(|&i| i < continuous.end)
+}
+
+fn 係助詞のは(node: &NJDNode) -> bool {
+    node.get_string() == "は"
+        && matches!(node.get_pos(), POS::Joshi(Joshi::KakariJoshi))
+        && node.get_pron().mora_matches(MoraEnum::Wa)
+}
+
+fn 単独の長音(node: &NJDNode) -> bool {
+    node.get_string() == "ー"
+        && (node.get_pron().is_empty() || node.get_pron().mora_matches(MoraEnum::Long))
+}
+
+fn 係助詞のはぁ(before: &[NJDNode], after: &[NJDNode]) -> bool {
+    let ([.., topic], [ha, comma, next, rest @ ..]) = (before, after) else {
+        return false;
+    };
+    // 「がはぁ」の「はぁ」は係助詞にならない。「と」で閉じる発話では感動詞の読みを残す。
+    matches!(ha.get_pos(), POS::Kandoushi)
+        && 係助詞が付く語(topic)
+        // 副詞の分類は「は」の接続可否を表さないため、取り立て用法のある語に限定する。
+        && (!matches!(topic.get_pos(), POS::Fukushi(_))
+            || crate::data::HA_TOPIC_ADVERBS.contains(topic.get_string()))
+        && comma.get_string() == "、"
+        && matches!(
+            next.get_pos(),
+            POS::Meishi(_)
+                | POS::Fukushi(_)
+                | POS::Doushi(_)
+                | POS::Keiyoushi(_)
+                | POS::Rentaishi
+                | POS::Kandoushi
+        )
+        && !matches!(next.get_string(), "はぁ" | "はあ" | "はっ")
+        && !発話を閉じる引用助詞(rest)
+}
+
+fn 発話を閉じる引用助詞(nodes: &[NJDNode]) -> bool {
+    let mut rest = nodes.iter();
+    for node in rest.by_ref() {
+        match node.get_string() {
+            "。" | "」" | "』" => return false,
+            // 「疲れた！と」の感嘆符は引用に含まれる。直後の引用助詞まで確かめる。
+            "！" | "？" => {
+                return rest
+                    .find(|node| !空白(node) && !matches!(node.get_string(), "！" | "？"))
+                    .is_some_and(引用のと);
+            }
+            _ if 引用のと(node) => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn 係助詞が付く語(node: &NJDNode) -> bool {
+    matches!(node.get_pos(), POS::Meishi(_) | POS::Fukushi(_))
+        || matches!(
+            node.get_pos(),
+            POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General) | Joshi::FukuJoshi)
+        ) && matches!(
+            node.get_string(),
+            "に" | "で" | "へ" | "と" | "から" | "まで" | "より"
+        )
+}
+
+fn 引用のと(node: &NJDNode) -> bool {
+    node.get_string() == "と"
+        && matches!(
+            node.get_pos(),
+            POS::Joshi(Joshi::KakuJoshi(KakuJoshi::Quote))
+        )
+}
+
+// 三点リーダーは名詞の後にも置けるので、直前の感動詞か文の境界まで確かめる。
+fn 発話の先頭(before: &[NJDNode]) -> Option<usize> {
+    let end = before
+        .iter()
+        .rposition(|node| !空白(node))
+        .map_or(0, |i| i + 1);
+    let start = before[..end]
+        .iter()
+        .rposition(|node| !matches!(node.get_string(), "…" | "‥") && !空白(node));
+    let Some(start) = start else { return Some(0) };
+    let boundary = &before[start];
+    if matches!(boundary.get_string(), "。" | "？" | "！")
+        || matches!(boundary.get_pos(), POS::Kigou(Kigou::KakkoOpen))
+        || (start + 1 < end && matches!(boundary.get_pos(), POS::Kandoushi))
+    {
+        Some(start)
+    } else if boundary.get_string() == "、"
+        && let Some(prior) = before[..start].iter().rposition(|node| !空白(node))
+        && matches!(before[prior].get_pos(), POS::Kandoushi)
+    {
+        Some(prior)
+    } else {
+        None
+    }
+}
+
+fn 独立したはー(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usize>> {
+    let [_, long, rest @ ..] = after else {
+        return None;
+    };
+    let boundary = rest.iter().enumerate().find(|(_, node)| !空白(node));
+    if !単独の長音(long)
+        || !boundary.is_none_or(|(_, node)| {
+            matches!(node.get_pos(), POS::Kigou(Kigou::KakkoClose))
+                || matches!(node.get_string(), "、" | "。" | "！" | "？" | "…" | "‥")
+        })
+    {
+        return None;
+    }
+    let end = boundary.map_or(after.len(), |(offset, _)| offset + 3);
+    Some(発話の先頭(before)?..before.len() + end)
+}
+
+fn 空白(node: &NJDNode) -> bool {
+    matches!(node.get_pos(), POS::Kigou(Kigou::Space))
+}
+
+fn 息切れ(nodes: &[NJDNode]) -> bool {
+    matches!(nodes, [comma, breath, subject, verb, ..]
+        if comma.get_string() == "、" && breath.get_string() == "息"
+            && subject.get_string() == "が"
+            && matches!(verb.get_orig(), Some("切れる" | "上がる" | "あがる" | "続く")))
+}
+
+fn 反復するはー(after: &[NJDNode]) -> bool {
+    matches!(after, [_, long, repeat, second_long, verb, ..]
+        if 単独の長音(long)
+            && 係助詞のは(repeat)
+            && 単独の長音(second_long)
+            && matches!(verb.get_orig(), Some("する" | "言う" | "いう" | "うなる")))
+}
+
+fn 息切れの反復(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usize>> {
+    let [_, long, rest @ ..] = after else {
+        return None;
+    };
+    let [.., first, first_long, comma] = before else {
+        return None;
+    };
+    // 読点で区切った反復には、息切れを述べる文が続くことを確かめる。
+    (単独の長音(long)
+        && 係助詞のは(first)
+        && 単独の長音(first_long)
+        && comma.get_string() == "、"
+        && 息切れ(rest))
+    .then(|| before.len() - 3..before.len() + 6)
+}
+
+fn 言い直しのは(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usize>> {
+    let [_, comma, interjection, rest @ ..] = after else {
+        return None;
+    };
+    if comma.get_string() != "、"
+        || !matches!(interjection.get_pos(), POS::Kandoushi)
+        || !interjection
+            .get_pron()
+            .moras()
+            .first()
+            .is_some_and(|mora| mora.mora_enum == MoraEnum::Ha)
+    {
+        return None;
+    }
+    let i = before.len();
+    let mut following = rest.iter().enumerate().filter(|(_, node)| !空白(node));
+    let next = following.next();
+    let end = next.map_or(after.len(), |(at, _)| at + 4);
+    let marked = next.is_some_and(|(_, node)| matches!(node.get_string(), "！" | "？" | "…" | "‥"));
+    let following = following.next();
+    if interjection.get_string() == "はい"
+        && next.is_some_and(|(_, node)| node.get_string() == "、")
+        && following.is_some_and(|(_, node)| node.get_string() == "いいえ")
+    {
+        return None;
+    }
+    if let Some(start) = 発話の先頭(before)
+        && (marked
+            || next.is_none_or(|(_, node)| {
+                matches!(node.get_string(), "、" | "。")
+                    || matches!(node.get_pos(), POS::Kigou(Kigou::KakkoClose))
+            }))
+    {
+        // 感動詞の直後に助詞が続くときは、その感動詞を語として取り上げた文にもなる。
+        let after_interjection = rest.iter().find(|node| {
+            !空白(node) && !matches!(node.get_string(), "、" | "！" | "？" | "…" | "‥")
+        });
+        if after_interjection.is_some_and(|node| matches!(node.get_pos(), POS::Joshi(_)))
+            && before
+                .get(start)
+                .is_some_and(|node| matches!(node.get_pos(), POS::Kandoushi))
+        {
+            return None;
+        }
+        // 発話頭で感動詞が独立しているときは、「は」を感動詞の語頭の反復として読む。
+        let end = if next.is_some_and(|(_, node)| node.get_string() == "、") {
+            following.map_or(end, |(at, _)| at + 4)
+        } else {
+            end
+        };
+        return Some(start..i + end);
+    }
+    let [.., address, comma] = before else {
+        return None;
+    };
+    if !marked
+        || comma.get_string() != "、"
+        || following.is_some_and(|(_, node)| matches!(node.get_pos(), POS::Joshi(_)))
+    {
+        return None;
+    }
+    let address_start = match address.get_pos() {
+        POS::Meishi(Meishi::General | Meishi::KoyuMeishi(KoyuMeishi::Person(_))) => i - 2,
+        POS::Meishi(Meishi::Setsubi(Setsubi::Person))
+            if i >= 3 && matches!(before[i - 3].get_pos(), POS::Meishi(_)) =>
+        {
+            i - 3
+        }
+        _ => return None,
+    };
+    let start = 発話の先頭(&before[..address_start])?;
+    Some(start..i + following.map_or(end, |(at, _)| at + 4))
+}
+
+fn 助詞(node: &NJDNode, surface: &str) -> bool {
+    node.get_string() == surface && matches!(node.get_pos(), POS::Joshi(_))
+}
+
+fn 引用先の述語(nodes: &[NJDNode]) -> usize {
+    let start = 副詞句の後(nodes);
+    if let [subject, particle, rest @ ..] = &nodes[start..]
+        && matches!(subject.get_pos(), POS::Meishi(_))
+        && (係助詞のは(particle)
+            || particle.get_string() == "が"
+                && matches!(
+                    particle.get_pos(),
+                    POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General))
+                ))
+    {
+        return start + 2 + 副詞句の後(rest);
+    }
+    start
+}
+
+fn 副詞句の後(nodes: &[NJDNode]) -> usize {
+    let mut end = 0;
+    while let Some(node) = nodes.get(end) {
+        if 空白(node)
+            || matches!(node.get_pos(), POS::Fukushi(_))
+            || *node.get_cform() == CForm::RenyouConjunctionTe
+                && matches!(node.get_pos(), POS::Keiyoushi(_))
+        {
+            end += 1;
+            continue;
+        }
+        let noun = end + usize::from(matches!(node.get_pos(), POS::Keiyoushi(_) | POS::Rentaishi));
+        let [head, particle, ..] = &nodes[noun..] else {
+            break;
+        };
+        if matches!(head.get_pos(), POS::Meishi(Meishi::General)) && 助詞(particle, "で")
+            || matches!(head.get_pos(), POS::Meishi(Meishi::KeiyoudoushiGokan))
+                && 助詞(particle, "に")
+        {
+            end = noun + 2;
+        } else {
+            break;
+        }
+    }
+    end
+}
+
+fn 笑い声を構成するは(node: &NJDNode, last: bool) -> bool {
+    if 係助詞のは(node) {
+        return true;
+    }
+    let surface = node.get_string();
+    if !surface.starts_with('は') {
+        return false;
+    }
+    match node.get_pos() {
+        POS::Filler => {
+            let repeated = if last {
+                surface.strip_suffix('っ').unwrap_or(surface)
+            } else {
+                surface
+            };
+            repeated.chars().all(|ch| ch == 'は')
+        }
+        POS::Meishi(Meishi::General) => surface == "はは" && node.get_read() == Some("ハハ"),
+        POS::Kandoushi => last && surface == "はっ",
+        _ => false,
+    }
+}
+
+struct LaughterMatch {
+    replace: Range<usize>,
+    context: Range<usize>,
+    continuous: Range<usize>,
+    restore_topic: bool,
+    split_quote: bool,
+}
+
+fn 笑い声の範囲(nodes: &[NJDNode], end: usize, gaps: &[usize]) -> Option<LaughterMatch> {
+    if !笑い声を構成するは(&nodes[end], true) {
+        return None;
+    }
+    let quote_index = end
+        + 1
+        + nodes[end + 1..]
+            .iter()
+            .take_while(|node| 空白(node) || matches!(node.get_string(), "！" | "？" | "…" | "‥"))
+            .count();
+    let (closing, quote_index) = match nodes.get(quote_index)?.get_string() {
+        "」" | "』" => {
+            let opening = if nodes[quote_index].get_string() == "」" {
+                "「"
+            } else {
+                "『"
+            };
+            let after_close = quote_index + 1;
+            let spaces = nodes[after_close..]
+                .iter()
+                .take_while(|node| 空白(node))
+                .count();
+            (Some(opening), after_close + spaces)
+        }
+        _ => (None, quote_index),
+    };
+    let [quote, rest @ ..] = &nodes[quote_index..] else {
+        return None;
+    };
+    let quote_particle = matches!(
+        (quote.get_string(), quote.get_pos()),
+        (
+            "と" | "っと",
+            POS::Joshi(Joshi::KakuJoshi(KakuJoshi::Quote))
+        ) | ("って", POS::Joshi(Joshi::ShuJoshi))
+    );
+    let te_after_geminate = closing.is_none()
+        && quote_index == end + 1
+        && nodes[end].get_string().ends_with('っ')
+        && quote.get_string() == "て"
+        && matches!(quote.get_pos(), POS::Joshi(Joshi::SetsuzokuJoshi));
+    // 辞書が末尾の「は」と「っと」を副詞「はっと」にまとめることがある。
+    let fused_quote = closing.is_none()
+        && quote_index == end + 1
+        && !nodes[end].get_string().ends_with('っ')
+        && quote.get_string() == "はっと"
+        && matches!(quote.get_pos(), POS::Fukushi(_));
+    if !(quote_particle || te_after_geminate || fused_quote) {
+        return None;
+    }
+    let predicate = quote_index
+        + 1
+        + if closing.is_some() {
+            引用先の述語(rest)
+        } else {
+            副詞句の後(rest)
+        };
+    let verb = nodes.get(predicate)?;
+    let continuation = nodes[predicate + 1..]
+        .iter()
+        .position(|node| !空白(node))
+        .filter(|_| verb.is_renyou())
+        .map(|offset| predicate + 1 + offset);
+    if !matches!(verb.get_pos(), POS::Doushi(_))
+        || !matches!(verb.get_orig(), Some("笑う" | "笑い出す"))
+        || continuation.is_some_and(|at| !matches!(nodes[at].get_pos(), POS::Jodoushi))
+    {
+        return None;
+    }
+
+    let mut start = end;
+    while start > 0
+        && gaps.binary_search(&start).is_err()
+        && 笑い声を構成するは(&nodes[start - 1], false)
+    {
+        start -= 1;
+    }
+    // 笑い声の前の空白は文脈から除くが、笑い声に含めたり名詞との接続に使ったりしない。
+    let before_end = nodes[..start]
+        .iter()
+        .rposition(|node| !空白(node))
+        .map_or(0, |i| i + 1);
+    let adjacent = before_end == start && gaps.binary_search(&start).is_err();
+    let mut restore_topic = false;
+    let context_start = if let Some(opening) = closing {
+        let open = nodes[..start].iter().rposition(|node| !空白(node))?;
+        if nodes[open].get_string() != opening {
+            return None;
+        }
+        open
+    } else {
+        match &nodes[..before_end] {
+            [.., comma] if comma.get_string() == "、" => before_end - 1,
+            [.., prior] if 係助詞のは(prior) => before_end - 1,
+            [.., topic]
+                if adjacent
+                    && matches!(topic.get_pos(), POS::Meishi(_))
+                    && 係助詞のは(&nodes[start]) =>
+            {
+                // 「彼はははと笑った」では「彼」の直後に係助詞を残す。
+                start += 1;
+                start - 2
+            }
+            [.., topic]
+                if adjacent
+                    && matches!(
+                        topic.get_pos(),
+                        POS::Meishi(
+                            Meishi::Daimeishi(_)
+                                | Meishi::KoyuMeishi(KoyuMeishi::Person(_))
+                                | Meishi::Setsubi(Setsubi::Person)
+                        )
+                    )
+                    && matches!(nodes[start].get_pos(), POS::Filler) =>
+            {
+                restore_topic = true;
+                start - 1
+            }
+            before => 発話の先頭(before)?,
+        }
+    };
+    let laugh = nodes.get(start..end + 1)?;
+    let ha_count = usize::from(fused_quote)
+        + laugh
+            .iter()
+            .map(|node| node.get_string().chars().filter(|&ch| ch == 'は').count())
+            .sum::<usize>();
+    if ha_count < 2 + usize::from(restore_topic) || !(restore_topic || laugh.iter().any(係助詞のは))
+    {
+        return None;
+    }
+    let replace = start..end + 1 + usize::from(fused_quote);
+    Some(LaughterMatch {
+        continuous: if restore_topic {
+            context_start..replace.end
+        } else {
+            replace.clone()
+        },
+        replace,
+        context: context_start..continuation.unwrap_or(predicate) + 1,
+        restore_topic,
+        split_quote: fused_quote,
+    })
+}
+
+fn 字としてのは(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usize>> {
+    let i = before.len();
+    let ([.., opening], [_, closing, ..]) = (before, after) else {
+        return None;
+    };
+    if !matches!(
+        (opening.get_string(), closing.get_string()),
+        ("「", "」") | ("『", "』")
+    ) {
+        return None;
+    }
+    // 「助詞の『は』」や「五十音表の『は』」は、字を指す名詞句になる。
+    if let [.., noun, no, _] = before
+        && 助詞(no, "の")
+        && (matches!(noun.get_string(), "助詞" | "ひらがな" | "文字" | "五十音表")
+            || (noun.get_string() == "表" && i >= 4 && before[i - 4].get_string() == "五十音"))
+    {
+        let start = i - if noun.get_string() == "表" { 4 } else { 3 };
+        return Some(start..i + 2);
+    }
+    let [_, _, object, kana, de, verb, ..] = after else {
+        return None;
+    };
+    (助詞(object, "を")
+        && matches!(kana.get_string(), "ひらがな" | "平仮名")
+        && 助詞(de, "で")
+        && verb.get_orig() == Some("書く"))
+    .then(|| i - 1..i + 6)
+}
+
+fn 息を表すはー(before: &[NJDNode], nodes: &[NJDNode]) -> Option<Range<usize>> {
+    let [_, long, quote, breath, object, verb, rest @ ..] = nodes else {
+        return None;
+    };
+    let breath_phrase = 単独の長音(long)
+        && matches!(quote.get_string(), "って" | "っと")
+        && matches!(quote.get_pos(), POS::Joshi(_))
+        && breath.get_string() == "息"
+        && matches!(breath.get_pos(), POS::Meishi(_))
+        && object.get_string() == "を"
+        && matches!(object.get_pos(), POS::Joshi(Joshi::KakuJoshi(_)))
+        && matches!(verb.get_pos(), POS::Doushi(_))
+        && matches!(
+            verb.get_orig(),
+            Some(
+                "吐く"
+                    | "はく"
+                    | "吹く"
+                    | "ふく"
+                    | "吹きかける"
+                    | "吹き掛ける"
+                    | "ふきかける"
+                    | "吹き込む"
+                    | "ふきこむ"
+                    | "吹きつける"
+                    | "吹き付ける"
+                    | "ふきつける"
+                    | "吐き出す"
+                    | "はきだす"
+                    | "かける"
+                    | "掛ける"
+            )
+        );
+    if !breath_phrase {
+        return None;
+    }
+    let i = before.len();
+    let prior = before
+        .iter()
+        .rposition(|node| !matches!(node.get_pos(), POS::Kigou(Kigou::Space)));
+    let start = prior.unwrap_or(i);
+    // 係助詞が付かない位置では、呼吸の動作を否定しても音の読みは変わらない。
+    if prior.is_none_or(|at| !係助詞が付く語(&before[at])) {
+        return Some(start..i + 6);
+    }
+    // 係助詞にも読める位置では、息を吐く動作を述べる文の形を使う。
+    // 「息を吐く時間」のように名詞を修飾する場合は、既存の読みを残す。
+    let suffix = rest
+        .iter()
+        .take_while(|node| 空白(node) || affirmative_ending(node))
+        .count();
+    let suffix = match &rest[suffix..] {
+        [nominalizer, copula, ..]
+            if matches!(nominalizer.get_string(), "ん" | "の")
+                && matches!(nominalizer.get_pos(), POS::Meishi(Meishi::Hijiritsu(_)))
+                && matches!(
+                    copula.get_ctype(),
+                    CType::Special(Special::Desu | Special::Da)
+                )
+                && *copula.get_cform() == CForm::Basic =>
+        {
+            suffix + 2
+        }
+        _ => suffix,
+    };
+    let after_auxiliaries = rest
+        .iter()
+        .enumerate()
+        .skip(suffix)
+        .find(|(_, node)| !空白(node));
+    let end = after_auxiliaries.map_or(i + nodes.len(), |(offset, _)| i + 7 + offset);
+    if let [negative, particle, request, ..] = rest
+        && matches!(negative.get_ctype(), CType::Special(Special::Nai))
+        && *negative.get_cform() == CForm::RenyouConjunctionDe
+        && 助詞(particle, "で")
+        && matches!(request.get_pos(), POS::Doushi(_))
+        && matches!(
+            request.get_cform(),
+            CForm::ImperativeE | CForm::ImperativeI | CForm::ImperativeRo | CForm::ImperativeYo
+        )
+    {
+        return Some(start..i + 9);
+    }
+    after_auxiliaries
+        .is_none_or(|(_, next)| {
+            matches!(next.get_pos(), POS::Kigou(Kigou::Kuten | Kigou::KakkoClose))
+                || matches!(next.get_string(), "、" | "！" | "？")
+                || matches!(next.get_pos(), POS::Joshi(Joshi::ShuJoshi))
+                || matches!(next.get_pos(), POS::Meishi(_)) && next.get_string() == "音"
+        })
+        .then_some(start..end)
+}
+
+fn affirmative_ending(node: &NJDNode) -> bool {
+    matches!(node.get_pos(), POS::Jodoushi)
+        && matches!(
+            node.get_ctype(),
+            CType::Special(Special::Ta | Special::Masu)
+        )
+        && *node.get_cform() == CForm::Basic
 }
 
 pub(super) fn 住所の字(nodes: &[NJDNode], i: usize) -> Option<RewriteMatch> {

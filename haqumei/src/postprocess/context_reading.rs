@@ -57,7 +57,7 @@ use crate::utils::count_mora;
 
 mod prepare;
 use prepare::{NodeSpec, RewriteRule, Stage};
-pub(crate) use prepare::{prepare_context_segments, prepare_context_words};
+pub(crate) use prepare::{prepare_context_ha, prepare_context_segments, prepare_context_words};
 
 // 品詞と分割は句の結合結果を変えるため、PREPARE_RULES は結合前に実行する。
 // RULES は word_accent を持つ規則を結合前に、読みだけを変える規則を結合後に実行する。

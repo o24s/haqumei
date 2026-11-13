@@ -1,6 +1,6 @@
 mod context_reading;
 pub(crate) use context_reading::{
-    prepare_context_segments, prepare_context_words, prepare_word_readings,
+    prepare_context_ha, prepare_context_segments, prepare_context_words, prepare_word_readings,
 };
 #[cfg(feature = "inference")]
 mod english;

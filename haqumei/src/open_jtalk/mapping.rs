@@ -1021,28 +1021,19 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
         // 表層形と文字数が保たれている場合だけ、NJD の各語に元の文字位置を割り当てる。
         if word.len() < morph.surface.len()
             && morph.surface.starts_with(word)
-            && morph.surface.chars().count() == morph.char_span.len()
+            && let Some((feature_count, morph_count)) =
+                match_split_surfaces(&features[idx..], &morphs[morph_idx..])
         {
-            let mut end = idx;
-            let mut joined = String::new();
-            while let Some(part) = features.get(end) {
-                joined.push_str(&part.string);
-                end += 1;
-                if !morph.surface.starts_with(&joined) || joined == morph.surface {
-                    break;
-                }
+            let end = idx + feature_count;
+            let mut start = morph.char_span.start;
+            for (feature, span) in features[idx..end].iter().zip(&mut spans[idx..end]) {
+                let end = start + feature.string.chars().count();
+                *span = start..end;
+                start = end;
             }
-            if joined == morph.surface {
-                let mut start = morph.char_span.start;
-                for (feature, span) in features[idx..end].iter().zip(&mut spans[idx..end]) {
-                    let end = start + feature.string.chars().count();
-                    *span = start..end;
-                    start = end;
-                }
-                idx = end;
-                morph_idx += 1;
-                continue;
-            }
+            idx = end;
+            morph_idx += morph_count;
+            continue;
         }
 
         let start = morph.char_span.start;
@@ -1084,6 +1075,37 @@ pub fn njd_char_spans(features: &[NjdFeature], morphs: &[MecabMorph]) -> Vec<Ran
     }
 
     spans
+}
+
+fn match_split_surfaces(features: &[NjdFeature], morphs: &[MecabMorph]) -> Option<(usize, usize)> {
+    let mut njd = String::new();
+    let mut mecab = String::new();
+    let mut feature_count = 0;
+    let mut morph_count = 0;
+    let mut char_end = morphs.first()?.char_span.start;
+    loop {
+        if njd.len() < mecab.len() {
+            njd.push_str(&features.get(feature_count)?.string);
+            feature_count += 1;
+        } else {
+            let morph = morphs.get(morph_count)?;
+            if morph.is_ignored
+                || morph.char_span.start != char_end
+                || morph.surface.chars().count() != morph.char_span.len()
+            {
+                return None;
+            }
+            mecab.push_str(&morph.surface);
+            char_end = morph.char_span.end;
+            morph_count += 1;
+        }
+        if njd == mecab {
+            return Some((feature_count, morph_count));
+        }
+        if !njd.starts_with(&mecab) && !mecab.starts_with(&njd) {
+            return None;
+        }
+    }
 }
 
 impl OpenJTalk {

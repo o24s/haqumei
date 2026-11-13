@@ -871,15 +871,20 @@ impl Haqumei {
         let has_calendar = calendar::may_contain_date(&text);
         let has_identifier =
             self.options.resolve_number_identifiers && identifier::may_contain_identifier(&text);
-        let before_filter =
-            ((prepared.is_some() || roman.is_some() || has_calendar || has_identifier)
-                && self.morph_filter.is_some())
-            .then(|| morphs.clone());
-        if let Some(filter) = self.morph_filter.clone() {
+        let before_filter = if let Some(filter) = self.morph_filter.clone() {
             let normalized = self.open_jtalk.text2mecab_string(&text)?;
             let nodes = self.open_jtalk.analyze_lattice(&text)?;
+            let before = (prepared.is_some()
+                || roman.is_some()
+                || has_calendar
+                || has_identifier
+                || self.options.modify_context_reading)
+                .then(|| morphs.clone());
             filter(&normalized, &nodes, &mut morphs);
-        }
+            before
+        } else {
+            None
+        };
         let edited = before_filter
             .as_ref()
             .map(|before| kaomoji::edited_ranges(before, &morphs))

@@ -1,6 +1,594 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn elongated_ha_before_breath_predicates_has_its_own_accent_phrase() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, span, breath) in [
+        ("私はーって何度も言い直しながら自己紹介した", 1..3, false),
+        ("私、はーって息を吹きかけたんです", 2..4, true),
+        ("私はーって息を吹きかけたんです", 1..3, true),
+        ("私はーっと息をふきかけたんです", 1..3, true),
+        ("私ははーって息を吹きかけたんです", 2..4, true),
+        ("私はーって言い直してから息を吹きかけたんです", 1..3, false),
+        ("私はーって息を吐かずに言った", 1..3, false),
+        ("私はーって息を吐く暇もなく名乗った。", 1..3, false),
+        ("私はーって息を吐く時間もなく名乗った。", 1..3, false),
+        ("私はーっと息を吹きかけたことはない。", 1..3, false),
+        ("私はーっと息を吹きかけた時間は短かった。", 1..3, false),
+        ("窓に、はーっと息を吹きかけないでください。", 3..5, true),
+        ("窓にはーっと息を吹きかけないでください。", 2..4, true),
+        ("窓に、はーっと息を吹きかけちゃだめです。", 3..5, true),
+    ] {
+        let (pron, pos, accent, chain, phoneme) = if breath {
+            ("ハー", "副詞", 1, 0, "h")
+        } else {
+            ("ワー", "助詞", 0, 1, "w")
+        };
+        let features = engine.run_frontend(text).unwrap();
+        assert_eq!(
+            features,
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+        let mapping = engine.g2p_mapping_detailed(text).unwrap();
+        let word = mapping.iter().find(|word| word.char_span == span).unwrap();
+        assert_eq!(word.word, "はー", "{text}");
+        assert_eq!(word.pron, pron, "{text}");
+        assert_eq!(word.pos, pos, "{text}");
+        assert_eq!(word.mora_count, 2, "{text}");
+        assert_eq!(word.accent_nucleus, accent, "{text}");
+        assert_eq!(word.chain_flag, chain, "{text}");
+        assert_eq!(word.phonemes[0].as_str(), phoneme, "{text}");
+        assert_eq!(
+            engine.g2p_mapping(text).unwrap(),
+            engine.g2p_candidates(text).unwrap().candidates[0].words,
+            "{text}"
+        );
+        if text.starts_with("私はは") {
+            let particle = mapping
+                .iter()
+                .find(|word| word.char_span == (1..2))
+                .unwrap();
+            assert_eq!(particle.pron, "ワ");
+        }
+    }
+
+    let text = "私はーって息を吹きかけたんです";
+    let contiguous = engine.g2k(text).unwrap();
+    assert!(
+        engine
+            .g2k("私は　ーって息を吹きかけたんです")
+            .unwrap()
+            .starts_with("ワタシワ")
+    );
+    engine.options.protect_user_dict_readings = true;
+    engine.set_morph_filter(|_, _, morphs| {
+        if let Some(ha) = morphs.iter_mut().find(|morph| morph.surface == "は") {
+            ha.dictionary_index = 1;
+        }
+    });
+    assert!(engine.g2k(text).unwrap().starts_with("ワタシワーッテ"));
+    engine.clear_morph_filter();
+    assert_eq!(engine.g2k(text).unwrap(), contiguous);
+
+    engine.options.modify_context_reading = false;
+    assert!(engine.g2k(text).unwrap().starts_with("ワタシワーッテ"));
+}
+
+#[test]
+fn breath_reading_respects_space_and_explicit_morph_edits() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "私は ーって息を吹きかけたんです",
+        "私はー　って息を吹きかけたんです",
+        "私はーっと 息を吹きかけたんです",
+        "私はーって息を吐か　ずに言った",
+    ] {
+        assert!(
+            engine.g2k(text).unwrap().starts_with("ワタシワー"),
+            "{text}"
+        );
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+    let kana = engine.g2k("塀を十重 に囲んだ。").unwrap();
+    assert_eq!(
+        engine
+            .g2k("彼はコーヒーを飲み、塀を十重 に囲んだ。")
+            .unwrap(),
+        format!("カレワコーヒーヲノミ、{kana}")
+    );
+    let kana = engine.g2k("従 三位になったと告げた。").unwrap();
+    assert_eq!(
+        engine
+            .g2k("彼、はーって息をかけてから、従 三位になったと告げた。")
+            .unwrap(),
+        format!("カレ、ハーッテイキヲカケテカラ、{kana}")
+    );
+    engine.set_morph_filter(|_, _, morphs| {
+        if let Some(ha) = morphs.iter_mut().find(|morph| morph.surface == "は") {
+            ha.feature = "は,助詞,係助詞,*,*,*,*,は,ワ,ワ,0/1,*".to_owned();
+        }
+    });
+    for text in ["私はーって息を吹きかけた", "私はｰって息を吹きかけた"] {
+        assert!(engine.g2k(text).unwrap().starts_with("ワタシワーッテ"));
+        assert_eq!(
+            engine.g2p_mapping(text).unwrap(),
+            engine.g2p_candidates(text).unwrap().candidates[0].words
+        );
+    }
+}
+
+#[test]
+fn ha_reading_uses_topic_and_utterance_boundaries() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading) in [
+        (
+            "私はぁ、別に構わないけど。",
+            "ワタシワー、ベツニカマワナイケド。",
+        ),
+        ("先輩、はぁ、疲れました。", "センパイ、ハー、ツカレマシタ。"),
+        (
+            "彼がはぁ、もう無理だ、とため息をついた。",
+            "カレガハー、モームリダ、トタメイキヲツイタ。",
+        ),
+        (
+            "彼はぁ、うそだろ、と叫んだ。",
+            "カレハー、ウソダロ、トサケンダ。",
+        ),
+        (
+            "お前はぁ？何言ってるんだ。",
+            "オマエハー？ナニイッテルンダ。",
+        ),
+        (
+            "今日はー、いい天気ですね。",
+            "キョーワー、イイテンキデスネ。",
+        ),
+        ("はー……", "ハー……"),
+        ("「 はー、やっと着いた」", "「ハー、ヤットツイタ」"),
+        ("「は ー、やっと着いた」", "「ワー、ヤットツイタ」"),
+        ("うん …… はー、疲れた。", "ウン……ハー、ツカレタ。"),
+        ("うん 、はー、疲れた。", "ウン、ハー、ツカレタ。"),
+        ("うん、はー 、疲れた。", "ウン、ハー、ツカレタ。"),
+        ("「はー 」と息をついた。", "「ハー」トイキヲツイタ。"),
+        (
+            "彼はぁ、やっと終わったとため息をついた。",
+            "カレハー、ヤットオワッタトタメイキヲツイタ。",
+        ),
+        (
+            "えっ……はー、そういうことか。",
+            "エッ……ハー、ソーユウコトカ。",
+        ),
+        (
+            "あの人……はー、もう帰ったよ。",
+            "アノヒト……ワー、モーカエッタヨ。",
+        ),
+        (
+            "録音した答えは「私はー、賛成です」だった。",
+            "ロクオンシタコタエワ「ワタシワー、サンセーデス」ダッタ。",
+        ),
+        (
+            "舞台裏で息を吐いてから「はー、緊張した」とつぶやいた。",
+            "ブタイウラデイキヲハイテカラ「ハー、キンチョーシタ」トツブヤイタ。",
+        ),
+        (
+            "ちょっと待って。はー、はー、息が切れた。",
+            "チョットマッテ。ハー、ハー、イキガキレタ。",
+        ),
+        (
+            "辛いものを食べてはーはーする。",
+            "ツライモノヲタベテハーハースル。",
+        ),
+        (
+            "うちのははは駅で待っています。",
+            "ウチノハハワエキデマッテイマス。",
+        ),
+        (
+            "先輩、は、はい！すぐ行きます！",
+            "センパイ、ハ、ハイ！スグイキマス！",
+        ),
+        (
+            "部長、は、はい！分かりました！",
+            "ブチョー、ハ、ハイ！ワカリマシタ！",
+        ),
+        (
+            "田中さん、は、はい！分かりました！",
+            "タナカサン、ハ、ハイ！ワカリマシタ！",
+        ),
+        ("「は、はい」と答えた。", "「ハ、ハイ」トコタエタ。"),
+        ("は、はぁ", "ハ、ハー"),
+        (
+            "「は、はぁ、分かりました」と答えた。",
+            "「ハ、ハー、ワカリマシタ」トコタエタ。",
+        ),
+        ("「は、はあ」と返事をした。", "「ハ、ハー」トヘンジヲシタ。"),
+        (
+            "「は、はーい」と返事をした。",
+            "「ハ、ハーイ」トヘンジヲシタ。",
+        ),
+        ("先輩、は、はぁ……。", "センパイ、ハ、ハー……。"),
+        ("先輩は、はぁ……。", "センパイワ、ハー……。"),
+        ("は、はぁ、と答えた。", "ハ、ハー、トコタエタ。"),
+        (
+            "はい、は、はぁ、よりも明瞭に聞こえた。",
+            "ハイ、ワ、ハー、ヨリモメーリョーニキコエタ。",
+        ),
+        (
+            "はい、は、はぁ……よりも明瞭に聞こえた。",
+            "ハイ、ワ、ハー……ヨリモメーリョーニキコエタ。",
+        ),
+        (
+            "「は、はい」と彼は答えた。",
+            "「ハ、ハイ」トカレワコタエタ。",
+        ),
+        (
+            "「は、はい！」 と小さく答えた。",
+            "「ハ、ハイ！」トチーサクコタエタ。",
+        ),
+        ("「は、はい」", "「ハ、ハイ」"),
+        ("「は、はい、分かりました」", "「ハ、ハイ、ワカリマシタ」"),
+        (
+            "「は、はい、分かりました」と彼は言った。",
+            "「ハ、ハイ、ワカリマシタ」トカレワイッタ。",
+        ),
+        (
+            "「は、はい、分かりました」の部分を聞き直した。",
+            "「ハ、ハイ、ワカリマシタ」ノブブンヲキキナオシタ。",
+        ),
+        (
+            "「は、はい！分かりました」と彼は答えた。",
+            "「ハ、ハイ！ワカリマシタ」トカレワコタエタ。",
+        ),
+        (
+            "「は、はい」とすぐに返事した。",
+            "「ハ、ハイ」トスグニヘンジシタ。",
+        ),
+        (
+            "「は、はい、いいえ」を読み上げる。",
+            "「ワ、ハイ、イーエ」ヲヨミアゲル。",
+        ),
+        (
+            "先輩は、はい！すぐ行きます！",
+            "センパイワ、ハイ！スグイキマス！",
+        ),
+        (
+            "助詞の「は」は「わ」と発音する。",
+            "ジョシノ「ハ」ワ「ワ」トハツオンスル。",
+        ),
+        ("助詞の「は」", "ジョシノ「ハ」"),
+        ("ひらがなの「は」", "ヒラガナノ「ハ」"),
+        (
+            "太郎が 助詞の「は」について話した。",
+            "タローガジョシノ「ハ」ニツイテハナシタ。",
+        ),
+        (
+            "「は」を平仮名で書いてください。",
+            "「ハ」ヲヒラガナデカイテクダサイ。",
+        ),
+        (
+            "次の空欄は助詞です。答えは「は」と読んでください。",
+            "ツギノクーランワジョシデス。コタエワ「ワ」トヨンデクダサイ。",
+        ),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+        let frontend = engine.run_frontend(text).unwrap();
+        assert_eq!(
+            frontend,
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+        assert_eq!(
+            engine.g2p_mapping(text).unwrap(),
+            engine.g2p_candidates(text).unwrap().candidates[0].words,
+            "{text}"
+        );
+    }
+
+    let mapping = engine
+        .g2p_mapping_detailed("私はぁ、別に構わないけど。")
+        .unwrap();
+    let particle = mapping.iter().find(|word| word.word == "はぁ").unwrap();
+    assert_eq!(particle.pos, "助詞");
+    assert_eq!(particle.pos_group1, "係助詞");
+    assert_eq!(particle.char_span, 1..3);
+    assert_eq!(particle.mora_count, 2);
+    assert_eq!(particle.chain_flag, 1);
+    assert_eq!(particle.phonemes[0].as_str(), "w");
+
+    let mapping = engine
+        .g2p_mapping_detailed("「は、はぁ」と答えた。")
+        .unwrap();
+    let fragment = mapping
+        .iter()
+        .find(|word| word.char_span == (1..2))
+        .unwrap();
+    assert_eq!(fragment.phonemes[0].as_str(), "h");
+    let response = mapping
+        .iter()
+        .find(|word| word.char_span == (3..5))
+        .unwrap();
+    assert_eq!(response.phonemes[0].as_str(), "h");
+    assert_eq!(response.pos, "感動詞");
+}
+
+#[test]
+fn sigh_after_adverbs_keeps_its_reading() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "ああもうはぁ、疲れた。",
+        "おもわずはぁ、疲れた。",
+        "ついはぁ、疲れた。",
+        "あいにくはぁ、もう無理だ。",
+    ] {
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let sigh = words.iter().find(|word| word.word == "はぁ").unwrap();
+        assert_eq!(sigh.pron, "ハー", "{text}");
+        assert_eq!(sigh.pos, "感動詞", "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+    for text in [
+        "私はぁ、疲れた。",
+        "彼にはぁ、何も言わないで。",
+        "本来はぁ、ここで降りるんです。",
+    ] {
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let topic = words.iter().find(|word| word.word == "はぁ").unwrap();
+        assert_eq!(topic.pron, "ワー", "{text}");
+        assert_eq!(topic.pos, "助詞", "{text}");
+    }
+}
+
+#[test]
+fn quote_particles_after_exclamation_and_question_keep_sigh_reading() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, expected) in [
+        ("ときどきはぁ、疲れた！と息をついた。", "ハー"),
+        ("ときどきはぁ、疲れた、と息をついた。", "ハー"),
+        ("彼にはぁ、何だよ？ と聞き返した。", "ハー"),
+        ("彼にはぁ、何だよ！？と聞き返した。", "ハー"),
+        ("私はぁ、賛成です！「理由は後で話す」と付け加えた。", "ワー"),
+    ] {
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let ha = words.iter().find(|word| word.word == "はぁ").unwrap();
+        assert_eq!(ha.pron, expected, "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn topic_ha_after_adverbs_preserves_sigh_boundaries() {
+    let mut engine = Haqumei::new().unwrap();
+    for (left, right) in [
+        ("実際", "、予約が必要です。"),
+        ("元々", "、住宅だった。"),
+        ("少し", "、役に立ったかな。"),
+        ("ちょっと", "、反省してよ。"),
+        ("もう少し", "、待てます。"),
+        ("いつも", "、歩いて帰ります。"),
+        ("すぐに", "、決められません。"),
+        ("ゆっくり", "、歩けないんです。"),
+    ] {
+        for (separator, expected) in [("", "ワー"), (" ", "ハー"), ("　", "ハー"), ("、", "ハー")]
+        {
+            let text = format!("{left}{separator}はぁ{right}");
+            let start = left.chars().count() + separator.chars().count();
+            let words = engine.g2p_mapping_detailed(&text).unwrap();
+            let word = words
+                .iter()
+                .find(|w| w.char_span == (start..start + 2))
+                .unwrap();
+            assert_eq!(word.pron, expected, "{text}");
+            assert_eq!(
+                engine.run_frontend(&text).unwrap(),
+                engine.run_frontend_detailed(&text).unwrap().0,
+                "{text}"
+            );
+        }
+    }
+    for text in [
+        "ちょっとはぁ、何それ。",
+        "少しはぁ、息を吐いてみて。",
+        "ゆっくりはぁ、息を吐かないで。",
+    ] {
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let word = words.iter().find(|w| w.word == "はぁ").unwrap();
+        assert!(["ハー", "ワー"].contains(&word.pron.as_str()), "{text}");
+    }
+    let text = "少しはぁ、役に立ったかな。";
+    engine.options.protect_user_dict_readings = true;
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.surface == "はぁ") {
+            morph.dictionary_index = 1;
+        }
+    });
+    let words = engine.g2p_mapping_detailed(text).unwrap();
+    assert_eq!(
+        words.iter().find(|w| w.word == "はぁ").unwrap().pron,
+        "ハー"
+    );
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.surface == "はぁ") {
+            morph.feature = "はぁ,感動詞,*,*,*,*,*,はぁ,ヒー,ヒー,1/2,*".to_owned();
+        }
+    });
+    let words = engine.g2p_mapping_detailed(text).unwrap();
+    assert_eq!(
+        words.iter().find(|w| w.word == "はぁ").unwrap().pron,
+        "ヒー"
+    );
+}
+
+#[test]
+fn laughter_space_boundaries_agree_between_apis() {
+    let mut engine = Haqumei::new().unwrap();
+    for prefix in ["彼は", "それ見て、", "彼は、", "「"] {
+        for space in [" ", "　", "  "] {
+            for count in 2..8 {
+                let laugh = "は".repeat(count);
+                let close = if prefix == "「" { "」" } else { "" };
+                let text = format!("{prefix}{space}{laugh}{close}と笑った。");
+                let simple = engine.run_frontend(&text).unwrap();
+                let detailed = engine.run_frontend_detailed(&text).unwrap().0;
+                assert_eq!(simple, detailed, "{text}");
+                let start = prefix.chars().count() + space.chars().count();
+                let words = engine.g2p_mapping_detailed(&text).unwrap();
+                let word = words
+                    .iter()
+                    .find(|w| w.char_span == (start..start + count))
+                    .unwrap();
+                assert_eq!(word.pron, "ハ".repeat(count), "{text}");
+                if prefix.starts_with("彼は") {
+                    let topic = words.iter().find(|w| w.char_span == (1..2)).unwrap();
+                    assert_eq!(topic.pron, "ワ", "{text}");
+                }
+                assert_eq!(
+                    engine.g2p_mapping(&text).unwrap(),
+                    engine.g2p_candidates(&text).unwrap().candidates[0].words,
+                    "{text}"
+                );
+            }
+        }
+    }
+    for text in ["彼は はは はと笑った。", "彼 はははと笑った。"] {
+        let simple = engine.run_frontend(text).unwrap();
+        assert_eq!(
+            simple,
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+        engine.options.modify_context_reading = false;
+        assert_eq!(simple, engine.run_frontend(text).unwrap(), "{text}");
+        engine.options.modify_context_reading = true;
+    }
+    let text = "彼は はははと笑った。";
+    engine.options.protect_user_dict_readings = true;
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.char_span == (5..6)) {
+            morph.dictionary_index = 1;
+        }
+    });
+    let words = engine.g2p_mapping_detailed(text).unwrap();
+    assert_eq!(
+        words.iter().find(|w| w.char_span == (5..6)).unwrap().pron,
+        "ワ"
+    );
+    engine.clear_morph_filter();
+    engine.set_morph_filter(|_, _, morphs| {
+        for morph in morphs.iter_mut().filter(|m| m.char_span == (5..6)) {
+            morph.feature = "は,助詞,係助詞,*,*,*,*,は,ワ,ワ,0/1,*".to_owned();
+        }
+    });
+    let words = engine.g2p_mapping_detailed(text).unwrap();
+    assert_eq!(
+        words.iter().find(|w| w.char_span == (5..6)).unwrap().pron,
+        "ワ"
+    );
+}
+
+#[test]
+fn laughter_uses_quotes_and_the_following_verb() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading) in [
+        ("それ見てははって笑った。", "ソレミテハハッテワラッタ。"),
+        ("それ見て、ははと笑った。", "ソレミテ、ハハトワラッタ。"),
+        (
+            "それ見て、はははって笑った。",
+            "ソレミテ、ハハハッテワラッタ。",
+        ),
+        ("それ見てはははって笑った。", "ソレミテワハハッテワラッタ。"),
+        (
+            "それ見て、はははははははと笑った。",
+            "ソレミテ、ハハハハハハハトワラッタ。",
+        ),
+        ("彼は、はははっと笑った。", "カレワ、ハハハットワラッタ。"),
+        (
+            "彼女は「ははは」と笑った。",
+            "カノジョワ「ハハハ」トワラッタ。",
+        ),
+        ("「ははははっ！」と笑った。", "「ハハハハッ！」トワラッタ。"),
+        (
+            "「ははは」 と小声で笑った。",
+            "「ハハハ」トコゴエデワラッタ。",
+        ),
+        (
+            "彼は、少しはははっと笑ったものの、大笑いはしなかった。",
+            "カレワ、スコシワハハットワラッタモノノ、オーワライワシナカッタ。",
+        ),
+        (
+            "いつも見てはははっと笑って、また再生しては笑った。",
+            "イツモミテワハハットワラッテ、マタサイセーシテワワラッタ。",
+        ),
+        (
+            "録音の『母は』を「ははは」と笑いながら読んだ。",
+            "ロクオンノ『ハハワ』ヲ「ハハワ」トワライナガラヨンダ。",
+        ),
+        (
+            "録音の『母は』を「ははは」と笑って読んだ。",
+            "ロクオンノ『ハハワ』ヲ「ハハワ」トワラッテヨンダ。",
+        ),
+        ("「ははは　！」と笑った。", "「ハハハ！」トワラッタ。"),
+        (
+            "「ははは」と低い声で笑った。",
+            "「ハハハ」トヒクイコエデワラッタ。",
+        ),
+        (
+            "「ははは」と朗らかに笑った。",
+            "「ハハハ」トホガラカニワラッタ。",
+        ),
+        (
+            "「ははは」と答えてから笑った。",
+            "「ハハワ」トコタエテカラワラッタ。",
+        ),
+        ("彼はははと笑った。", "カレワハハトワラッタ。"),
+        ("彼はははっと笑った。", "カレワハハットワラッタ。"),
+        ("私はははって言いました。", "ワタシワハハッテイイマシタ。"),
+        (
+            "「ははは昔からよく笑う人」と書いた。",
+            "「ハハワムカシカラヨクワラウヒト」トカイタ。",
+        ),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+
+    for count in 2..10 {
+        for (particle, katakana) in [("と", "ト"), ("っと", "ット")] {
+            let laughter = "は".repeat(count);
+            let text = format!("彼は{laughter}{particle}笑った。");
+            assert_eq!(
+                engine.g2k(&text).unwrap(),
+                format!("カレワ{}{katakana}ワラッタ。", "ハ".repeat(count)),
+                "{text}"
+            );
+            let mapping = engine.g2p_mapping_detailed(&text).unwrap();
+            assert_eq!(mapping[1].char_span, 1..2, "{text}");
+            assert_eq!(mapping[1].pos, "助詞", "{text}");
+            assert_eq!(mapping[1].phonemes[0].as_str(), "w", "{text}");
+            assert_eq!(
+                engine.run_frontend(&text).unwrap(),
+                engine.run_frontend_detailed(&text).unwrap().0,
+                "{text}"
+            );
+        }
+    }
+}
+
+#[test]
 fn lexical_nouns_and_abstract_koumuri_keep_their_features() {
     check_context_readings(
         &[
