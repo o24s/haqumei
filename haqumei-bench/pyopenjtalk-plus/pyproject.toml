@@ -4,9 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "haqumei",
-    "pyopenjtalk-plus[onnxruntime]",
+    "pyopenjtalk-plus[onnxruntime,tsqyomi]==0.4.1.post10",
 ]
 
 [tool.uv.sources]
 haqumei = { git = "https://github.com/o24s/haqumei.git", subdirectory = "haqumei-python" }
-pyopenjtalk-plus = { git = "https://github.com/tsukumijima/pyopenjtalk-plus.git", branch = "master" }

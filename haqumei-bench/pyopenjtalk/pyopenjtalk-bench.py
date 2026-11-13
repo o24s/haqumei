@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import sys
 from contextlib import contextmanager
+from importlib.metadata import version
 
 try:
     import haqumei
@@ -133,8 +134,12 @@ def main():
         print(f"haqumei (Default):           x{t_py / t_hq:.2f}")
         print(f"haqumei.g2p_batch (Default): x{t_py / t_hq_batch:.2f}")
     if args.json:
+        packages = {"haqumei": version("haqumei")}
+        if not args.haqumei_only:
+            packages["pyopenjtalk"] = version("pyopenjtalk")
         args.json.write_text(json.dumps({
             "platform": platform.platform(), "python": platform.python_version(),
+            "packages": packages,
             "cpu_count": os.cpu_count(), "rayon_threads": os.environ.get("RAYON_NUM_THREADS"),
             "lines": len(lines), "chars": sum(map(len, lines)),
             "iterations": ITERATIONS, "warmup": WARMUP,

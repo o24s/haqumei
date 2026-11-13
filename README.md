@@ -752,20 +752,22 @@ HaqumeiOptions {
 
 ## Benchmark
 
-The following benchmark compares `pyopenjtalk` (Baseline) with `haqumei`, using approximately 318,000 characters of Japanese text.
-Initialization time is excluded.
+The following benchmark compares `pyopenjtalk`, `pyopenjtalk-plus`, and `haqumei`, using approximately 318,000 characters of Japanese text.
+Initialization and model loading are excluded.
 
 Input data: [I Am a Cat (吾輩は猫である)](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407 chars / 8,451 lines (Average 37 chars/line) (Ruby characters have been removed)
 
 | Execution Mode | Execution Time (Mean) | Throughput | Speedup |
 | :--- | :--- | :--- | :--- |
-| **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 0.680 s | 468k chars/s | **3.47x** |
-| **haqumei** (`g2p_batch`, Default) | 0.048 s | 6.62M chars/s | 49.00x |
+| **pyopenjtalk 0.4.1** (Baseline) | 2.134 s | 149k chars/s | 1.00x |
+| **pyopenjtalk-plus 0.4.1.post10** (`use_tsqyomi=False`) | 5.603 s | 56.8k chars/s | 0.38x |
+| **pyopenjtalk-plus 0.4.1.post10** (`use_tsqyomi=True`, CPU) | 35.555 s | 8.96k chars/s | 0.06x |
+| **haqumei** (Default) | 0.780 s | 408k chars/s | 2.74x |
+| **haqumei** (`g2p_batch`, Default) | 0.053 s | 5.99M chars/s | 40.15x |
 
-The detailed benchmark code can be found in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk).
+The benchmark code is in [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) and [`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus).
 
-Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://crates.io/crates/criterion) can be run via `cargo bench` in the `haqumei-bench` crate. The comparison benchmark with `pyopenjtalk-plus` is located in [`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus).
+Additionally, Rust-layer benchmarks for Haqumei using [`Criterion.rs`](https://crates.io/crates/criterion) can be run via `cargo bench` in the `haqumei-bench` crate.
 
 ### Performance Notes
 

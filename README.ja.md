@@ -754,21 +754,22 @@ HaqumeiOptions {
 
 ## ベンチマーク
 
-約31.8万文字の日本語テキストを対象にした、`pyopenjtalk` (Baseline) と `haqumei` の比較結果です。
-初期化時間は除外されています。
+約31.8万文字の日本語テキストを対象にした、`pyopenjtalk`、`pyopenjtalk-plus`、`haqumei` の比較結果です。
+初期化とモデル読み込みの時間は除外しています。
 
 入力データ: [「吾輩は猫である」](https://www.aozora.gr.jp/cards/000148/files/789_14547.html) 318,407文字 / 8,451行 (平均 37文字/行) (※ ルビは消去済み)
 
 | 実行モード | 実行時間 (Mean) | スループット | スピードアップ |
 | :--- | :--- | :--- | :--- |
-| **pyopenjtalk** (Baseline) | 2.358 s | 135k chars/s | 1.00x |
-| **haqumei** (Default) | 0.680 s | 468k chars/s | 3.47x |
-| **haqumei** (`g2p_batch`, Default) | 0.048 s | 6.62M chars/s | 49.00x |
+| **pyopenjtalk 0.4.1** (Baseline) | 2.134 s | 149k chars/s | 1.00x |
+| **pyopenjtalk-plus 0.4.1.post10** (`use_tsqyomi=False`) | 5.603 s | 56.8k chars/s | 0.38x |
+| **pyopenjtalk-plus 0.4.1.post10** (`use_tsqyomi=True`, CPU) | 35.555 s | 8.96k chars/s | 0.06x |
+| **haqumei** (Default) | 0.780 s | 408k chars/s | 2.74x |
+| **haqumei** (`g2p_batch`, Default) | 0.053 s | 5.99M chars/s | 40.15x |
 
-ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) にあります。
+ベンチマークコードは [`haqumei-bench/pyopenjtalk`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk) と [`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus) にあります。
 
 また、[`Criterion.rs`](https://crates.io/crates/criterion) を使用した Haqumei のベンチマークは、`haqumei-bench` クレートで `cargo bench` することで実行できます。
-`pyopenjtalk-plus` との比較ベンチマークは、[`haqumei-bench/pyopenjtalk-plus`](https://github.com/o24s/haqumei/tree/main/haqumei-bench/pyopenjtalk-plus) にあります。
 
 ### 注意点
 
