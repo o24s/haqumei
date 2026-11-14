@@ -22,15 +22,15 @@ exclude = ["haqumei-dict-lab"]
 
 [workspace.dependencies]
 anyhow = "1.0.104"
-arc-swap = "1.9.3"
-cc = "1.10.0"
+arc-swap = "1.9.5"
+cc = "1.11.2"
 clap = { version = "4.6.7", features = ["derive"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 csv = "1.4.0"
 daachorse = "5.1.0"
 digest-io = "0.1.0"
 dirs = "7.0.0"
-encoding_rs = "0.8.42"
+encoding_rs = "0.8.44"
 env_logger = "0.11.11"
 fs4 = { version = "1.1.0", features = ["sync"] }
 glob = "0.3.4"
@@ -44,10 +44,10 @@ haqumei-jpreprocess-window = { version = "0.1.0", path = "haqumei-jpreprocess-wi
 haqumei-kanalizer = { version = "0.1.6", path = "haqumei-kanalizer" }
 haqumei-macros = { version = "0.1.6", path = "haqumei-macros" }
 hex = "0.4.3"
-log = "0.4.34"
+log = "0.4.35"
 moka = { version = "0.12.16", features = ["sync"] }
 ndarray = "0.17.2"
-ort = { version = "=2.0.0-rc.13", default-features = false, features = [
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
     "api-27",
     "copy-dylibs",
     "download-binaries",
@@ -69,7 +69,7 @@ rustc-hash = "2.1.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
-syn = { version = "3.0.9", features = ["full"] }
+syn = { version = "3.0.10", features = ["full"] }
 tar = "0.4.46"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
@@ -77,7 +77,7 @@ unicode-normalization = "0.1.26"
 unicode-segmentation = "1.13.3"
 vibrato = { package = "vibrato-rkyv", version = "0.7.20", default-features = false }
 walkdir = "2.5.0"
-zstd = "0.14.3"
+zstd = "0.14.4"
 
 [profile.dev.package.crawdad-rkyv]
 opt-level = 3

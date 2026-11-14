@@ -5,7 +5,8 @@ An ONNX-based English-to-Katakana translator for the Haqumei Japanese G2P librar
 ## Usage
 
 ```rust
-let mut kanalizer = haqumei_kanalizer::Kanalizer::new().unwrap();
+let environment = ort::init().build().unwrap();
+let mut kanalizer = haqumei_kanalizer::Kanalizer::new(&environment).unwrap();
 let kana = kanalizer.convert("kanalizer").unwrap();
 
 assert_eq!(kana, "カナライザー");

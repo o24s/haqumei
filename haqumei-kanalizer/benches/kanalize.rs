@@ -14,7 +14,8 @@ fn bench_convert(c: &mut Criterion) {
 
     group.sample_size(30);
     group.measurement_time(std::time::Duration::from_secs(10));
-    let mut kanalizer = Kanalizer::new().unwrap();
+    let environment = ort::init().build().unwrap();
+    let mut kanalizer = Kanalizer::new(&environment).unwrap();
 
     for (name, input) in cases {
         group.bench_with_input(BenchmarkId::new("greedy", name), input, |b, input| {

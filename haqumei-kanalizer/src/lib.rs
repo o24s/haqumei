@@ -7,7 +7,7 @@ pub use error::{KanalizerError, Result};
 pub use options::{ConvertOptions, MaxLength, Strategy, StrategyTopK, StrategyTopP};
 
 use ndarray::{Array2, Array3, ArrayView3};
-use ort::{session::Session, value::TensorRef};
+use ort::{environment::Environment, session::Session, value::TensorRef};
 use rand::RngExt as _;
 
 use crate::constants::KANAS;
@@ -21,15 +21,16 @@ pub struct Kanalizer {
 }
 
 impl Kanalizer {
-    pub fn new() -> Result<Self> {
-        let encoder = Session::builder()?
+    /// 渡された ONNX Runtime 環境で、同梱モデルを読み込みます。
+    pub fn new(environment: &Environment) -> Result<Self> {
+        let encoder = Session::builder(environment)?
             .with_intra_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .with_inter_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_memory(ENCODER_MODEL_BYTES)?;
 
-        let decoder = Session::builder()?
+        let decoder = Session::builder(environment)?
             .with_intra_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .with_inter_threads(1)
@@ -39,15 +40,16 @@ impl Kanalizer {
         Ok(Self::new_inner(encoder, decoder))
     }
 
-    pub fn from_paths(enc_path: &str, dec_path: &str) -> Result<Self> {
-        let encoder = Session::builder()?
+    /// 渡された ONNX Runtime 環境で、指定されたファイルからモデルを読み込みます。
+    pub fn from_paths(environment: &Environment, enc_path: &str, dec_path: &str) -> Result<Self> {
+        let encoder = Session::builder(environment)?
             .with_intra_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .with_inter_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .commit_from_file(enc_path)?;
 
-        let decoder = Session::builder()?
+        let decoder = Session::builder(environment)?
             .with_intra_threads(1)
             .map_err(|e| KanalizerError::OrtError(e.into()))?
             .with_inter_threads(1)

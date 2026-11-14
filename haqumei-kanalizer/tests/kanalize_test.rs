@@ -1,18 +1,23 @@
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use haqumei_kanalizer::{
         ConvertOptions, Kanalizer, KanalizerError, MaxLength, Strategy, StrategyTopK, StrategyTopP,
     };
+    use ort::environment::Environment;
+
+    static ENVIRONMENT: LazyLock<Environment> = LazyLock::new(|| ort::init().build().unwrap());
 
     #[test]
     fn test_initialization() {
-        let kanalizer = Kanalizer::new();
+        let kanalizer = Kanalizer::new(&ENVIRONMENT);
         assert!(kanalizer.is_ok(), "Failed to initialize Kanalizer");
     }
 
     #[test]
     fn test_inference_greedy() {
-        let mut kanalizer = Kanalizer::new().unwrap();
+        let mut kanalizer = Kanalizer::new(&ENVIRONMENT).unwrap();
 
         let cases = vec![
             ("hi", "ハイ"),
@@ -52,7 +57,7 @@ mod tests {
 
     #[test]
     fn test_empty_input() {
-        let mut kanalizer = Kanalizer::new().unwrap();
+        let mut kanalizer = Kanalizer::new(&ENVIRONMENT).unwrap();
 
         let result = kanalizer.convert("");
         assert!(matches!(result, Err(KanalizerError::EmptyInput)));
@@ -60,7 +65,7 @@ mod tests {
 
     #[test]
     fn test_invalid_characters() {
-        let mut kanalizer = Kanalizer::new().unwrap();
+        let mut kanalizer = Kanalizer::new(&ENVIRONMENT).unwrap();
 
         let result = kanalizer.convert("hello123");
         assert!(matches!(result, Err(KanalizerError::InvalidCharacter('1'))));
@@ -77,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_inference_strategies() {
-        let mut kanalizer = Kanalizer::new().unwrap();
+        let mut kanalizer = Kanalizer::new(&ENVIRONMENT).unwrap();
         let input = "random";
 
         let options_topk = ConvertOptions {
@@ -104,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_incomplete_conversion() {
-        let mut kanalizer = Kanalizer::new().unwrap();
+        let mut kanalizer = Kanalizer::new(&ENVIRONMENT).unwrap();
 
         let options = ConvertOptions {
             max_length: MaxLength::Fixed(std::num::NonZeroUsize::new(3).unwrap()),

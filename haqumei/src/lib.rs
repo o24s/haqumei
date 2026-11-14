@@ -29,6 +29,8 @@ pub use haqumei_jlabel::Label;
 use haqumei_kanalizer::Kanalizer;
 #[cfg(feature = "inference")]
 use moka::sync::Cache;
+#[cfg(feature = "inference")]
+use ort::environment::Environment;
 
 use std::collections::HashMap;
 
@@ -83,8 +85,18 @@ static NANI_PREDICTOR: LazyLock<Mutex<NaniPredictor>> = LazyLock::new(|| {
 #[cfg(feature = "inference")]
 static KANALIZER_CACHE: LazyLock<Cache<String, String>> = LazyLock::new(|| Cache::new(1000));
 #[cfg(feature = "inference")]
-static KANALIZER: LazyLock<Mutex<Kanalizer>> =
-    LazyLock::new(|| Mutex::new(Kanalizer::new().expect("Failed to initialize Kanalizer models")));
+static KANALIZER: LazyLock<Mutex<Kanalizer>> = LazyLock::new(|| {
+    let environment = ort_environment().expect("Failed to initialize ONNX Runtime");
+    Mutex::new(Kanalizer::new(environment).expect("Failed to initialize Kanalizer models"))
+});
+
+#[cfg(feature = "inference")]
+fn ort_environment() -> ort::Result<&'static Environment> {
+    static ENVIRONMENT: LazyLock<ort::Result<Environment>> = LazyLock::new(|| ort::init().build());
+    ENVIRONMENT
+        .as_ref()
+        .map_err(|error| ort::Error::new_with_code(error.code(), error.message()))
+}
 
 /// MeCab の出力を NJD に渡す前に書き換える手続き。
 ///

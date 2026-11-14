@@ -17,9 +17,9 @@ pub struct NaniPredictor {
 impl NaniPredictor {
     /// バイナリに埋め込まれた ONNX モデルから、[NaniPredictor] のセッションを作ります。
     pub fn new() -> ort::Result<Self> {
-        let enc_session = Session::builder()?.commit_from_memory(ENC_MODEL_BYTES)?;
-
-        let model_session = Session::builder()?.commit_from_memory(MODEL_BYTES)?;
+        let environment = crate::ort_environment()?;
+        let enc_session = Session::builder(environment)?.commit_from_memory(ENC_MODEL_BYTES)?;
+        let model_session = Session::builder(environment)?.commit_from_memory(MODEL_BYTES)?;
 
         Ok(Self {
             enc_session,
