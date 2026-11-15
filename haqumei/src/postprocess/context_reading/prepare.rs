@@ -181,6 +181,16 @@ pub(crate) fn prepare_context_ha(
         1,
         None,
     );
+    const QUOTED_BREATH: NodeSpec = NodeSpec::new(
+        "はーっ",
+        POS::Fukushi(Fukushi::General),
+        "ハアッ",
+        "ハーッ",
+        1,
+        None,
+    );
+    const BREATH_ONSET: NodeSpec =
+        NodeSpec::new("は", POS::Fukushi(Fukushi::General), "ハ", "ハ", 1, None);
     const SIGH: NodeSpec = NodeSpec::new(
         "はー",
         POS::Kandoushi,
@@ -272,8 +282,19 @@ pub(crate) fn prepare_context_ha(
                 continue;
             }
             "は" if 係助詞のは(&nodes[i]) => {
-                if let Some(context) = 息を表すはー(before, after) {
-                    (2, &BREATH, context.clone(), i..context.end)
+                if let Some((count, context)) = 引用された呼気音(before, after) {
+                    if count > 3
+                        || gaps.binary_search(&(i + 1)).is_ok()
+                        || gaps.binary_search(&(i + 2)).is_ok()
+                    {
+                        // 引用内に空白があれば、「は」の読みだけを直して境界を保つ。
+                        (1, &BREATH_ONSET, context, i..i + 1)
+                    } else {
+                        (count, &QUOTED_BREATH, context, i..i + count)
+                    }
+                } else if let Some(context) = 息を表すはー(before, after) {
+                    let end = context.end;
+                    (2, &BREATH, context, i..end)
                 } else if let Some(context) = 息切れの反復(before, after) {
                     if ha_context_available(
                         protected,
@@ -298,6 +319,8 @@ pub(crate) fn prepare_context_ha(
                     (1, &STUTTER, context, i..i + 3)
                 } else if let Some(context) = 字としてのは(before, after) {
                     (1, &LETTER, context, i - 1..i + 2)
+                } else if let Some(context) = 文字を特定する引用(before, after) {
+                    (1, &LETTER, context, i..i + 1)
                 } else {
                     continue;
                 }
@@ -443,8 +466,26 @@ fn 独立したはー(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usi
     Some(発話の先頭(before)?..before.len() + end)
 }
 
+fn 発話の末尾(nodes: &[NJDNode]) -> Option<usize> {
+    // MeCab は後ろに述語が続く引用の「って」も終助詞にする。
+    let boundary = 空白以外(nodes).find(|(_, node)| {
+        !(助詞(node, "か")
+            || matches!(node.get_pos(), POS::Joshi(Joshi::ShuJoshi)) && node.get_string() != "って")
+    });
+    boundary.map_or(Some(nodes.len()), |(at, node)| {
+        (matches!(node.get_pos(), POS::Kigou(Kigou::Kuten | Kigou::KakkoClose))
+            || matches!(node.get_string(), "！" | "？"))
+        .then_some(at + 1)
+    })
+}
+
 fn 空白(node: &NJDNode) -> bool {
     matches!(node.get_pos(), POS::Kigou(Kigou::Space))
+}
+
+// 通常解析では空白が形態素に残らない。引用の判定では空白を除き、添字は元の列を指す。
+fn 空白以外(nodes: &[NJDNode]) -> impl DoubleEndedIterator<Item = (usize, &NJDNode)> {
+    nodes.iter().enumerate().filter(|(_, node)| !空白(node))
 }
 
 fn 息切れ(nodes: &[NJDNode]) -> bool {
@@ -554,6 +595,13 @@ fn 言い直しのは(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usi
 
 fn 助詞(node: &NJDNode, surface: &str) -> bool {
     node.get_string() == surface && matches!(node.get_pos(), POS::Joshi(_))
+}
+
+fn かぎ括弧の対(opening: &NJDNode, closing: &NJDNode) -> bool {
+    matches!(
+        (opening.get_string(), closing.get_string()),
+        ("「", "」") | ("『", "』")
+    )
 }
 
 fn 引用先の述語(nodes: &[NJDNode]) -> usize {
@@ -780,10 +828,7 @@ fn 字としてのは(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usi
     let ([.., opening], [_, closing, ..]) = (before, after) else {
         return None;
     };
-    if !matches!(
-        (opening.get_string(), closing.get_string()),
-        ("「", "」") | ("『", "』")
-    ) {
+    if !かぎ括弧の対(opening, closing) {
         return None;
     }
     // 「助詞の『は』」や「五十音表の『は』」は、字を指す名詞句になる。
@@ -805,14 +850,119 @@ fn 字としてのは(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usi
     .then(|| i - 1..i + 6)
 }
 
-fn 息を表すはー(before: &[NJDNode], nodes: &[NJDNode]) -> Option<Range<usize>> {
-    let [_, long, quote, breath, object, verb, rest @ ..] = nodes else {
+fn 文字を特定する引用(before: &[NJDNode], after: &[NJDNode]) -> Option<Range<usize>> {
+    let mut left = 空白以外(before).rev();
+    let (_, opening) = left.next()?;
+    let (closing_at, closing) = 空白以外(after).nth(1)?;
+    if !かぎ括弧の対(opening, closing) {
         return None;
+    }
+    let (_, topic) = left.next()?;
+    let (start, noun) = left.next()?;
+    if !matches!(noun.get_string(), "文字" | "ひらがな" | "平仮名")
+        || !matches!(noun.get_pos(), POS::Meishi(_))
+        || !(係助詞のは(topic)
+            || topic.get_string() == "が"
+                && matches!(
+                    topic.get_pos(),
+                    POS::Joshi(Joshi::KakuJoshi(KakuJoshi::General))
+                ))
+    {
+        return None;
+    }
+    let predicate_start = closing_at + 1;
+    let end = 文字を特定する述語(&after[predicate_start..])?;
+    Some(start..before.len() + predicate_start + end)
+}
+
+fn 文字を特定する述語(nodes: &[NJDNode]) -> Option<usize> {
+    let mut predicate = 空白以外(nodes);
+    let (first, copula) = predicate.next()?;
+    if !matches!(
+        copula.get_ctype(),
+        CType::Special(Special::Desu | Special::Da)
+    ) || !matches!(copula.get_pos(), POS::Jodoushi)
+    {
+        return None;
+    }
+    let (last, ending) = predicate
+        .take_while(|(_, node)| matches!(node.get_pos(), POS::Jodoushi))
+        .last()
+        .unwrap_or((first, copula));
+    // 「だって」「ですら」は、副助詞でも先頭の「だ」「で」が助動詞に分かれる。
+    if *ending.get_cform() != CForm::Basic {
+        return None;
+    }
+    let end = last + 1;
+    let rest = &nodes[end..];
+    if let Some((offset, node)) = 空白以外(rest).next()
+        && (引用のと(node) || matches!(node.get_pos(), POS::Joshi(Joshi::SetsuzokuJoshi)))
+    {
+        return Some(end + offset + 1);
+    }
+    Some(end + 発話の末尾(rest)?)
+}
+
+fn 引用された呼気音(
+    before: &[NJDNode],
+    after: &[NJDNode],
+) -> Option<(usize, Range<usize>)> {
+    let mut right = 空白以外(after).skip(1);
+    let (_, long) = right.next()?;
+    if !単独の長音(long) {
+        return None;
+    }
+    let (stop_at, stop) = right.next()?;
+    if stop.get_string() != "っ" || !stop.get_pron().mora_matches(MoraEnum::Xtsu) {
+        return None;
+    }
+    let (start, opening) = 空白以外(before).next_back()?;
+    let (_, closing) = right.next()?;
+    let (_, quote) = right.next()?;
+    if !かぎ括弧の対(opening, closing) || !引用のと(quote) {
+        return None;
+    }
+    let (_, noun) = right.next()?;
+    let (_, particle) = right.next()?;
+    let (breath, object) = if matches!(noun.get_pos(), POS::Meishi(_)) && 助詞(particle, "に") {
+        (right.next()?.1, right.next()?.1)
+    } else {
+        (noun, particle)
     };
-    let breath_phrase = 単独の長音(long)
-        && matches!(quote.get_string(), "って" | "っと")
-        && matches!(quote.get_pos(), POS::Joshi(_))
-        && breath.get_string() == "息"
+    let (verb_at, verb) = right.next()?;
+    if !呼気の述語(breath, object, verb) {
+        return None;
+    }
+    let (last, ending) = right
+        .take_while(|(_, node)| affirmative_ending(node))
+        .last()
+        .unwrap_or((verb_at, verb));
+    let mut rest = 空白以外(&after[last + 1..]);
+    let (last, ending) = if let (Some((_, nominalizer)), Some((offset, copula))) =
+        (rest.next(), rest.next())
+        && 説明の形式名詞と助動詞(nominalizer, copula)
+    {
+        (last + 1 + offset, copula)
+    } else {
+        (last, ending)
+    };
+    // 連用形の中止や連体修飾では、引用の「と」が後ろの述語にもかかりうる。
+    if !matches!(
+        ending.get_cform(),
+        CForm::Basic
+            | CForm::ImperativeE
+            | CForm::ImperativeI
+            | CForm::ImperativeRo
+            | CForm::ImperativeYo
+    ) {
+        return None;
+    }
+    let end = last + 1 + 発話の末尾(&after[last + 1..])?;
+    Some((stop_at + 1, start..before.len() + end))
+}
+
+fn 呼気の述語(breath: &NJDNode, object: &NJDNode, verb: &NJDNode) -> bool {
+    breath.get_string() == "息"
         && matches!(breath.get_pos(), POS::Meishi(_))
         && object.get_string() == "を"
         && matches!(object.get_pos(), POS::Joshi(Joshi::KakuJoshi(_)))
@@ -837,35 +987,45 @@ fn 息を表すはー(before: &[NJDNode], nodes: &[NJDNode]) -> Option<Range<usi
                     | "かける"
                     | "掛ける"
             )
-        );
-    if !breath_phrase {
+        )
+}
+
+fn 説明の形式名詞と助動詞(nominalizer: &NJDNode, copula: &NJDNode) -> bool {
+    matches!(nominalizer.get_string(), "ん" | "の")
+        && matches!(nominalizer.get_pos(), POS::Meishi(Meishi::Hijiritsu(_)))
+        && matches!(
+            copula.get_ctype(),
+            CType::Special(Special::Desu | Special::Da)
+        )
+        && *copula.get_cform() == CForm::Basic
+}
+
+fn 息を表すはー(before: &[NJDNode], nodes: &[NJDNode]) -> Option<Range<usize>> {
+    let [_, long, quote, breath, object, verb, rest @ ..] = nodes else {
+        return None;
+    };
+    if !単独の長音(long)
+        || !matches!(quote.get_string(), "って" | "っと")
+        || !matches!(quote.get_pos(), POS::Joshi(_))
+        || !呼気の述語(breath, object, verb)
+    {
         return None;
     }
     let i = before.len();
-    let prior = before
-        .iter()
-        .rposition(|node| !matches!(node.get_pos(), POS::Kigou(Kigou::Space)));
+    let prior = 空白以外(before).next_back().map(|(at, _)| at);
     let start = prior.unwrap_or(i);
     // 係助詞が付かない位置では、呼吸の動作を否定しても音の読みは変わらない。
     if prior.is_none_or(|at| !係助詞が付く語(&before[at])) {
         return Some(start..i + 6);
     }
-    // 係助詞にも読める位置では、息を吐く動作を述べる文の形を使う。
-    // 「息を吐く時間」のように名詞を修飾する場合は、既存の読みを残す。
+    // 引用の「と」が息を吐く動作にかかる文の形を確かめる。
+    // 「息を吐く時間」のように名詞を修飾する場合は、引用が後ろの述語にかかりうる。
     let suffix = rest
         .iter()
         .take_while(|node| 空白(node) || affirmative_ending(node))
         .count();
     let suffix = match &rest[suffix..] {
-        [nominalizer, copula, ..]
-            if matches!(nominalizer.get_string(), "ん" | "の")
-                && matches!(nominalizer.get_pos(), POS::Meishi(Meishi::Hijiritsu(_)))
-                && matches!(
-                    copula.get_ctype(),
-                    CType::Special(Special::Desu | Special::Da)
-                )
-                && *copula.get_cform() == CForm::Basic =>
-        {
+        [nominalizer, copula, ..] if 説明の形式名詞と助動詞(nominalizer, copula) => {
             suffix + 2
         }
         _ => suffix,

@@ -1,6 +1,215 @@
 use haqumei::{Haqumei, HaqumeiOptions, OpenJTalk};
 
 #[test]
+fn quoted_breath_sound_attaches_to_the_exhalation() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading, span) in [
+        (
+            "寒くて手に「はーっ」と息を吹きかける。",
+            "サムクテテニ「ハーッ」トイキヲフキカケル。",
+            6..9,
+        ),
+        (
+            "『はーっ』と窓に息を吐いた。",
+            "『ハーッ』トマドニイキヲハイタ。",
+            1..4,
+        ),
+        (
+            "「はーっ」と息を吐いたよ。",
+            "「ハーッ」トイキヲハイタヨ。",
+            1..4,
+        ),
+        (
+            "「『はーっ』と息を吐く」って言った。",
+            "「『ハーッ』トイキヲハク」ッテイッタ。",
+            2..5,
+        ),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let breath = words.iter().find(|word| word.char_span == span).unwrap();
+        assert_eq!(breath.word, "はーっ");
+        assert_eq!(breath.pron, "ハーッ");
+        assert_eq!(breath.pos, "副詞");
+        assert_eq!(breath.mora_count, 3);
+        assert_eq!(breath.accent_nucleus, 1);
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+    let text = "「ぼくは」の助詞を「はーっ」と息を吐きながら読み直した。";
+    assert_eq!(
+        engine.g2k(text).unwrap(),
+        "「ボクワ」ノジョシヲ「ワーッ」トイキヲハキナガラヨミナオシタ。"
+    );
+    assert_eq!(
+        engine.run_frontend(text).unwrap(),
+        engine.run_frontend_detailed(text).unwrap().0,
+    );
+}
+
+#[test]
+fn quoted_breath_sound_preserves_spaces_in_the_mapping() {
+    let mut engine = Haqumei::new().unwrap();
+    for text in [
+        "窓に「は ーっ」と息を吹きかけた。",
+        "窓に「はー　っ」と息を吹きかけた。",
+    ] {
+        engine.options.modify_context_reading = false;
+        let original = engine.g2p_mapping_detailed(text).unwrap();
+        engine.options.modify_context_reading = true;
+        let corrected = engine.g2p_mapping_detailed(text).unwrap();
+        assert_eq!(
+            engine.g2k(text).unwrap(),
+            "マドニ「ハーッ」トイキヲフキカケタ。",
+            "{text}"
+        );
+        assert_eq!(corrected.len(), original.len(), "{text}");
+        for (before, after) in original.iter().zip(&corrected) {
+            assert_eq!(before.word, after.word, "{text}");
+            assert_eq!(before.char_span, after.char_span, "{text}");
+        }
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_quoted_character_in_a_nominal_predicate_uses_its_letter_name() {
+    let mut engine = Haqumei::new().unwrap();
+    for (text, reading, span) in [
+        (
+            "最初の文字は「は」です。",
+            "サイショノモジワ「ハ」デス。",
+            7..8,
+        ),
+        ("文字は「は」 です。", "モジワ「ハ」デス。", 4..5),
+        (
+            "このひらがなは『は』だった。",
+            "コノヒラガナワ『ハ』ダッタ。",
+            8..9,
+        ),
+        (
+            "最後の文字は「は」だと答えた。",
+            "サイゴノモジワ「ハ」ダトコタエタ。",
+            7..8,
+        ),
+        (
+            "最後の文字は「は」ですか？",
+            "サイゴノモジワ「ハ」デスカ？",
+            7..8,
+        ),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let letter = words.iter().find(|word| word.char_span == span).unwrap();
+        assert_eq!(letter.word, "は");
+        assert_eq!(letter.pron, "ハ");
+        assert_eq!(letter.pos, "名詞");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+    for (text, reading) in [
+        ("最後の助詞は「は」です。", "サイゴノジョシワ「ワ」デス。"),
+        ("私「は」行きませんよ。", "ワタシ「ワ」イキマセンヨ。"),
+        (
+            "最後の文字は「は」だって読めば伝わります。",
+            "サイゴノモジワ「ワ」ダッテヨメバツタワリマス。",
+        ),
+        (
+            "末尾の文字は「は」ですら読み上げる。",
+            "マツビノモジワ「ワ」デスラヨミアゲル。",
+        ),
+        (
+            "最後の文字は「は」だか「わ」だか、よく聞こえなかった。",
+            "サイゴノモジワ「ワ」ダカ「ワ」ダカ、ヨクキコエナカッタ。",
+        ),
+    ] {
+        assert_eq!(engine.g2k(text).unwrap(), reading, "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn quoted_ha_reads_consistently_with_spaces_in_its_context() {
+    let mut engine = Haqumei::new().unwrap();
+    for (pattern, reading) in [
+        ("文字は「は」|です。", "モジワ「ハ」デス。"),
+        ("文字|は|「|は|」|でし|た|。", "モジワ「ハ」デシタ。"),
+        ("文字は「は」だ|と答えた。", "モジワ「ハ」ダトコタエタ。"),
+        ("「はーっ」と息を吐いた|。", "「ハーッ」トイキヲハイタ。"),
+        (
+            "「はーっ」と息を吐いた|よ。",
+            "「ハーッ」トイキヲハイタヨ。",
+        ),
+        ("「はーっ」と息を吐いた|？", "「ハーッ」トイキヲハイタ？"),
+        ("「はーっ」と息を吐い|た。", "「ハーッ」トイキヲハイタ。"),
+        (
+            "「|はーっ|」|と|手|に|息|を|吐いたん|です|。",
+            "「ハーッ」トテニイキヲハイタンデス。",
+        ),
+        (
+            "窓に「は|ーっ」と息を吹きかけた|。",
+            "マドニ「ハーッ」トイキヲフキカケタ。",
+        ),
+        (
+            "「ぼくは」の助詞を「はーっ」と|息を吐きながら読み直した。",
+            "「ボクワ」ノジョシヲ「ワーッ」トイキヲハキナガラヨミナオシタ。",
+        ),
+        ("私|「は」|行きませんよ。", "ワタシ「ワ」イキマセンヨ。"),
+    ] {
+        for space in [" ", "　", "\t", "\n"] {
+            let text = pattern.replace('|', space);
+            assert_eq!(engine.g2k(&text).unwrap(), reading, "{text:?}");
+            assert_eq!(
+                engine.run_frontend(&text).unwrap(),
+                engine.run_frontend_detailed(&text).unwrap().0,
+                "{text:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn protected_readings_survive_in_quoted_ha() {
+    let mut engine = Haqumei::new().unwrap();
+    engine.options.protect_user_dict_readings = true;
+    engine.set_morph_filter(|_, _, morphs| {
+        if let Some(ha) = morphs.iter_mut().rev().find(|morph| morph.surface == "は") {
+            ha.dictionary_index = 1;
+        }
+    });
+    for (text, span) in [
+        ("「はーっ」と息を吐いた。", 1..3),
+        ("窓に「は ーっ」と息を吹きかけた。", 3..6),
+        ("最初の文字は「は」です。", 7..8),
+        ("文字は「は」 です。", 4..5),
+    ] {
+        let words = engine.g2p_mapping_detailed(text).unwrap();
+        let ha = words.iter().find(|word| word.char_span == span).unwrap();
+        assert_eq!(ha.pos, "助詞", "{text}");
+        assert_eq!(ha.phonemes[0].as_str(), "w", "{text}");
+        assert_eq!(
+            engine.run_frontend(text).unwrap(),
+            engine.run_frontend_detailed(text).unwrap().0,
+            "{text}"
+        );
+    }
+}
+
+#[test]
 fn elongated_ha_before_breath_predicates_has_its_own_accent_phrase() {
     let mut engine = Haqumei::new().unwrap();
     for (text, span, breath) in [
