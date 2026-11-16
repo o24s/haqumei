@@ -629,7 +629,7 @@ The figures are the phoneme error rate (PER) on [prj-beatrice/jsut-label](https:
 | :--- | ---: | ---: |
 | pyopenjtalk 0.4.1 | 1.31% | 5.02% * |
 | pyopenjtalk-plus 0.4.1.post10 | **0.71%** | **0.66%** |
-| **haqumei 0.12.3** | 0.81% | 0.71% |
+| **haqumei 0.12.4** | 0.81% | 0.71% |
 
 \* vanilla `pyopenjtalk` has no way to write long vowels and yotsugana in their
 original spelling, so its output cannot be brought to ROHAN's notation. Most of that
@@ -702,10 +702,10 @@ Every combination is listed under "All option combinations" below.
 | pyopenjtalk_plus | use_sudachi_kanji_yomi=False, use_tsqyomi=False, iu_pronunciation=KanjiYuuBase, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.78% |
 | haqumei | normalize_iu=none, revert_long_vowels=True, revert_yotsugana=True | - | 0.71% |
 | haqumei | normalize_iu=none, revert_long_vowels=False, revert_yotsugana=False | 0.94% | 3.73% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.77% |
-| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.79% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.74% |
-| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.81% | 3.76% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=True, revert_yotsugana=True | - | 0.76% |
+| haqumei | normalize_iu=yuu, revert_long_vowels=False, revert_yotsugana=False | 0.90% | 3.78% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=True, revert_yotsugana=True | - | 0.73% |
+| haqumei | normalize_iu=yuu-base, revert_long_vowels=False, revert_yotsugana=False | 0.81% | 3.75% |
 
 `-` means it was not measured. The options that restore the original spelling
 (`revert_long_vowels` / `revert_yotsugana`) only mean something for ROHAN, which
@@ -721,13 +721,13 @@ cd japanese-g2p-benchmark
 uv run init.py
 G2P_BENCH_PKG_PYOPENJTALK=pyopenjtalk==0.4.1 \
 G2P_BENCH_PKG_PYOPENJTALK_PLUS='pyopenjtalk-plus[onnxruntime,tsqyomi]==0.4.1.post10' \
-G2P_BENCH_PKG_HAQUMEI=haqumei==0.12.3 \
+G2P_BENCH_PKG_HAQUMEI=haqumei==0.12.4 \
 uv run python run_all.py --datasets phoneme,no_lvs --sources jsut-label,rohan4600
 ```
 
 ### jsut-label
 
-Phoneme Error Rate (S+D+I / N_expected): **0.81%** (Substitute=1430, Delete=438, Insert=557, N=297843)
+Phoneme Error Rate (S+D+I / N_expected): **0.81%** (Substitute=1424, Delete=436, Insert=552, N=297843)
 
 `HaqumeiOptions`:
 ```rust
@@ -739,7 +739,7 @@ HaqumeiOptions {
 
 ### ROHAN
 
-Katakana Error Rate (S+D+I / N_expected): **0.71%** (Substitute=689, Delete=152, Insert=236, N=150637)
+Katakana Error Rate (S+D+I / N_expected): **0.71%** (Substitute=684, Delete=152, Insert=232, N=150637)
 
 `HaqumeiOptions`:
 ```rust

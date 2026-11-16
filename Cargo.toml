@@ -41,7 +41,7 @@ haqumei-jpreprocess-dictionary = { version = "0.1.2", path = "haqumei-jpreproces
 haqumei-jpreprocess-jpcommon = { version = "0.1.2", path = "haqumei-jpreprocess-jpcommon" }
 haqumei-jpreprocess-njd = { version = "0.1.3", path = "haqumei-jpreprocess-njd" }
 haqumei-jpreprocess-window = { version = "0.1.0", path = "haqumei-jpreprocess-window" }
-haqumei-kanalizer = { version = "0.1.6", path = "haqumei-kanalizer" }
+haqumei-kanalizer = { version = "0.1.7", path = "haqumei-kanalizer" }
 haqumei-macros = { version = "0.1.6", path = "haqumei-macros" }
 hex = "0.4.3"
 log = "0.4.35"

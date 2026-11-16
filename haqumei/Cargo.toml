@@ -1,12 +1,11 @@
 [package]
 name = "haqumei"
-version = "0.12.3"
+version = "0.12.4"
 edition = "2024"
 authors = ["o24s <fulmlumo@gmail.com>"]
 description = "Haqumei is a Japanese Grapheme-to-Phoneme (G2P) library implemented in Rust."
 license = "Apache-2.0"
 readme = "../README.md"
-homepage = "https://github.com/o24s/haqumei"
 repository = "https://github.com/o24s/haqumei"
 keywords = ["japanese", "g2p", "phoneme", "nlp"]
 categories = ["text-processing", "parsing"]
@@ -78,7 +77,3 @@ tempfile = { workspace = true, optional = true }
 [dev-dependencies]
 serde_json.workspace = true
 tempfile.workspace = true
-
-[[example]]
-name = "memory_dictionary"
-required-features = ["serde"]
