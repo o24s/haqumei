@@ -345,8 +345,8 @@ mod tests {
         let mut haqumei = Haqumei::new().unwrap();
         // 「東京」 -> t o o [ ky o o $
         let p = haqumei.g2p_prosody("東京").unwrap();
-        assert!(p.contains(&"o".to_string()));
-        assert!(p.contains(&"[".to_string()));
+        assert!(p.iter().any(|i| i == "o"));
+        assert!(p.iter().any(|i| i == "["));
     }
 
     #[test]
